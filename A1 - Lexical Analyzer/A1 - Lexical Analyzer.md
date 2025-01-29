@@ -22,8 +22,9 @@ global variables:
 ## Reserved Words
 
 The following are the reserved words in the language (may be upper or lower case):
-
 `BEGIN, MODULE, CONSTANT, PROCEDURE, IS, IF, THEN, ELSE, ELSIF, WHILE, LOOP, FLOAT, INTEGER, CHAR, GET, PUT, END`
+
+Note: make a simple data structure to store it
 
 ---
 
@@ -37,10 +38,12 @@ The following are the reserved words in the language (may be upper or lower case
 - Blanks between tokens are optional, with the exception of reserved words.
 - Reserved words must be separated by blanks, newlines, the beginning of the program, or the final semicolon.
 
-### Identifiers
+### Identifiers (id)
 - Token `id` for identifiers matches a letter followed by letters, underscores, and/or digits.
 - Maximum length: 17 characters.
 - Ada identifiers are **not case sensitive**.
+- Must start with a **letter**.
+- Can include **letters, digits, and underscores**.
 #### Definition:
 ```plaintext
 letter         -> [a-z, A-Z]
@@ -71,31 +74,37 @@ num               -> digits optional_fraction
 Token `relop` includes the following:  
 `=`, `/=`, `<`, `<=`, `>`, `>=`
 
-### Arithmetic Operators
+### Operators & Special Symbols
 
 #### Additive Operators (`addop`):
 `+`, `-`, `or`
-
 #### Multiplicative Operators (`mulop`):
 `*`, `/`, `rem`, `mod`, `and`
-
-### Assignment Operator
+#### Assignment Operator
 - The assignment operator is `:=`.
 
 ### Other Symbols
 The following symbols are allowed:  
 `( ) , : ; . "`
 
+### Comments
+- Start with `--` and extend to the **end of the line**.
+- **Ignored** by the Lexer.
+
+### Whitespace
+- Spaces and tabs **separate tokens** but are **not reported**.
+
 ---
 
 ## Rules for the Ada Subset
-
 1. **Procedure Declarations**:
     - Parameterless procedure declarations start the program.
     - Procedures are begun with the reserved word `PROCEDURE`, followed by an `id`, the word `IS`, and then a semicolon.
+    - Format: `PROCEDURE <id> IS;`
 2. **Procedure Body**:
     - The body of a procedure starts with the reserved word `BEGIN`.
     - It terminates with the reserved word `END`, followed by the name of the procedure and a semicolon.
+    - Starts with `BEGIN` and ends with `END <procedure_name>;`
 
 ---
 ## Tokens
@@ -115,3 +124,17 @@ Write a short program that:
 ## Submission Guidelines
 - Source code for this and all other assignments must be submitted as a **single zip file**.
 - Upload the zip file to the appropriate **D2L Dropbox** on or before the due date.
+
+---
+Do not report
+- space
+- tabs
+- comments
+- the identifiers are 17 character long, not by more than 17
+
+
+---
+# Plan
+
+Token class
+- 
