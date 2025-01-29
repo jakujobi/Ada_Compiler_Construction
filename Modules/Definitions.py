@@ -1,10 +1,12 @@
 # Definitions
 
 from enum import Enum
+import re
+from typing import Dict, Optional
 
 class TokenDefinitions:
     def __init__(self):
-        # Define token types using Enum for better type safety
+        """Initialize token definitions."""
         self.TokenType = Enum('TokenType', [
             'PROCEDURE', 'MODULE', 'CONSTANT', 'IS', 'BEGIN', 'END',
             'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP', 'FLOAT',
@@ -14,8 +16,15 @@ class TokenDefinitions:
             'DOT', 'QUOTE', 'EOF'
         ])
 
-        # Reserved words (stored as uppercase for case-insensitive matching)
-        self.reserved_words = {
+        self.reserved_words = self._initialize_reserved_words()
+        self.token_patterns = self._initialize_token_patterns()
+        self.operators = self._initialize_operators()
+        self.operator_names = self._initialize_operator_names()
+        self.symbols = self._initialize_symbols()
+
+    def _initialize_reserved_words(self) -> Dict[str, Enum]:
+        """Initialize reserved words."""
+        return {
             "BEGIN": self.TokenType.BEGIN,
             "MODULE": self.TokenType.MODULE,
             "CONSTANT": self.TokenType.CONSTANT,
@@ -35,8 +44,9 @@ class TokenDefinitions:
             "END": self.TokenType.END
         }
 
-        # Token patterns using regular expressions
-        self.token_patterns = {
+    def _initialize_token_patterns(self) -> Dict[str, str]:
+        """Initialize token patterns using regular expressions."""
+        return {
             "ASSIGN": r":=",
             "RELOP": r"<=|>=|/=|=|<|>",
             "ADDOP": r"\+|-|\bor\b",
@@ -56,41 +66,49 @@ class TokenDefinitions:
             "ID": r"[a-zA-Z_][a-zA-Z0-9_]{0,16}"
         }
 
-        # Operators and symbols for categorization
-        self.operators = {
-            "ASSIGN": ":=",
-            "RELOP": ["<=", ">=", "/=", "=", "<", ">"],
-            "ADDOP": ["+", "-", "or"],
-            "MULOP": ["*", "/", "rem", "mod", "and"]
+    def _initialize_operators(self) -> Dict[str, str]:
+        """Initialize operators and their symbols."""
+        return {
+            "AssignTok": ":=",
+            "LessThanOrEqualTok": "<=",
+            "GreaterThanOrEqualTok": ">=",
+            "NotEqualTok": "/=",
+            "EqualsSignTok": "=",
+            "LessThanTok": "<",
+            "GreaterThanTok": ">",
+            "PlusTok": "+",
+            "MinusTok": "-",
+            "OrTok": "or",
+            "MultiplyTok": "*",
+            "DivideTok": "/",
+            "RemainderTok": "rem",
+            "ModuloTok": "mod",
+            "AndTok": "and"
         }
 
-        self.operator_names = {
-            "ASSIGN": {
-                "AssignTok": ":=",
-            },
-            "RELOP": {
-                "LessThanOrEqualTok": "<=",
-                "GreaterThanOrEqualTok": ">=",
-                "NotEqualTok": "/=",
-                "EqualsSignTok": "=",
-                "LessThanTok": "<",
-                "GreaterThanTok": ">",
-            },
-            "ADDOP": {
-                "PlusTok": "+",
-                "MinusTok": "-",
-                "OrTok": "or",
-            },
-            "MULOP": {
-                "MultiplyTok": "*",
-                "DivideTok": "/",
-                "RemainderTok": "rem",
-                "ModuloTok": "mod",
-                "AndTok": "and"
-            }
+    def _initialize_operator_names(self) -> Dict[str, str]:
+        """Initialize operator names and their corresponding tokens."""
+        return {
+            ":=": "AssignTok",
+            "<=": "LessThanOrEqualTok",
+            ">=": "GreaterThanOrEqualTok",
+            "/=": "NotEqualTok",
+            "=": "EqualsSignTok",
+            "<": "LessThanTok",
+            ">": "GreaterThanTok",
+            "+": "PlusTok",
+            "-": "MinusTok",
+            "or": "OrTok",
+            "*": "MultiplyTok",
+            "/": "DivideTok",
+            "rem": "RemainderTok",
+            "mod": "ModuloTok",
+            "and": "AndTok"
         }
 
-        self.symbols = {
+    def _initialize_symbols(self) -> Dict[str, str]:
+        """Initialize symbols."""
+        return {
             "LPAREN": "(",
             "RPAREN": ")",
             "COMMA": ",",
@@ -100,11 +118,14 @@ class TokenDefinitions:
             "QUOTE": '"'
         }
 
-    def is_reserved(self, word):
+    def is_reserved(self, word: str) -> bool:
+        """Check if a word is a reserved word."""
         return word.upper() in self.reserved_words
 
-    def get_reserved_token(self, word):
+    def get_reserved_token(self, word: str) -> Optional[Enum]:
+        """Get the token type for a reserved word."""
         return self.reserved_words.get(word.upper(), None)
 
-    def get_token_type(self, token_type_str):
+    def get_token_type(self, token_type_str: str) -> Optional[Enum]:
+        """Get the token type from a string."""
         return getattr(self.TokenType, token_type_str, None)
