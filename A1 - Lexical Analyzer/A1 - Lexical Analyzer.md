@@ -126,11 +126,14 @@ Write a short program that:
 - Upload the zip file to the appropriate **D2L Dropbox** on or before the due date.
 
 ---
-Do not report
-- space
-- tabs
-- comments
+- Do not report
+	- space
+	- tabs
+	- comments
+
 - the identifiers are 17 character long, not by more than 17
+	-  if they are, give an error, except for literal strings
+- The end of file is saved as eoft or end of file token
 
 
 ---
