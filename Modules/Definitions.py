@@ -2,9 +2,16 @@
 
 from enum import Enum
 import re
+import logging
 from typing import Dict, Optional
 
-class TokenDefinitions:
+
+"""_summary_
+
+
+"""
+
+class Definitions:
     def __init__(self):
         """Initialize token definitions."""
         self.TokenType = Enum('TokenType', [
