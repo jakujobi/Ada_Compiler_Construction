@@ -13,3 +13,5 @@ repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_home_path)
 
 from Modules.FileHandler import FileHandler
+from Modules.Token import Token
+from Modules.Definitions import Definitions
