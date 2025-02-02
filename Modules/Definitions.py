@@ -1,15 +1,21 @@
 # Definitions
 
 from enum import Enum
-import re
-import logging
 from typing import Dict, Optional
+# import re
+# import logging
 
 
 """_summary_
+Definitions Module
 
+Responsibility: Define constants, reserved words, token regular expressions, and other static data.
+Features:
+Data structure (e.g., dictionary or list) for reserved words.
+Regular expressions for identifiers, numbers, string literals, and operators.
 
 """
+
 
 class Definitions:
     def __init__(self):
