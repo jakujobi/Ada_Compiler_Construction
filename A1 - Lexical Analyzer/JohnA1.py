@@ -53,12 +53,13 @@ class JohnA1:
         ***  DESCRIPTION : Configures the logging for the JohnA1 class.     ***
         **********************************************************************/
         """
+
         log_directory = Path("logs")
         log_directory.mkdir(exist_ok=True)  # Create the directory if it doesn't exist
     
         log_title = log_directory / f"{self.__class__.__name__}_{self.input_file_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
         logging.basicConfig(filename=log_title, level=logging.DEBUG,
-                            format='%(asctime)s - %(levelname)s - %(message)s')
+                            format='%(asctime)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s')
         logging.debug(f"Log file created: {log_title}")
 
     def run(self):
