@@ -392,6 +392,24 @@ class FileHandler:
         except Exception as e:
             print(f"An error occurred: {e}")
 
+    def read_file_as_string(self, file_name):
+        """
+        Reads the specified file and returns its contents as a string.
+        """
+        try:
+            file_path = self.find_file(file_name)
+            if file_path is None:
+                print(f"Error: Could not find the file '{file_name}'.")
+                return None
+            with open(file_path, 'r', encoding='utf-8') as file:
+                file_contents = file.read()
+            return file_contents
+        except FileNotFoundError:
+            print(f"File not found: {file_name}.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            return None
+
     def use_system_explorer(self):
         """
         /********************************************************************
