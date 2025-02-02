@@ -193,7 +193,49 @@ Acquire files:
 	- Pass it to the JohnA1 class initialized
 - If no arguments, it should ask the user to provide the name of the file or exit the program
 
+---
 
+## Lexical Analyzer
+
+```
+function analyze(source_code):
+    initialize position, line, column, errors list
+    while position < length of source_code:
+        if whitespace is matched:
+            update position, line, column
+            continue
+        if comment is matched:
+            skip to end of line
+            continue
+        for each token type in a prioritized order (e.g., ASSIGN before COLON):
+            if regex pattern matches at current position:
+                lexeme = matched text
+                determine token type:
+                    if type is ID:
+                        if lexeme.upper() is in reserved_words:
+                            set token type to reserved word type
+                        else if len(lexeme) > 17:
+                            log error (identifier too long)
+                            if stop_on_error:
+                                raise exception
+                            else:
+                                add error to list and continue
+                        else:
+                            token type remains ID
+                    if type is NUM or REAL:
+                        convert lexeme to integer or float
+                    if type is LITERAL:
+                        ensure closing quote on same line
+                create a Token with metadata (line, column, etc.)
+                update position and column
+                yield token
+                break out of pattern loop
+        if no token pattern matches:
+            log error for unrecognized character
+            update position to avoid infinite loop
+    yield an EOF token
+
+```
 
 
 
