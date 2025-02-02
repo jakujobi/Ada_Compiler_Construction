@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 if not logging.getLogger().hasHandlers():
     logging.basicConfig(
         level=logging.DEBUG,  # Default logging level is DEBUG
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
     )
 
 # Try to import Tkinter for GUI file explorer. If not available, fallback to manual entry.
