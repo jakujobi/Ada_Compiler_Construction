@@ -137,7 +137,88 @@ Write a short program that:
 
 
 ---
-# Plan
+# Modules
+## Token
+### Responsibility:  
+Define a data structure (class) to represent tokens, along with metadata such as token type, lexeme, line number, column number, and associated values (for numbers or strings).
+### Key Features:
+- **Data Encapsulation:** Encapsulate all token-related information to be passed around between modules.
+- **Readable Representation:** Provide methods to display tokens (using `__str__` or `__repr__`).
+### Design Considerations:
+- Use of an object-oriented design so that tokens can be extended easily.
+- Support for various types of tokens (identifiers, numbers, reserved words, etc.) by including extra attributes (e.g., integer value vs. real value).
 
-Token class
-- 
+---
+## Definitions
+### Responsibility:  
+Store static data that defines the language, including:
+- **Token Types:** Enumerated types for reserved words, operators, and symbols.
+- **Reserved Words:** A data structure (dictionary or set) mapping Ada reserved words to their corresponding token types.
+- **Regular Expressions/Patterns:** Patterns to validate identifiers, numbers, string literals, and operators.
+- **Operators and Symbols:** Maps for operators (assignment, relational, additive, multiplicative) and special symbols (parentheses, semicolons, etc.).
+### Key Features:
+- **Case Insensitivity:** Since Ada is not case sensitive, the module ensures that comparisons for reserved words are done in a normalized form (e.g., uppercase).
+- **Extensibility:** Easily add or modify token patterns and reserved words.
+### Design Considerations:
+- The use of regular expressions or pattern strings in this module centralizes the static aspects of the language definition.
+- This module acts as a reference for the Lexical Analyzer when classifying tokens.
+
+---
+## ErrorHandler
+
+
+
+## JohnA1.py
+This is the driver program.
+### JohnA1 class
+- Create a log file 
+- Receives the input file name at initialization as string, and the output file name(optional)
+- Confirm if the input file exists
+	- Log an error if the input file does not exist
+	- 
+- Log each step it performs with relevant level of logging
+- Get the source code from the file
+- Process it with the lexical analyzer and receive a list of tokens
+- Format the tokens in to a table
+- Print the table
+- Write the table to a file
+## main
+Acquire files:
+- If there are 2 arguements,
+	- The first one is the name of the input file
+	- The second one is the name of the output file
+	- It should pass them to the JohnA1 class initialized
+- If there is 1 arguement
+	- it is the name of the input file
+	- Pass it to the JohnA1 class initialized
+- If no arguments, it should ask the user to provide the name of the file or exit the program
+
+
+
+
+
+
+---
+# Testing and Validation Plan
+
+## 1. Test Cases
+
+- **Valid Inputs:**
+    - A small Ada procedure with valid tokens (identifiers, numbers, strings, reserved words).
+    - Input with varying whitespace and inline comments.
+- **Error Conditions:**
+    - An identifier longer than 17 characters.
+    - An unterminated string literal.
+    - Unrecognized symbols (illegal characters).
+- **Corner Cases:**
+    - Input that starts or ends with whitespace.
+    - Sequences that could be confused with multi-character operators (e.g., differentiating between `:` and `:=`).
+
+## 2. Debugging Strategies
+
+- **Module-Level Testing:**
+    - Test each module independently (e.g., validate the Definitions module’s reserved word lookup).
+    - Create unit tests for helper functions within the Lexical Analyzer.
+- **Integration Testing:**
+    - Combine the modules to simulate the full lexical analysis process.
+    - Use a controlled set of source code inputs and verify that the output token stream matches expectations.
