@@ -1,3 +1,6 @@
+# A1 - Lexical Analyzer
+# John A1.py
+
 import os
 import sys
 import logging
@@ -127,8 +130,8 @@ class JohnA1:
         separator = "-" * (len(header) + 10)
         table_lines = [header, separator]
         for token in self.tokens:
-            # Assuming each token has attributes: token_type, lexeme, line_number, column_number, value.
             row = f"{str(token.token_type):15} | {token.lexeme:15} | {token.line_number:<5} | {token.column_number:<6} | {token.value}"
+            logging.debug(f"Formatted token: {row}")
             table_lines.append(row)
         
         table_output = "\n".join(table_lines)
@@ -153,6 +156,7 @@ class JohnA1:
         except Exception as e:
             logging.error(f"An error occurred while writing to the file '{output_file_name}': {e}")
             return False
+
 
 
 def main():
