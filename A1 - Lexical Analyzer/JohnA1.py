@@ -39,7 +39,7 @@ class JohnA1:
         self.file_handler = FileHandler()
         self.lexical_analyzer = LexicalAnalyzer()
         
-        self.source_code_stream = None
+        self.source_code_string = None
         self.tokens = []
         
         self.run()
@@ -53,7 +53,10 @@ class JohnA1:
         ***  DESCRIPTION : Configures the logging for the JohnA1 class.     ***
         **********************************************************************/
         """
-        log_title = f"{self.__class__.__name__}_{self.input_file_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+        log_directory = Path("logs")
+        log_directory.mkdir(exist_ok=True)  # Create the directory if it doesn't exist
+    
+        log_title = log_directory / f"{self.__class__.__name__}_{self.input_file_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
         logging.basicConfig(filename=log_title, level=logging.DEBUG,
                             format='%(asctime)s - %(levelname)s - %(message)s')
         logging.debug(f"Log file created: {log_title}")
@@ -69,7 +72,8 @@ class JohnA1:
         """
         logging.debug("Starting run() method.")
         self.get_source_code_from_file(self.input_file_name)
-        if self.source_code_stream:
+        self.print_source_code()
+        if self.source_code_string:
             self.process_tokens()
             self.format_and_output_tokens()
 
@@ -78,8 +82,8 @@ class JohnA1:
         Retrieves a character stream from the file.
         """
         logging.debug(f"Attempting to read source code from file: {input_file_name}")
-        self.source_code_stream = self.file_handler.process_file_char_stream(input_file_name)
-        if self.source_code_stream is None:
+        self.source_code_string = self.file_handler.read_file_as_string(input_file_name)
+        if self.source_code_string is None:
             logging.critical(f"Error: Could not read the file '{input_file_name}'.")
             raise FileNotFoundError(f"File '{input_file_name}' not found.")
         else:
@@ -93,10 +97,20 @@ class JohnA1:
         try:
             logging.debug("Processing tokens from source code.")
             # The analyze method is assumed to take a character stream generator and return a list of tokens.
-            self.tokens = self.lexical_analyzer.analyze(self.source_code_stream)
+            self.tokens = self.lexical_analyzer.analyze(self.source_code_string)
             logging.debug(f"Tokenization complete. {len(self.tokens)} tokens produced.")
         except Exception as e:
             logging.error(f"An error occurred during tokenization: {e}")
+
+    def print_source_code(self):
+        """
+        Prints the source code to the console.
+        """
+        if not self.source_code_string:
+            logging.warning("No source code to print.")
+            return
+        print (self.source_code_string)
+        logging.debug("Source code printed to console.")
 
     def format_and_output_tokens(self):
         """
