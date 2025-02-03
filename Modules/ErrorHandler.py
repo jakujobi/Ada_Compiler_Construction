@@ -2,11 +2,20 @@
 
 import logging
 import re
+import os
+import sys
 
 
+from pathlib import Path
+
+repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(repo_home_path)
+
+from Modules.Logger import Logger
 
 class ErrorHandler:
     def __init__(self):
+        self.logger = Logger()
         self.errors = []
         
         self.warnings = []

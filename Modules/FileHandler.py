@@ -80,26 +80,12 @@ import sys
 import os
 import logging
 
-# Configure a specific logger for this module
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(repo_home_path)
 
-# Create a console handler with a specific format
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
-)
-console_handler.setFormatter(formatter)
+from Modules.Logger import Logger
 
-# Add the handler to the logger
-logger.addHandler(console_handler)
 
-# Optionally, add a file handler if you want to log to a file as well
-file_handler = logging.FileHandler('filehandler.log')
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
 
 # Try to import Tkinter for GUI file explorer. If not available, fallback to manual entry.
 try:
@@ -117,6 +103,42 @@ class FileHandler:
     arguments and interactive user input.
     """
     
+    def __init__(self):
+        self.logger = Logger()
+        self.logger.debug("Initializing FileHandler.")
+
+
+    # def configure_logger(self):
+    #     try:
+    #         repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    #         sys.path.append(repo_home_path)
+    #         from Modules.Logger import Logger
+    #         logger = Logger()
+    #     except ImportError:
+    #         # Revert the path changes if Logger module is not found
+    #         sys.path.remove(repo_home_path)
+            
+    #         # Configure a specific logger for this module
+    #         logger = logging.getLogger(__name__)
+    #         logger.setLevel(logging.DEBUG)
+
+    #         # Create a console handler with a specific format
+    #         console_handler = logging.StreamHandler()
+    #         console_handler.setLevel(logging.DEBUG)
+    #         formatter = logging.Formatter(
+    #             "%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
+    #         )
+    #         console_handler.setFormatter(formatter)
+
+    #         # Add the handler to the logger
+    #         logger.addHandler(console_handler)
+
+    #         # Optionally, add a file handler if you want to log to a file as well
+    #         file_handler = logging.FileHandler('filehandler.log')
+    #         file_handler.setLevel(logging.DEBUG)
+    #         file_handler.setFormatter(formatter)
+    #         logger.addHandler(file_handler)
+    
     def process_file(self, file_name):
         """
         Processes the file by finding it, opening it, and reading it line by line.
@@ -125,30 +147,30 @@ class FileHandler:
         try:
             file_path = self.find_file(file_name)
             if file_path is None:
-                logger.error("Could not find the file '%s'.", file_name)
+                self.logger.error("Could not find the file '%s'.", file_name)
                 print(f"Error: Could not find the file '{file_name}'.")
                 return None
 
             file_generator = self.open_file(file_path)
             if file_generator is None:
-                logger.error("Could not open the file '%s'.", file_name)
+                self.logger.error("Could not open the file '%s'.", file_name)
                 print(f"Error: Could not open the file '{file_name}'.")
                 return None
             
             return self.read_file(file_generator)
         except FileNotFoundError:
-            logger.exception("File not found: %s.", file_name)
+            self.logger.exception("File not found: %s.", file_name)
             print(f"File not found: {file_name}.")
         except Exception as e:
-            logger.exception("An error occurred: %s", e)
+            self.logger.exception("An error occurred: %s", e)
             print(f"An error occurred: {e}")
             return None
 
     def process_arg_file(self, file_name):
-        logger.info("Processing file: %s from argument", file_name)
+        self.logger.info("Processing file: %s from argument", file_name)
         file_path = self.find_file(file_name)
         if file_path is None:
-            logger.error("Could not find the file '%s'.", file_name)
+            self.logger.error("Could not find the file '%s'.", file_name)
             print(f"Error: Could not find the file '{file_name}'.")
             return None
         file_generator = self.open_file(file_path)
@@ -161,17 +183,17 @@ class FileHandler:
         """
         main_program_directory = os.path.dirname(os.path.realpath(sys.argv[0]))
         default_path = os.path.join(main_program_directory, file_name)
-        logger.debug("Checking for file at: %s", default_path)
+        self.logger.debug("Checking for file at: %s", default_path)
     
         if os.path.isfile(default_path):
-            logger.info("Found %s in the main program directory (%s).", file_name, main_program_directory)
+            self.logger.info("Found %s in the main program directory (%s).", file_name, main_program_directory)
             use_found_file = input(f"Do you want to use this {file_name}? (y/n): ").strip().lower()
     
             if use_found_file in {"y", "", "yes"}:
-                logger.info("Using %s from main program directory (%s).", file_name, main_program_directory)
+                self.logger.info("Using %s from main program directory (%s).", file_name, main_program_directory)
                 return default_path
             elif use_found_file in {"n", "no"}:
-                logger.info("Alright, let's find it manually then.")
+                self.logger.info("Alright, let's find it manually then.")
             else:
                 # Invalid response handling; this remains interactive.
                 self.handle_invalid_input("Do you want to use this file?", 5)
@@ -179,10 +201,10 @@ class FileHandler:
             try:
                 with open(default_path, "w") as file:
                     pass  # Create an empty file
-                logger.info("Created a new file: %s", file_name)
+                self.logger.info("Created a new file: %s", file_name)
                 return default_path
             except Exception as e:
-                logger.error("Error creating the file '%s': %s", file_name, e)
+                self.logger.error("Error creating the file '%s': %s", file_name, e)
                 print(f"Error creating the file '{file_name}': {e}")
                 return None
     
@@ -267,13 +289,13 @@ class FileHandler:
                 for line in file:
                     yield line
         except FileNotFoundError:
-            logger.error("Error: %s not found. @ open_file", file_path)
+            self.logger.error("Error: %s not found. @ open_file", file_path)
             print(f"Error: {file_path} not found. @ open_file")
         except PermissionError:
-            logger.error("Error: Permission denied for %s. @ open_file", file_path)
+            self.logger.error("Error: Permission denied for %s. @ open_file", file_path)
             print(f"Error: Permission denied for {file_path}. @ open_file")
         except Exception as e:
-            logger.error("An unexpected error occurred while opening %s: %s @ open_file", file_path, e)
+            self.logger.error("An unexpected error occurred while opening %s: %s @ open_file", file_path, e)
             print(f"An unexpected error occurred while opening {file_path}: {e} @ open_file")
 
     def create_new_file_in_main(self, file_name: str, extension: str) -> str:
@@ -286,10 +308,10 @@ class FileHandler:
         try:
             with open(file_path, "w") as file:
                 pass  # Create an empty file
-            logger.info("Successfully created the file: %s", file_path)
+            self.logger.info("Successfully created the file: %s", file_path)
             return file_path
         except Exception as e:
-            logger.error("An error occurred while creating the file '%s': %s", file_path, e)
+            self.logger.error("An error occurred while creating the file '%s': %s", file_path, e)
             print(f"An error occurred while creating the file '{file_path}': {e}")
             return None
 
@@ -304,7 +326,7 @@ class FileHandler:
                 lines.append(cleaned_line)
         
         if not lines:
-            logger.warning("No valid lines found in the file.")
+            self.logger.warning("No valid lines found in the file.")
         
         return lines
 
@@ -315,7 +337,7 @@ class FileHandler:
         try:
             file_path = self.find_file(file_name)
             if file_path is None:
-                logger.error("Error: Could not find the file '%s'.", file_name)
+                self.logger.error("Error: Could not find the file '%s'.", file_name)
                 print(f"Error: Could not find the file '{file_name}'.")
                 return None
 
@@ -323,10 +345,10 @@ class FileHandler:
                 lines = file.readlines()
             return lines
         except FileNotFoundError:
-            logger.exception("File not found: %s.", file_name)
+            self.logger.exception("File not found: %s.", file_name)
             print(f"File not found: {file_name}.")
         except Exception as e:
-            logger.exception("An error occurred: %s", e)
+            self.logger.exception("An error occurred: %s", e)
             print(f"An error occurred: {e}")
             return None
 
@@ -337,7 +359,7 @@ class FileHandler:
         try:
             file_path = self.find_file(file_name)
             if file_path is None:
-                logger.error("Error: Could not find the file '%s'.", file_name)
+                self.logger.error("Error: Could not find the file '%s'.", file_name)
                 print(f"Error: Could not find the file '{file_name}'.")
                 return
 
@@ -348,10 +370,10 @@ class FileHandler:
                         break
                     yield char
         except FileNotFoundError:
-            logger.exception("File not found: %s.", file_name)
+            self.logger.exception("File not found: %s.", file_name)
             print(f"File not found: {file_name}.")
         except Exception as e:
-            logger.exception("An error occurred: %s", e)
+            self.logger.exception("An error occurred: %s", e)
             print(f"An error occurred: {e}")
 
     def read_file_as_string(self, file_name):
@@ -361,17 +383,17 @@ class FileHandler:
         try:
             file_path = self.find_file(file_name)
             if file_path is None:
-                logger.error("Error: Could not find the file '%s'.", file_name)
+                self.logger.error("Error: Could not find the file '%s'.", file_name)
                 print(f"Error: Could not find the file '{file_name}'.")
                 return None
             with open(file_path, 'r', encoding='utf-8') as file:
                 file_contents = file.read()
             return file_contents
         except FileNotFoundError:
-            logger.exception("File not found: %s.", file_name)
+            self.logger.exception("File not found: %s.", file_name)
             print(f"File not found: {file_name}.")
         except Exception as e:
-            logger.exception("An error occurred: %s", e)
+            self.logger.exception("An error occurred: %s", e)
             print(f"An error occurred: {e}")
             return None
 
@@ -410,7 +432,7 @@ class FileHandler:
         """
         file_path = self.find_file(file_name, create_if_missing=True)
         if not file_path:
-            logger.error("Error: Could not create or find the file '%s'.", file_name)
+            self.logger.error("Error: Could not create or find the file '%s'.", file_name)
             print(f"Error: Could not create or find the file '{file_name}'.")
             return False
 
@@ -418,10 +440,10 @@ class FileHandler:
             with open(file_path, "w", encoding="utf-8") as file:
                 for line in lines:
                     file.write(line + "\n")
-            logger.info("Successfully wrote to the file: %s", file_path)
+            self.logger.info("Successfully wrote to the file: %s", file_path)
             return True
         except Exception as e:
-            logger.error("An error occurred while writing to the file: %s", e)
+            self.logger.error("An error occurred while writing to the file: %s", e)
             print(f"An error occurred while writing to the file: {e}")
             return False
 
@@ -431,7 +453,7 @@ class FileHandler:
         """
         file_path = self.find_file(file_name, create_if_missing=True)
         if not file_path:
-            logger.error("Error: Could not create or find the file '%s'.", file_name)
+            self.logger.error("Error: Could not create or find the file '%s'.", file_name)
             print(f"Error: Could not create or find the file '{file_name}'.")
             return False
 
@@ -439,10 +461,10 @@ class FileHandler:
             with open(file_path, "a", encoding="utf-8") as file:
                 for line in lines:
                     file.write(line + "\n")
-            logger.info("Successfully appended to the file: %s", file_path)
+            self.logger.info("Successfully appended to the file: %s", file_path)
             return True
         except Exception as e:
-            logger.error("An error occurred while appending to the file: %s", e)
+            self.logger.error("An error occurred while appending to the file: %s", e)
             print(f"An error occurred while appending to the file: {e}")
             return False
 

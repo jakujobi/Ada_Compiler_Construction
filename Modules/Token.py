@@ -3,7 +3,6 @@
 
 import os
 import sys
-import logging
 from typing import List, Optional
 
 from pathlib import Path
@@ -11,13 +10,14 @@ from pathlib import Path
 repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_home_path)
 
-#from Modules.
+from Modules.Logger import Logger
 
 
 
 class Token:
     def __init__(self, token_type, lexeme, line_number, column_number,
                  value=None, real_value=None, literal_value=None):
+        self.logger = Logger()
         self.token_type = token_type
         self.lexeme = lexeme
         self.line_number = line_number
@@ -32,7 +32,7 @@ class Token:
                     f"value={self.value}, line={self.line_number}, "
                     f"column={self.column_number})")
         except Exception:
-            logging.error('Error in Token __repr__: %s', self.__dict__)
+            self.logger.error('Error in Token __repr__: %s', self.__dict__)
             raise
 
     def __str__(self):

@@ -1,10 +1,12 @@
 MODULE ComplexExample;
 PROCEDURE Main IS
+    -- This is a comment
     CONSTANT Pi : FLOAT := 3.14159;
     X, Y : INTEGER;
 BEGIN
     X := 10;
     Y := X * 2 + 5;
+    -- lalalalalala
     
     WHILE Y > X LOOP
         IF Y mod 2 = 0 THEN
