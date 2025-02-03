@@ -6,6 +6,28 @@ from datetime import datetime
 from pathlib import Path
 
 # --------------------------------------------------------------------
+# Custom Filter to add caller class information.
+# --------------------------------------------------------------------
+class CallerFilter(logging.Filter):
+    """
+    A logging filter that attempts to add the caller's class name to the log record.
+    It scans the call stack and assigns the first encountered class name that is not 'Logger'.
+    """
+    def filter(self, record):
+        try:
+            # Iterate through the call stack (starting a few frames up)
+            for frame_info in inspect.stack()[8:]:
+                if "self" in frame_info.frame.f_locals:
+                    cls = frame_info.frame.f_locals["self"].__class__.__name__
+                    if cls != "Logger":
+                        record.caller_class = cls
+                        return True
+            record.caller_class = "None"
+        except Exception:
+            record.caller_class = "None"
+        return True
+
+# --------------------------------------------------------------------
 # Colored Formatter for Console Logging
 # --------------------------------------------------------------------
 class ColoredFormatter(logging.Formatter):
@@ -43,15 +65,15 @@ class Logger:
       - Console log level: DEBUG (messages at DEBUG and above will show)
       - File log level: DEBUG (all messages are captured in the file)
       - Log directory: "logs" (created in the directory of the main script)
-      - Log file name: <caller_name>_<timestamp>.log (caller_name is detected automatically)
-      - Log format: "%(asctime)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
+      - Log file name: <caller_name>_<timestamp>.log (caller_name is auto-detected)
+      - Log format: "%(asctime)s - %(levelname)s - %(message)s - %(caller_class)s - %(filename)s:%(lineno)d - %(funcName)s"
       - Date format: "%Y-%m-%d %H:%M:%S"
       - Colored output: Enabled
     """
     _instance = None
 
     def __new__(cls, *args, **kwargs):
-        # Singleton: return the existing instance if available.
+        # Singleton: always return the same instance.
         if cls._instance is None:
             cls._instance = super(Logger, cls).__new__(cls)
         return cls._instance
@@ -68,7 +90,7 @@ class Logger:
         if hasattr(self, "_initialized") and self._initialized:
             return
 
-        # Determine the source name if not provided.
+        # Auto-detect the source name if not provided.
         if source_name is None:
             source_name = self._get_caller_name()
         self.source_name = source_name
@@ -92,29 +114,31 @@ class Logger:
 
         # Set default format if not provided.
         if fmt is None:
-            fmt = "%(asctime)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
+            fmt = "%(asctime)s - %(levelname)s - %(message)s - %(caller_class)s - %(filename)s:%(lineno)d - %(funcName)s"
         if datefmt is None:
             datefmt = "%Y-%m-%d %H:%M:%S"
 
-        # Create formatter for console output (colored).
+        # Create formatters.
         console_formatter = ColoredFormatter(fmt=fmt, datefmt=datefmt, use_color=use_color)
-        # Formatter for file output (no colors).
         file_formatter = logging.Formatter(fmt, datefmt)
 
-        # File handler: logs everything at or above log_level_file.
+        # File handler: logs all messages.
         file_handler = logging.FileHandler(self.log_filename, encoding="utf-8")
         file_handler.setLevel(log_level_file)
         file_handler.setFormatter(file_formatter)
+        file_handler.addFilter(CallerFilter())
         self._logger.addHandler(file_handler)
 
-        # Console handler: displays messages at or above log_level_console.
+        # Console handler: displays messages at or above the console log level.
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(log_level_console)
         console_handler.setFormatter(console_formatter)
+        console_handler.addFilter(CallerFilter())
         self._logger.addHandler(console_handler)
 
         self._initialized = True
-        self._logger.debug(f"Logger initialized. Log file: {self.log_filename}")
+        # Use stacklevel=3 so that the findCaller() skips our Logger wrapper.
+        self._logger.debug(f"Logger initialized. Log file: {self.log_filename}", stacklevel=3)
 
     def _get_caller_name(self):
         """
@@ -123,7 +147,6 @@ class Logger:
         """
         import inspect
         stack = inspect.stack()
-        # stack[0] is _get_caller_name, [1] is __init__, [2] is the caller.
         if len(stack) >= 3:
             frame = stack[2]
             if 'self' in frame.frame.f_locals:
@@ -135,33 +158,31 @@ class Logger:
         return "DefaultLogger"
 
     # ----------------------------------------------------------------
-    # Logging method wrappers.
+    # Logging method wrappers with stacklevel adjustment.
     # ----------------------------------------------------------------
     def debug(self, msg, *args, **kwargs):
+        kwargs.setdefault("stacklevel", 3)
         self._logger.debug(msg, *args, **kwargs)
 
     def info(self, msg, *args, **kwargs):
+        kwargs.setdefault("stacklevel", 3)
         self._logger.info(msg, *args, **kwargs)
 
     def warning(self, msg, *args, **kwargs):
+        kwargs.setdefault("stacklevel", 3)
         self._logger.warning(msg, *args, **kwargs)
 
     def error(self, msg, *args, **kwargs):
+        kwargs.setdefault("stacklevel", 3)
         self._logger.error(msg, *args, **kwargs)
 
     def critical(self, msg, *args, **kwargs):
+        kwargs.setdefault("stacklevel", 3)
         self._logger.critical(msg, *args, **kwargs)
 
-    # ----------------------------------------------------------------
-    # Additional Configuration Methods.
-    # ----------------------------------------------------------------
     def set_level(self, level, handler_type="both"):
         """
         Change the logging level for console and/or file handlers.
-        
-        Parameters:
-          - level: The log level (e.g., logging.INFO, logging.DEBUG).
-          - handler_type: 'console', 'file', or 'both'.
         """
         for handler in self._logger.handlers:
             if handler_type == "both":
@@ -170,7 +191,7 @@ class Logger:
                 handler.setLevel(level)
             elif handler_type == "file" and isinstance(handler, logging.FileHandler):
                 handler.setLevel(level)
-        self._logger.debug(f"Logger level changed to {logging.getLevelName(level)} for {handler_type} handler(s).")
+        self._logger.debug(f"Logger level changed to {logging.getLevelName(level)} for {handler_type} handler(s).", stacklevel=3)
 
     def help(self):
         """
@@ -185,7 +206,7 @@ Parameters:
   - log_directory: Directory to store log files. Default is "logs" (created in the main script's directory).
   - source_name: Name used in the log filename. If not provided, it is auto-detected from the caller.
   - fmt: Format string for log messages.
-         Default: "%(asctime)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
+         Default: "%(asctime)s - %(levelname)s - %(message)s - %(caller_class)s - %(filename)s:%(lineno)d - %(funcName)s"
   - datefmt: Date format string for timestamps.
          Default: "%Y-%m-%d %H:%M:%S"
   - use_color: Enable colored log messages in console output (True/False).
@@ -195,20 +216,13 @@ Usage Example:
     from Logger import Logger
     import logging
 
-    # Create a logger instance (singleton)
     log = Logger(log_level_console=logging.INFO)
-
-    # Log messages:
     log.debug("This is a debug message.")
     log.info("This is an info message.")
     log.warning("This is a warning message.")
     log.error("This is an error message.")
     log.critical("This is a critical message.")
-
-    # Change log level for console output:
     log.set_level(logging.WARNING, handler_type="console")
-
-    # Display help:
     log.help()
 
 Log File Naming:
