@@ -79,7 +79,7 @@ class JohnA1:
             self.tokens = self.lexical_analyzer.analyze(self.source_code_string)
             self.logger.debug(f"Tokenization complete. {len(self.tokens)} tokens produced.")
         except Exception as e:
-            self.logger.error(f"An error occurred during tokenization: {e}")
+            self.logger.critical(f"An error occurred during tokenization: {e}")
 
     def print_source_code(self):
         """
@@ -128,7 +128,7 @@ class JohnA1:
             self.logger.debug(f"Content successfully written to {output_file_name}.")
             return True
         except Exception as e:
-            self.logger.error(f"An error occurred while writing to the file '{output_file_name}': {e}")
+            self.logger.critical(f"An error occurred while writing to the file '{output_file_name}': {e}")
             return False
 
 def main():
@@ -158,7 +158,7 @@ def main():
         JohnA1(input_file)
     else:
         print("Usage: python JohnA1.py <input_file> [output_file]")
-        logger.error("Invalid number of arguments. Exiting program.")
+        logger.critical("Invalid number of arguments. Exiting program.")
         sys.exit(1)
 
 if __name__ == "__main__":
