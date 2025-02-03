@@ -80,33 +80,36 @@ import sys
 import os
 import logging
 
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
 
-from Modules.Logger import Logger
+try:
+    repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    sys.path.append(repo_home_path)
+    from Modules.Logger import Logger
+    logger = Logger()
+except ImportError:
+    # Revert the path changes if Logger module is not found
+    sys.path.remove(repo_home_path)
+    
+    # Configure a specific logger for this module
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
 
-logger = Logger()
+    # Create a console handler with a specific format
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
+    )
+    console_handler.setFormatter(formatter)
 
-# # Configure a specific logger for this module
-# logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG)
+    # Add the handler to the logger
+    logger.addHandler(console_handler)
 
-# # Create a console handler with a specific format
-# console_handler = logging.StreamHandler()
-# console_handler.setLevel(logging.DEBUG)
-# formatter = logging.Formatter(
-#     "%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
-# )
-# console_handler.setFormatter(formatter)
-
-# # Add the handler to the logger
-# logger.addHandler(console_handler)
-
-# # Optionally, add a file handler if you want to log to a file as well
-# file_handler = logging.FileHandler('filehandler.log')
-# file_handler.setLevel(logging.DEBUG)
-# file_handler.setFormatter(formatter)
-# logger.addHandler(file_handler)
+    # Optionally, add a file handler if you want to log to a file as well
+    file_handler = logging.FileHandler('filehandler.log')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
 # Try to import Tkinter for GUI file explorer. If not available, fallback to manual entry.
 try:
