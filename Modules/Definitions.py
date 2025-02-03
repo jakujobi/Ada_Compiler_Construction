@@ -33,7 +33,7 @@ class Definitions:
             'INTEGER', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
             'LITERAL', 'CHAR_LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
             'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
-            'DOT', 'EOF'
+            'DOT', 'EOF', 'CONCAT'
         ])
 
         self.reserved_words = {
@@ -60,6 +60,7 @@ class Definitions:
         self.token_patterns: Dict[str, re.Pattern] = {
             "COMMENT": re.compile(r"--.*"),
             "WHITESPACE": re.compile(r"[ \t\r\n]+"),
+            "CONCAT": re.compile(r"\&"),
             # String literal: a starting ", then any sequence of (non-" or doubled ") until a closing " (or end-of-input)
             "LITERAL": re.compile(r'"(?:[^"\n]|"")*(?:"|$)'),
             # Character literal: a starting ', then one character (or doubled ') then a closing ' (or end-of-input)

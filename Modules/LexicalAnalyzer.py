@@ -32,18 +32,35 @@ class LexicalAnalyzer:
         self.logger.debug("Starting tokenization of source code.")
         while pos < len(source_code):
             self.logger.debug(f"At position {pos} (line {line}, column {column}).")
-            # Skip whitespace and comments.
-            pos, line, column = self._skip_whitespace(source_code, pos, line, column)
-            pos, line, column = self._skip_comment(source_code, pos, line, column)
+            
+            # Keep skipping whitespace until nothing changes.
+            while True:
+                new_pos, new_line, new_column = self._skip_whitespace(source_code, pos, line, column)
+                if new_pos == pos:
+                    break
+                pos, line, column = new_pos, new_line, new_column
 
-            # Try to match a token.
+            # Likewise, skip comments (which might be followed by more whitespace).
+            while True:
+                new_pos, new_line, new_column = self._skip_comment(source_code, pos, line, column)
+                if new_pos == pos:
+                    break
+                pos, line, column = new_pos, new_line, new_column
+                # Also try to consume any whitespace that follows a comment.
+                while True:
+                    np, nl, nc = self._skip_whitespace(source_code, pos, line, column)
+                    if np == pos:
+                        break
+                    pos, line, column = np, nl, nc
+
+            # Now try to match a token.
             token, new_pos, new_line, new_column = self._match_token(source_code, pos, line, column)
             if token:
                 self.logger.debug(f"Matched token: {token} at line {line}, column {column}.")
                 tokens.append(token)
                 pos, line, column = new_pos, new_line, new_column
             else:
-                # Handle unrecognized characters.
+                # If no token was matched, log the unrecognized character.
                 error_msg = f"Unrecognized character '{source_code[pos]}' at line {line}, column {column}."
                 self.logger.error(error_msg)
                 self.errors.append(error_msg)
@@ -60,6 +77,7 @@ class LexicalAnalyzer:
         tokens.append(eof_token)
         self.logger.debug("Tokenization complete. EOF token appended.")
         return tokens
+
 
     def _skip_whitespace(self, source: str, pos: int, line: int, column: int):
         ws_match = self.defs.token_patterns["WHITESPACE"].match(source, pos)
@@ -112,6 +130,8 @@ class LexicalAnalyzer:
                     token_type, literal_value = self._process_literal(lexeme, line, column)
                 elif token_name == "CHAR_LITERAL":
                     token_type, literal_value = self._process_char_literal(lexeme, line, column)
+                elif token_name == "CONCAT":
+                    token_type = self.defs.TokenType.CONCAT
                 else:
                     token_type = getattr(self.defs.TokenType, token_name, None)
                     self.logger.debug(f"Assigned token type '{token_type}' for operator/punctuation '{lexeme}'.")

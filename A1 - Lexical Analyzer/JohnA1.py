@@ -105,7 +105,9 @@ class JohnA1:
         separator = "-" * (len(header) + 10)
         table_lines = [header, separator]
         for token in self.tokens:
-            row = f"{str(token.token_type):15} | {token.lexeme:15} | {token.line_number:<5} | {token.column_number:<6} | {token.value}"
+            # Extract the name of the token type without the 'TokenType' prefix.
+            token_type_name = token.token_type.name
+            row = f"{token_type_name:15} | {token.lexeme:15} | {token.line_number:<5} | {token.column_number:<6} | {token.value}"
             self.logger.debug(f"Formatted token: {row}")
             table_lines.append(row)
         
@@ -117,6 +119,7 @@ class JohnA1:
             success = self.write_output_to_file(self.output_file_name, table_output)
             if success:
                 self.logger.debug(f"Token table written to file: {self.output_file_name}")
+
 
     def write_output_to_file(self, output_file_name: str, content: str) -> bool:
         """
