@@ -2,13 +2,11 @@
 # LexicalAnalyzer is a module that provides a lexical analyzer for Ada programs.
 
 
-
 import os
 import re
 import sys
 import logging
 from typing import List, Optional
-
 from pathlib import Path
 
 repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -16,121 +14,45 @@ sys.path.append(repo_home_path)
 
 from Modules.Token import Token
 from Modules.Definitions import Definitions
+from Modules.Logger import Logger
 
 
 class LexicalAnalyzer:
     def __init__(self, stop_on_error=False):
+        self.logger = Logger()
         self.defs = Definitions()
-        self.stop_on_error = stop_on_error  # Change behavior based on this flag.
-        self.errors = []  # Collect errors to be reported later.
+        self.stop_on_error = stop_on_error  # Configurable error handling flag
+        self.errors = []  # Collect errors for later reporting
 
     def analyze(self, source_code: str):
+        """Main function to tokenize the given source code."""
         tokens = []
         pos = 0
         line = 1
         column = 1
 
+        self.logger.debug("Starting tokenization of source code.")
         while pos < len(source_code):
-            # Skip whitespace
-            ws_match = self.defs.token_patterns["WHITESPACE"].match(source_code, pos)
-            if ws_match:
-                ws_text = ws_match.group()
-                # Update line and column numbers accordingly.
-                line += ws_text.count("\n")
-                if "\n" in ws_text:
-                    column = len(ws_text.split("\n")[-1]) + 1
-                else:
-                    column += len(ws_text)
-                pos = ws_match.end()
-                continue
+            self.logger.debug(f"At position {pos} (line {line}, column {column}).")
+            # Skip whitespace and comments.
+            pos, line, column = self._skip_whitespace(source_code, pos, line, column)
+            pos, line, column = self._skip_comment(source_code, pos, line, column)
 
-            # Skip comments
-            comment_match = self.defs.token_patterns["COMMENT"].match(source_code, pos)
-            if comment_match:
-                pos = comment_match.end()
-                # Assume comment is one line so set column appropriately
-                column = 1
-                line += 1
-                continue
-
-            # Attempt to match tokens in order of priority.
-            token_found = False
-            for token_name, pattern in self.defs.token_patterns.items():
-                match = pattern.match(source_code, pos)
-                if match:
-                    lexeme = match.group()
-                    token_type = None
-
-                    # Identify token type based on token_name.
-                    if token_name == "ID":
-                        # Check if the lexeme is a reserved word.
-                        if self.defs.is_reserved(lexeme):
-                            token_type = self.defs.get_reserved_token(lexeme)
-                        else:
-                            if len(lexeme) > 17:
-                                error_msg = f"Identifier '{lexeme}' exceeds maximum length at line {line}, column {column}."
-                                logging.error(error_msg)
-                                self.errors.append(error_msg)
-                                if self.stop_on_error:
-                                    raise Exception(error_msg)
-                            token_type = self.defs.TokenType.ID
-
-                    elif token_name == "NUM":
-                        token_type = self.defs.TokenType.NUM
-                        try:
-                            value = int(lexeme)
-                        except ValueError:
-                            value = None
-                            error_msg = f"Invalid number '{lexeme}' at line {line}, column {column}."
-                            logging.error(error_msg)
-                            self.errors.append(error_msg)
-                            if self.stop_on_error:
-                                raise Exception(error_msg)
-                    elif token_name == "REAL":
-                        token_type = self.defs.TokenType.REAL
-                        try:
-                            value = float(lexeme)
-                        except ValueError:
-                            value = None
-                            error_msg = f"Invalid real number '{lexeme}' at line {line}, column {column}."
-                            logging.error(error_msg)
-                            self.errors.append(error_msg)
-                            if self.stop_on_error:
-                                raise Exception(error_msg)
-                    elif token_name == "LITERAL":
-                        token_type = self.defs.TokenType.LITERAL
-                        # Remove the enclosing quotes
-                        literal_value = lexeme[1:-1]
-                    else:
-                        # For operators and punctuation, determine token type.
-                        token_type = getattr(self.defs.TokenType, token_name, None)
-
-                    # Create token. (Adjust attribute assignments as needed)
-                    token = Token(
-                        token_type=token_type,
-                        lexeme=lexeme,
-                        line_number=line,
-                        column_number=column,
-                        value=locals().get('value', None),
-                        literal_value=locals().get('literal_value', None)
-                    )
-                    tokens.append(token)
-                    token_found = True
-
-                    # Update position and column
-                    pos = match.end()
-                    column += len(lexeme)
-                    break
-
-            if not token_found:
-                # Unrecognized character encountered.
+            # Try to match a token.
+            token, new_pos, new_line, new_column = self._match_token(source_code, pos, line, column)
+            if token:
+                self.logger.debug(f"Matched token: {token} at line {line}, column {column}.")
+                tokens.append(token)
+                pos, line, column = new_pos, new_line, new_column
+            else:
+                # Handle unrecognized characters.
                 error_msg = f"Unrecognized character '{source_code[pos]}' at line {line}, column {column}."
-                logging.error(error_msg)
+                self.logger.error(error_msg)
                 self.errors.append(error_msg)
                 pos += 1
                 column += 1
 
-        # Append EOF token at the end.
+        # Append an EOF token at the end.
         eof_token = Token(
             token_type=self.defs.TokenType.EOF,
             lexeme="EOF",
@@ -138,4 +60,159 @@ class LexicalAnalyzer:
             column_number=column
         )
         tokens.append(eof_token)
+        self.logger.debug("Tokenization complete. EOF token appended.")
         return tokens
+
+    def _skip_whitespace(self, source: str, pos: int, line: int, column: int):
+        """Skips whitespace and updates position, line, and column numbers."""
+        ws_match = self.defs.token_patterns["WHITESPACE"].match(source, pos)
+        if ws_match:
+            ws_text = ws_match.group()
+            self.logger.debug(f"Skipping whitespace: '{ws_text}' at line {line}, column {column}.")
+            # Update line count if newlines are encountered.
+            line += ws_text.count("\n")
+            if "\n" in ws_text:
+                column = len(ws_text.split("\n")[-1]) + 1
+            else:
+                column += len(ws_text)
+            pos = ws_match.end()
+        return pos, line, column
+
+    def _skip_comment(self, source: str, pos: int, line: int, column: int):
+        """Skips comments (from '--' to end of line) and updates position."""
+        comment_match = self.defs.token_patterns["COMMENT"].match(source, pos)
+        if comment_match:
+            comment_text = comment_match.group()
+            self.logger.debug(f"Skipping comment: '{comment_text.strip()}' at line {line}, column {column}.")
+            line += comment_text.count("\n")
+            if "\n" in comment_text:
+                column = len(comment_text.split("\n")[-1]) + 1
+            else:
+                column += len(comment_text)
+            pos = comment_match.end()
+        return pos, line, column
+
+    def _match_token(self, source: str, pos: int, line: int, column: int):
+        """
+        Attempts to match any token (other than whitespace/comments) at the current position.
+        Delegates processing to helper methods for specific token types.
+        """
+        self.logger.debug(f"Attempting to match a token at pos {pos} (line {line}, column {column}).")
+        # Iterate through token patterns in an order of priority.
+        for token_name, pattern in self.defs.token_patterns.items():
+            # Skip patterns that have already been handled.
+            if token_name in ["WHITESPACE", "COMMENT"]:
+                continue
+
+            match = pattern.match(source, pos)
+            if match:
+                lexeme = match.group()
+                self.logger.debug(f"Pattern '{token_name}' matched lexeme '{lexeme}' at line {line}, column {column}.")
+                token_type = None
+                value = None
+                literal_value = None
+
+                # Process token based on its type.
+                if token_name == "ID":
+                    token_type = self._process_identifier(lexeme, line, column)
+                elif token_name == "NUM":
+                    token_type, value = self._process_num(lexeme, line, column)
+                elif token_name == "REAL":
+                    token_type, value = self._process_real(lexeme, line, column)
+                elif token_name == "LITERAL":
+                    token_type, literal_value = self._process_literal(lexeme, line, column)
+                else:
+                    # For operators, punctuation, etc., directly obtain token type.
+                    token_type = getattr(self.defs.TokenType, token_name, None)
+                    self.logger.debug(f"Assigned token type '{token_type}' for operator/punctuation '{lexeme}'.")
+
+                # Create the token with the appropriate metadata.
+                token = Token(
+                    token_type=token_type,
+                    lexeme=lexeme,
+                    line_number=line,
+                    column_number=column,
+                    value=value,
+                    literal_value=literal_value
+                )
+
+                # Update position and column based on the lexeme.
+                new_line = line + lexeme.count("\n")
+                if "\n" in lexeme:
+                    new_column = len(lexeme.split("\n")[-1]) + 1
+                else:
+                    new_column = column + len(lexeme)
+                new_pos = match.end()
+                self.logger.debug(f"Token '{lexeme}' processed. New pos {new_pos}, line {new_line}, column {new_column}.")
+                return token, new_pos, new_line, new_column
+
+        # If no token pattern matches, return None so that analyze() can log the error.
+        self.logger.debug(f"No matching token found at pos {pos} (line {line}, column {column}).")
+        return None, pos, line, column
+
+    def _process_identifier(self, lexeme: str, line: int, column: int):
+        """Processes an identifier and checks for reserved words or length violations."""
+        self.logger.debug(f"Processing identifier: '{lexeme}' at line {line}, column {column}.")
+        if self.defs.is_reserved(lexeme):
+            reserved_type = self.defs.get_reserved_token(lexeme)
+            self.logger.debug(f"Identifier '{lexeme}' is reserved; token type set to {reserved_type}.")
+            return reserved_type
+        else:
+            if len(lexeme) > 17:
+                error_msg = f"Identifier '{lexeme}' exceeds maximum length at line {line}, column {column}."
+                self.logger.error(error_msg)
+                self.errors.append(error_msg)
+                if self.stop_on_error:
+                    raise Exception(error_msg)
+            return self.defs.TokenType.ID
+
+    def _process_num(self, lexeme: str, line: int, column: int):
+        """Processes a numeric token (integer)."""
+        self.logger.debug(f"Processing number: '{lexeme}' at line {line}, column {column}.")
+        token_type = self.defs.TokenType.NUM
+        try:
+            value = int(lexeme)
+        except ValueError:
+            error_msg = f"Invalid number '{lexeme}' at line {line}, column {column}."
+            self.logger.error(error_msg)
+            self.errors.append(error_msg)
+            if self.stop_on_error:
+                raise Exception(error_msg)
+            value = None
+        return token_type, value
+
+    def _process_real(self, lexeme: str, line: int, column: int):
+        """Processes a real number token (floating-point)."""
+        self.logger.debug(f"Processing real number: '{lexeme}' at line {line}, column {column}.")
+        token_type = self.defs.TokenType.REAL
+        try:
+            value = float(lexeme)
+        except ValueError:
+            error_msg = f"Invalid real number '{lexeme}' at line {line}, column {column}."
+            self.logger.error(error_msg)
+            self.errors.append(error_msg)
+            if self.stop_on_error:
+                raise Exception(error_msg)
+            value = None
+        return token_type, value
+
+    def _process_literal(self, lexeme: str, line: int, column: int):
+        """Processes a string literal token and ensures it is properly terminated."""
+        token_type = self.defs.TokenType.LITERAL
+        self.logger.debug(f"Processing string literal: {lexeme} at line {line}, column {column}.")
+        # At this point, the regex should have matched a complete literal if terminated correctly.
+        if not lexeme.endswith('"'):
+            error_msg = f"Unterminated string literal starting at line {line}, column {column}."
+            self.logger.error(error_msg)
+            self.errors.append(error_msg)
+            if self.stop_on_error:
+                raise Exception(error_msg)
+            # Fallback: take everything after the first quote
+            literal_value = lexeme[1:]
+        else:
+            # Remove the enclosing quotes.
+            inner_text = lexeme[1:-1]
+            # Replace any doubled quotes with a single quote (Ada string literal escape)
+            literal_value = inner_text.replace('""', '"')
+        self.logger.debug(f"Extracted literal value: '{literal_value}' from lexeme {lexeme}.")
+        return token_type, literal_value
