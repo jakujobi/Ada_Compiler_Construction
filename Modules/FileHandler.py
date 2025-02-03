@@ -447,6 +447,26 @@ class FileHandler:
             print(f"An error occurred while writing to the file: {e}")
             return False
 
+    def write_string_to_file(self, file_name, content):
+        """
+        Writes the provided content to the specified file (creates or overwrites).
+        """
+        file_path = self.find_file(file_name, create_if_missing=True)
+        if not file_path:
+            self.logger.error("Error: Could not create or find the file '%s'.", file_name)
+            print(f"Error: Could not create or find the file '{file_name}'.")
+            return False
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as file:
+                file.write(content)
+            self.logger.info("Successfully wrote to the file: %s", file_path)
+            return True
+        except Exception as e:
+            self.logger.error("An error occurred while writing to the file: %s", e)
+            print(f"An error occurred while writing to the file: {e}")
+            return
+
     def append_to_file(self, file_name, lines):
         """
         Appends a list of lines to the specified file (creates if it doesn't exist).
