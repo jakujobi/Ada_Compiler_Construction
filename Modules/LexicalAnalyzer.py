@@ -16,7 +16,6 @@ from Modules.Token import Token
 from Modules.Definitions import Definitions
 from Modules.Logger import Logger
 
-
 class LexicalAnalyzer:
     def __init__(self, stop_on_error=False):
         self.logger = Logger()
@@ -64,12 +63,10 @@ class LexicalAnalyzer:
         return tokens
 
     def _skip_whitespace(self, source: str, pos: int, line: int, column: int):
-        """Skips whitespace and updates position, line, and column numbers."""
         ws_match = self.defs.token_patterns["WHITESPACE"].match(source, pos)
         if ws_match:
             ws_text = ws_match.group()
             self.logger.debug(f"Skipping whitespace: '{ws_text}' at line {line}, column {column}.")
-            # Update line count if newlines are encountered.
             line += ws_text.count("\n")
             if "\n" in ws_text:
                 column = len(ws_text.split("\n")[-1]) + 1
@@ -79,7 +76,6 @@ class LexicalAnalyzer:
         return pos, line, column
 
     def _skip_comment(self, source: str, pos: int, line: int, column: int):
-        """Skips comments (from '--' to end of line) and updates position."""
         comment_match = self.defs.token_patterns["COMMENT"].match(source, pos)
         if comment_match:
             comment_text = comment_match.group()
@@ -93,14 +89,8 @@ class LexicalAnalyzer:
         return pos, line, column
 
     def _match_token(self, source: str, pos: int, line: int, column: int):
-        """
-        Attempts to match any token (other than whitespace/comments) at the current position.
-        Delegates processing to helper methods for specific token types.
-        """
         self.logger.debug(f"Attempting to match a token at pos {pos} (line {line}, column {column}).")
-        # Iterate through token patterns in an order of priority.
         for token_name, pattern in self.defs.token_patterns.items():
-            # Skip patterns that have already been handled.
             if token_name in ["WHITESPACE", "COMMENT"]:
                 continue
 
@@ -112,7 +102,6 @@ class LexicalAnalyzer:
                 value = None
                 literal_value = None
 
-                # Process token based on its type.
                 if token_name == "ID":
                     token_type = self._process_identifier(lexeme, line, column)
                 elif token_name == "NUM":
@@ -121,12 +110,12 @@ class LexicalAnalyzer:
                     token_type, value = self._process_real(lexeme, line, column)
                 elif token_name == "LITERAL":
                     token_type, literal_value = self._process_literal(lexeme, line, column)
+                elif token_name == "CHAR_LITERAL":
+                    token_type, literal_value = self._process_char_literal(lexeme, line, column)
                 else:
-                    # For operators, punctuation, etc., directly obtain token type.
                     token_type = getattr(self.defs.TokenType, token_name, None)
                     self.logger.debug(f"Assigned token type '{token_type}' for operator/punctuation '{lexeme}'.")
 
-                # Create the token with the appropriate metadata.
                 token = Token(
                     token_type=token_type,
                     lexeme=lexeme,
@@ -136,7 +125,6 @@ class LexicalAnalyzer:
                     literal_value=literal_value
                 )
 
-                # Update position and column based on the lexeme.
                 new_line = line + lexeme.count("\n")
                 if "\n" in lexeme:
                     new_column = len(lexeme.split("\n")[-1]) + 1
@@ -146,12 +134,10 @@ class LexicalAnalyzer:
                 self.logger.debug(f"Token '{lexeme}' processed. New pos {new_pos}, line {new_line}, column {new_column}.")
                 return token, new_pos, new_line, new_column
 
-        # If no token pattern matches, return None so that analyze() can log the error.
         self.logger.debug(f"No matching token found at pos {pos} (line {line}, column {column}).")
         return None, pos, line, column
 
     def _process_identifier(self, lexeme: str, line: int, column: int):
-        """Processes an identifier and checks for reserved words or length violations."""
         self.logger.debug(f"Processing identifier: '{lexeme}' at line {line}, column {column}.")
         if self.defs.is_reserved(lexeme):
             reserved_type = self.defs.get_reserved_token(lexeme)
@@ -167,7 +153,6 @@ class LexicalAnalyzer:
             return self.defs.TokenType.ID
 
     def _process_num(self, lexeme: str, line: int, column: int):
-        """Processes a numeric token (integer)."""
         self.logger.debug(f"Processing number: '{lexeme}' at line {line}, column {column}.")
         token_type = self.defs.TokenType.NUM
         try:
@@ -182,7 +167,6 @@ class LexicalAnalyzer:
         return token_type, value
 
     def _process_real(self, lexeme: str, line: int, column: int):
-        """Processes a real number token (floating-point)."""
         self.logger.debug(f"Processing real number: '{lexeme}' at line {line}, column {column}.")
         token_type = self.defs.TokenType.REAL
         try:
@@ -197,22 +181,37 @@ class LexicalAnalyzer:
         return token_type, value
 
     def _process_literal(self, lexeme: str, line: int, column: int):
-        """Processes a string literal token and ensures it is properly terminated."""
         token_type = self.defs.TokenType.LITERAL
         self.logger.debug(f"Processing string literal: {lexeme} at line {line}, column {column}.")
-        # At this point, the regex should have matched a complete literal if terminated correctly.
+        # Check if the lexeme ends with a double quote.
         if not lexeme.endswith('"'):
             error_msg = f"Unterminated string literal starting at line {line}, column {column}."
             self.logger.error(error_msg)
             self.errors.append(error_msg)
             if self.stop_on_error:
                 raise Exception(error_msg)
-            # Fallback: take everything after the first quote
             literal_value = lexeme[1:]
         else:
-            # Remove the enclosing quotes.
             inner_text = lexeme[1:-1]
-            # Replace any doubled quotes with a single quote (Ada string literal escape)
+            # Replace any doubled quotes with a single quote.
             literal_value = inner_text.replace('""', '"')
-        self.logger.debug(f"Extracted literal value: '{literal_value}' from lexeme {lexeme}.")
+        self.logger.debug(f"Extracted string literal value: '{literal_value}' from lexeme {lexeme}.")
+        return token_type, literal_value
+
+    def _process_char_literal(self, lexeme: str, line: int, column: int):
+        token_type = self.defs.TokenType.CHAR_LITERAL
+        self.logger.debug(f"Processing character literal: {lexeme} at line {line}, column {column}.")
+        # Check if the lexeme ends with a single quote.
+        if not lexeme.endswith("'"):
+            error_msg = f"Unterminated character literal starting at line {line}, column {column}."
+            self.logger.error(error_msg)
+            self.errors.append(error_msg)
+            if self.stop_on_error:
+                raise Exception(error_msg)
+            literal_value = lexeme[1:]
+        else:
+            inner_text = lexeme[1:-1]
+            # Replace any doubled single quotes with a single quote.
+            literal_value = inner_text.replace("''", "'")
+        self.logger.debug(f"Extracted character literal value: '{literal_value}' from lexeme {lexeme}.")
         return token_type, literal_value
