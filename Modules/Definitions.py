@@ -16,9 +16,8 @@ Regular expressions for identifiers, numbers, string literals, and operators.
 
 """
 
-
-from enum import Enum
 import re
+from enum import Enum
 
 class Definitions:
     def __init__(self):
@@ -26,7 +25,7 @@ class Definitions:
             'PROCEDURE', 'MODULE', 'CONSTANT', 'IS', 'BEGIN', 'END',
             'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP', 'FLOAT',
             'INTEGER', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
-            'LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
+            'LITERAL', 'CHAR_LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
             'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
             'DOT', 'QUOTE', 'EOF'
         ])
@@ -66,22 +65,21 @@ class Definitions:
             "QUOTE": re.compile(r'"'),
             "COMMENT": re.compile(r"--.*"),
             "WHITESPACE": re.compile(r"[ \t\r\n]+"),
-            # "LITERAL": re.compile(r'"[^"\n]*"'),
-            "LITERAL": re.compile(r'"(?:[^"\n]|"")*"'),
+            # Literal pattern: matches starting with ", then any number of characters (including illegal ones),
+            # where a doubled quote is allowed as an escape, until a closing " is found or end-of-input.
+            "LITERAL": re.compile(r'"(?:[^"\n]|"")*(?:"|$)'),
+            # My pattern for character literal: one character (or an escaped single quote) enclosed in single quotes. blueerghh
+            "CHAR_LITERAL": re.compile(r"'(?:[^'\n]|'')(?:"+"'|$)"),
             "REAL": re.compile(r"\d+\.\d+"),
             "NUM": re.compile(r"\d+"),
             "ID": re.compile(r"[a-zA-Z][a-zA-Z0-9_]{0,16}")
         }
 
-
     def is_reserved(self, word: str) -> bool:
-        """Check if a word is a reserved word."""
         return word.upper() in self.reserved_words
 
-    def get_reserved_token(self, word: str) -> Optional[Enum]:
-        """Get the token type for a reserved word."""
+    def get_reserved_token(self, word: str):
         return self.reserved_words.get(word.upper(), None)
 
-    def get_token_type(self, token_type_str: str) -> Optional[Enum]:
-        """Get the token type from a string."""
+    def get_token_type(self, token_type_str: str):
         return getattr(self.TokenType, token_type_str, None)
