@@ -66,7 +66,8 @@ class Definitions:
             "QUOTE": re.compile(r'"'),
             "COMMENT": re.compile(r"--.*"),
             "WHITESPACE": re.compile(r"[ \t\r\n]+"),
-            "LITERAL": re.compile(r'"[^"\n]*"'),
+            # "LITERAL": re.compile(r'"[^"\n]*"'),
+            "LITERAL": re.compile(r'"(?:[^"\n]|"")*"'),
             "REAL": re.compile(r"\d+\.\d+"),
             "NUM": re.compile(r"\d+"),
             "ID": re.compile(r"[a-zA-Z][a-zA-Z0-9_]{0,16}")
