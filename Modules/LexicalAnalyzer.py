@@ -1,6 +1,5 @@
-# LexicalAnalyzer
+# LexicalAnalyzer.py
 # LexicalAnalyzer is a module that provides a lexical analyzer for Ada programs.
-
 
 import os
 import re
@@ -90,6 +89,7 @@ class LexicalAnalyzer:
 
     def _match_token(self, source: str, pos: int, line: int, column: int):
         self.logger.debug(f"Attempting to match a token at pos {pos} (line {line}, column {column}).")
+        # Iterate through token patterns in the order defined by the dictionary.
         for token_name, pattern in self.defs.token_patterns.items():
             if token_name in ["WHITESPACE", "COMMENT"]:
                 continue
@@ -193,7 +193,7 @@ class LexicalAnalyzer:
             literal_value = lexeme[1:]
         else:
             inner_text = lexeme[1:-1]
-            # Replace any doubled quotes with a single quote.
+            # Allow any character, replacing doubled quotes with a single quote.
             literal_value = inner_text.replace('""', '"')
         self.logger.debug(f"Extracted string literal value: '{literal_value}' from lexeme {lexeme}.")
         return token_type, literal_value
