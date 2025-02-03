@@ -5,6 +5,27 @@ from typing import Dict, Optional
 import re
 
 class Definitions:
+    """
+    A class used to define token types and patterns for a compiler.
+
+    Attributes
+    ----------
+    TokenType : Enum
+        An enumeration of all possible token types.
+    reserved_words : dict
+        A dictionary mapping reserved words to their corresponding token types.
+    token_patterns : dict
+        A dictionary mapping token names to their corresponding regular expression patterns.
+
+    Methods
+    -------
+    is_reserved(word: str) -> bool
+        Checks if a given word is a reserved word.
+    get_reserved_token(word: str) -> Optional[Enum]
+        Returns the token type for a given reserved word.
+    get_token_type(token_type_str: str) -> Optional[Enum]
+        Returns the token type for a given token type string.
+    """
     def __init__(self):
         self.TokenType = Enum('TokenType', [
             'PROCEDURE', 'MODULE', 'CONSTANT', 'IS', 'BEGIN', 'END',
@@ -60,10 +81,38 @@ class Definitions:
         }
 
     def is_reserved(self, word: str) -> bool:
+        """
+        Check if a given word is a reserved word.
+
+        Args:
+            word (str): The word to check.
+
+        Returns:
+            bool: True if the word is a reserved word, False otherwise.
+        """
         return word.upper() in self.reserved_words
 
     def get_reserved_token(self, word: str) -> Optional[Enum]:
+        """
+        Retrieve the reserved token for a given word.
+
+        Args:
+            word (str): The word to look up in the reserved words dictionary.
+
+        Returns:
+            Optional[Enum]: The corresponding reserved token if the word is found,
+                            otherwise None.
+        """
         return self.reserved_words.get(word.upper(), None)
 
     def get_token_type(self, token_type_str: str) -> Optional[Enum]:
+        """
+        Retrieves the token type from the TokenType enumeration based on the provided token type string.
+
+        Args:
+            token_type_str (str): The string representation of the token type.
+
+        Returns:
+            Optional[Enum]: The corresponding token type from the TokenType enumeration if it exists, otherwise None.
+        """
         return getattr(self.TokenType, token_type_str, None)
