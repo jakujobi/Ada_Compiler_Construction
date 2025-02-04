@@ -16,6 +16,8 @@ from Modules.Definitions import Definitions
 from Modules.Logger import Logger
 
 class LexicalAnalyzer:
+    SKIP = object() # Special marker indicating that a matched token should be skipped.
+
     def __init__(self, stop_on_error=False):
         self.logger = Logger()
         self.defs = Definitions()
@@ -34,41 +36,38 @@ class LexicalAnalyzer:
         while pos < len(source_code):
             self.logger.debug(f"At position {pos} (line {line}, column {column}).")
             
-            # Keep skipping whitespace until nothing changes.
+            # Skip whitespace and comments as before...
             while True:
                 new_pos, new_line, new_column = self._skip_whitespace(source_code, pos, line, column)
                 if new_pos == pos:
                     break
                 pos, line, column = new_pos, new_line, new_column
-
-            # Likewise, skip comments (which might be followed by more whitespace).
             while True:
                 new_pos, new_line, new_column = self._skip_comment(source_code, pos, line, column)
                 if new_pos == pos:
                     break
                 pos, line, column = new_pos, new_line, new_column
-                # Also try to consume any whitespace that follows a comment.
                 while True:
                     np, nl, nc = self._skip_whitespace(source_code, pos, line, column)
                     if np == pos:
                         break
                     pos, line, column = np, nl, nc
 
-            # Now try to match a token.
             token, new_pos, new_line, new_column = self._match_token(source_code, pos, line, column)
-            if token:
-                self.logger.debug(f"Matched token: {token} at line {line}, column {column}.")
+            if token is LexicalAnalyzer.SKIP:
+                # A token was matched but is being skipped (e.g. too long)
+                pos, line, column = new_pos, new_line, new_column
+                continue
+            elif token:
                 tokens.append(token)
                 pos, line, column = new_pos, new_line, new_column
             else:
-                # If no token was matched, log the unrecognized character.
                 error_msg = f"Unrecognized character '{source_code[pos]}' at line {line}, column {column}."
                 self.logger.error(error_msg)
                 self.errors.append(error_msg)
                 pos += 1
                 column += 1
 
-        # Append an EOF token at the end.
         eof_token = Token(
             token_type=self.defs.TokenType.EOF,
             lexeme="EOF",
@@ -78,7 +77,6 @@ class LexicalAnalyzer:
         tokens.append(eof_token)
         self.logger.debug("Tokenization complete. EOF token appended.")
         return tokens
-
 
     def _skip_whitespace(self, source: str, pos: int, line: int, column: int):
         ws_match = self.defs.token_patterns["WHITESPACE"].match(source, pos)
@@ -108,7 +106,6 @@ class LexicalAnalyzer:
 
     def _match_token(self, source: str, pos: int, line: int, column: int):
         self.logger.debug(f"Attempting to match a token at pos {pos} (line {line}, column {column}).")
-        # Iterate through token patterns in the order defined by the dictionary.
         for token_name, pattern in self.defs.token_patterns.items():
             if token_name in ["WHITESPACE", "COMMENT"]:
                 continue
@@ -123,6 +120,16 @@ class LexicalAnalyzer:
 
                 if token_name == "ID":
                     token_type = self._process_identifier(lexeme, line, column)
+                    if token_type is None:
+                        # The identifier is too long. Log a debug message and signal that this token should be skipped.
+                        self.logger.debug(f"Skipping identifier '{lexeme}' (exceeds length limit).")
+                        new_line = line + lexeme.count("\n")
+                        if "\n" in lexeme:
+                            new_column = len(lexeme.split("\n")[-1]) + 1
+                        else:
+                            new_column = column + len(lexeme)
+                        new_pos = match.end()
+                        return LexicalAnalyzer.SKIP, new_pos, new_line, new_column
                 elif token_name == "NUM":
                     token_type, value = self._process_num(lexeme, line, column)
                 elif token_name == "REAL":
@@ -137,6 +144,7 @@ class LexicalAnalyzer:
                     token_type = getattr(self.defs.TokenType, token_name, None)
                     self.logger.debug(f"Assigned token type '{token_type}' for operator/punctuation '{lexeme}'.")
 
+                # Create a token.
                 token = Token(
                     token_type=token_type,
                     lexeme=lexeme,
@@ -158,6 +166,7 @@ class LexicalAnalyzer:
         self.logger.debug(f"No matching token found at pos {pos} (line {line}, column {column}).")
         return None, pos, line, column
 
+
     def _process_identifier(self, lexeme: str, line: int, column: int):
         self.logger.debug(f"Processing identifier: '{lexeme}' at line {line}, column {column}.")
         if self.defs.is_reserved(lexeme):
@@ -172,7 +181,7 @@ class LexicalAnalyzer:
                 if self.stop_on_error:
                     raise Exception(error_msg)
                 self.logger.debug(f"Skipping to next token at pos {column}.")
-                # return self.SKIP
+                return None
             return self.defs.TokenType.ID
 
     def _process_num(self, lexeme: str, line: int, column: int):
