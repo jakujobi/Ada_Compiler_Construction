@@ -9,70 +9,80 @@
 ***  FILE  : FileHandler.py                                       ***
 *********************************************************************
 ***  DESCRIPTION :                                                 ***
-***  This program defines a class `FileHandler` that handles      ***
-***  various file operations, including finding, opening, and      ***
-***  reading files line by line. The class also provides methods   ***
-***  for prompting the user to input file paths or use the system  ***
-***  file explorer to locate files. The program is designed to     ***
-***  work with both command-line arguments and interactive user    ***
-***  input.                                                        ***
-***  The program then outputs the information as a list of lines   ***
-***                                                                ***
-***  The `FileHandler` class includes the following methods:      ***
-***                                                                ***
+***  This module defines a FileHandler class that manages various   ***
+***  file operations. It is used by multiple programs to handle     ***
+***  tasks such as finding, opening, reading, writing, and appending  ***
+***  to files. It supports both command-line file names and interactive***
+***  input, including using a GUI file explorer (if Tkinter is available). ***
+***                                                                  ***
+***  The FileHandler class includes the following methods:         ***
+***                                                                  ***
 ***  - process_file(file_name):                                    ***
-***      Processes the specified file by finding it, opening it,   ***
-***      and reading it line by line. Returns a list of cleaned    ***
-***      lines from the file or None if errors occur.              ***
-***                                                                ***
+***      Finds the file, opens it, reads it line by line, and returns ***
+***      a list of cleaned lines. If an error occurs, returns None.  ***
+***                                                                  ***
 ***  - process_arg_file(file_name):                                ***
-***      Processes the file provided as a command-line argument.   ***
-***      Finds, opens, and reads the file.                         ***
-***                                                                ***
-***  - find_file(file_name):                                       ***
-***      Checks if the specified file exists in the same directory ***
-***      as the script. If not, prompts the user to input the file ***
-***      path or use the system file explorer.                     ***
-***                                                                ***
+***      Processes a file provided as a command-line argument.      ***
+***                                                                  ***
+***  - find_file(file_name, create_if_missing=False):              ***
+***      Checks if the file exists in the main program directory.  ***
+***      If not found, prompts the user for the file path or lets the ***
+***      user use the system file explorer to locate it.            ***
+***                                                                  ***
 ***  - prompt_for_file(file_name):                                 ***
-***      Prompts the user to either type the file path or use the  ***
-***      system file explorer. Validates the input and returns a   ***
-***      valid file path.                                          ***
-***                                                                ***
+***      Interactively prompts the user to type in a file path or     ***
+***      select one via the system file explorer (if available).      ***
+***                                                                  ***
 ***  - handle_invalid_input(question, retry_limit):                ***
-***      Handles invalid inputs with retry logic and displays a    ***
-***      message if retries are exhausted.                         ***
-***                                                                ***
+***      Handles invalid responses during interactive input with a   ***
+***      retry mechanism.                                            ***
+***                                                                  ***
 ***  - open_file(file_path):                                       ***
-***      Opens the specified file and yields each line using a     ***
-***      generator to avoid loading the entire file into memory.   ***
-***                                                                ***
+***      Opens the file in read mode and yields each line one at a   ***
+***      time using a generator (so large files aren’t fully loaded).***
+***                                                                  ***
 ***  - read_file(file):                                            ***
-***      Reads the file line by line, cleans each line, and        ***
-***      returns a list of cleaned lines.                          ***
-***                                                                ***
+***      Reads from a file generator line by line, cleans each line,  ***
+***      and returns a list of non-empty, cleaned lines.             ***
+***                                                                  ***
+***  - read_file_raw(file_name):                                   ***
+***      Reads the entire file into a list of raw lines without       ***
+***      additional processing.                                      ***
+***                                                                  ***
+***  - process_file_char_stream(file_name):                        ***
+***      Reads the file character by character using a generator.    ***
+***                                                                  ***
+***  - read_file_as_string(file_name):                             ***
+***      Reads the entire file and returns its contents as a single   ***
+***      string.                                                     ***
+***                                                                  ***
 ***  - use_system_explorer():                                      ***
-***      Opens a system file explorer window using Tkinter for the ***
-***      user to select a file. Returns the selected file path.    ***
-***                                                                ***
+***      Opens a system file explorer window using Tkinter (if        ***
+***      available) so the user can select a file interactively.       ***
+***                                                                  ***
 ***  - read_line_from_file(line):                                  ***
-***      Cleans and processes a single line from the file. Removes ***
-***      leading/trailing spaces and everything after '//' to skip ***
-***      comments. Skips empty lines.                              ***
-***                                                                ***
-***  The program also includes error handling to manage common     ***
-***  issues such as file not found, permission errors, and invalid ***
-***  user inputs.                                                  ***
-***                                                                ***
-***  USAGE:                                                        ***
-***  - To use this program, create an instance of the `FileHandler`***
-***    class and call the `process_file` or `process_arg_file`     ***
-***    method with the desired file name.                          ***
-***                                                                ***
-***  - Example:                                                    ***
-***      explorer = FileHandler()                                 ***
-***      lines = explorer.process_file("example.txt")              ***
-***                                                                ***
+***      Cleans an individual line by removing extra spaces and any  ***
+***      inline comments (everything after '//'). Skips empty lines.   ***
+***                                                                  ***
+***  - write_file(file_name, lines):                               ***
+***      Writes a list of lines to a file (overwriting if it exists).  ***
+***                                                                  ***
+***  - write_string_to_file(file_name, content):                   ***
+***      Writes a single string to a file (overwriting if it exists).  ***
+***                                                                  ***
+***  - append_to_file(file_name, lines):                           ***
+***      Appends a list of lines to a file (creates the file if missing). ***
+***                                                                  ***
+***  - file_exists(file_name):                                     ***
+***      Checks if a file exists at the given path.                  ***
+***                                                                  ***
+***  USAGE:                                                         ***
+***  - Create an instance of FileHandler and call its methods to read, ***
+***    write, or process files. For example:                         ***
+***                                                                  ***
+***      explorer = FileHandler()                                   ***
+***      lines = explorer.process_file("example.txt")               ***
+***                                                                  ***
 ********************************************************************/
 """
 
@@ -80,14 +90,13 @@ import sys
 import os
 import logging
 
+# Set the repository home path for module imports.
 repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_home_path)
 
 from Modules.Logger import Logger
 
-
-
-# Try to import Tkinter for GUI file explorer. If not available, fallback to manual entry.
+# Try to import Tkinter for GUI file explorer; if not available, fall back to manual input.
 try:
     import tkinter as tk
     from tkinter import filedialog
@@ -98,51 +107,41 @@ except ImportError:
 
 class FileHandler:
     """
-    FileHandler class handles file operations such as finding, opening,
-    reading, writing, and appending to files. It supports both command-line
-    arguments and interactive user input.
-    """
+    FileHandler is a utility class to handle common file operations.
     
+    This class supports:
+      - Finding files (by checking the main directory and prompting the user).
+      - Reading files line by line or as a whole.
+      - Opening files safely using generators to manage memory usage.
+      - Writing and appending to files.
+      - Using a system file explorer (if Tkinter is available) for file selection.
+      
+    This class is used by multiple programs, so each method is thoroughly documented.
+    """
+
     def __init__(self):
+        """
+        Initialize a FileHandler instance.
+        
+        It sets up a logger for this module so that all operations can be traced.
+        """
         self.logger = Logger()
         self.logger.debug("Initializing FileHandler.")
 
-
-    # def configure_logger(self):
-    #     try:
-    #         repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    #         sys.path.append(repo_home_path)
-    #         from Modules.Logger import Logger
-    #         logger = Logger()
-    #     except ImportError:
-    #         # Revert the path changes if Logger module is not found
-    #         sys.path.remove(repo_home_path)
-            
-    #         # Configure a specific logger for this module
-    #         logger = logging.getLogger(__name__)
-    #         logger.setLevel(logging.DEBUG)
-
-    #         # Create a console handler with a specific format
-    #         console_handler = logging.StreamHandler()
-    #         console_handler.setLevel(logging.DEBUG)
-    #         formatter = logging.Formatter(
-    #             "%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d - %(funcName)s"
-    #         )
-    #         console_handler.setFormatter(formatter)
-
-    #         # Add the handler to the logger
-    #         logger.addHandler(console_handler)
-
-    #         # Optionally, add a file handler if you want to log to a file as well
-    #         file_handler = logging.FileHandler('filehandler.log')
-    #         file_handler.setLevel(logging.DEBUG)
-    #         file_handler.setFormatter(formatter)
-    #         logger.addHandler(file_handler)
-    
     def process_file(self, file_name):
         """
-        Processes the file by finding it, opening it, and reading it line by line.
-        Returns a list of cleaned lines or None if an error occurs.
+        Process a file by finding, opening, and reading it line by line.
+        
+        This method:
+          1. Attempts to locate the file using find_file().
+          2. Opens the file using open_file() to create a generator.
+          3. Reads and cleans each line using read_file().
+          
+        Parameters:
+          file_name (str): The name or path of the file to process.
+          
+        Returns:
+          list[str] or None: A list of cleaned lines from the file, or None if an error occurs.
         """
         try:
             file_path = self.find_file(file_name)
@@ -167,6 +166,15 @@ class FileHandler:
             return None
 
     def process_arg_file(self, file_name):
+        """
+        Process a file provided as a command-line argument.
+        
+        Parameters:
+          file_name (str): The name of the file provided in the command line.
+          
+        Returns:
+          None: This function processes the file for side effects (e.g., reading), but does not return the content.
+        """
         self.logger.info("Processing file: %s from argument", file_name)
         file_path = self.find_file(file_name)
         if file_path is None:
@@ -178,8 +186,15 @@ class FileHandler:
 
     def find_file(self, file_name, create_if_missing=False):
         """
-        Checks for the file in the main program directory. If not found,
-        prompts the user for the file path (or uses the system file explorer).
+        Checks if the file exists in the main program directory. If not, prompts the user for a path
+        or to use the system file explorer.
+        
+        Parameters:
+          file_name (str): The name of the file to locate.
+          create_if_missing (bool): If True, attempts to create the file if it does not exist.
+          
+        Returns:
+          str or None: The file path if found or created, otherwise None.
         """
         main_program_directory = os.path.dirname(os.path.realpath(sys.argv[0]))
         default_path = os.path.join(main_program_directory, file_name)
@@ -195,7 +210,6 @@ class FileHandler:
             elif use_found_file in {"n", "no"}:
                 self.logger.info("Alright, let's find it manually then.")
             else:
-                # Invalid response handling; this remains interactive.
                 self.handle_invalid_input("Do you want to use this file?", 5)
         elif create_if_missing:
             try:
@@ -212,28 +226,32 @@ class FileHandler:
 
     def prompt_for_file(self, file_name):
         """
-        Prompts the user to either type the file path or use the system file explorer.
-        This method remains interactive.
+        Prompts the user to type the file path or use the system file explorer to select a file.
+        
+        Parameters:
+          file_name (str): The expected name of the file.
+          
+        Returns:
+          str: A valid file path provided by the user.
         """
         retry_limit = 5
         retries = 0
 
         while True:
             if retries >= retry_limit:
-                print(f"\nSeriously? After {retry_limit} attempts, you still can't choose between 1 or 2?")
-                choice = input("Do you want to keep trying or end the program? (try/exit): ").strip().lower()
+                print(f"\nSeriously? After {retry_limit} attempts, you still can't choose?")
+                choice = input("Do you want to keep trying or exit? (try/exit): ").strip().lower()
 
                 if choice in ["exit", "e", "n", "no"]:
-                    print("\nBruh!\nFine, exiting the program. Goodbye!")
-                    sys.exit(1)  # Exit gracefully
+                    print("\nExiting the program. Goodbye!")
+                    sys.exit(1)
                 elif choice in ["try", "y", "yes", ""]:
                     print("Alright, let's give it another shot!")
                     retries = 0  # Reset retry count
                 else:
                     print("Invalid input. I'll assume you want to keep trying.")
-                    retries = 0  # Reset retry count
+                    retries = 0
 
-            # Interactive menu for file selection.
             print("\nFinding Menu:")
             print(f"1. Type the {file_name} file path manually.")
             if tkinter_available:
@@ -246,25 +264,31 @@ class FileHandler:
                 if os.path.isfile(file_path):
                     return file_path
                 else:
-                    print(f"Error: Invalid typed file path for {file_name}. Please try again.\n"
-                          f"Example: c:/Users/username/path_to_project/{file_name}\n")
+                    print(f"Error: Invalid file path for {file_name}. Please try again.\n")
             elif choice == "2" and tkinter_available:
                 try:
                     file_path = self.use_system_explorer()
                     if os.path.isfile(file_path):
                         return file_path
                     else:
-                        print(f"Error: Invalid file path for {file_name} from system explorer. Please try again.")
+                        print(f"Error: Invalid file path from system explorer for {file_name}. Please try again.")
                 except Exception as e:
-                    print(f"Unexpected Error: {e} occurred while trying to use the system file explorer.")
-                    continue  # Try again
+                    print(f"Unexpected Error: {e} occurred while using the system file explorer.")
+                    continue
             else:
                 print("Invalid choice. Please select 1 or 2.")
                 retries += 1
 
     def handle_invalid_input(self, question: str, retry_limit: int = 5):
         """
-        Handles invalid inputs with retry logic. This method remains interactive.
+        Handles invalid interactive input with a retry mechanism.
+        
+        Parameters:
+          question (str): The question to prompt the user.
+          retry_limit (int): The maximum number of retry attempts.
+          
+        Returns:
+          bool: True if the user eventually answers yes, False otherwise.
         """
         retries = 0
         while retries < retry_limit:
@@ -277,12 +301,20 @@ class FileHandler:
                 print("Invalid input. Please type 'y' for yes or 'n' for no.")
                 retries += 1
 
-        print(f"\n*sigh* \nOkay, you had {retry_limit} chances. I'm moving on without your input.")
+        print(f"\nYou had {retry_limit} chances. Moving on without input.")
         return False
 
     def open_file(self, file_path):
         """
-        Opens the file and yields each line using a generator.
+        Opens the specified file and yields each line one at a time using a generator.
+        
+        Parameters:
+          file_path (str): The path to the file to open.
+          
+        Yields:
+          str: Each line of the file.
+          
+        This method uses a generator to avoid loading the entire file into memory.
         """
         try:
             with open(file_path, "r", encoding="utf-8") as file:
@@ -295,29 +327,43 @@ class FileHandler:
             self.logger.error("Error: Permission denied for %s. @ open_file", file_path)
             print(f"Error: Permission denied for {file_path}. @ open_file")
         except Exception as e:
-            self.logger.error("An unexpected error occurred while opening %s: %s @ open_file", file_path, e)
-            print(f"An unexpected error occurred while opening {file_path}: {e} @ open_file")
+            self.logger.error("Unexpected error while opening %s: %s @ open_file", file_path, e)
+            print(f"Unexpected error while opening {file_path}: {e} @ open_file")
 
     def create_new_file_in_main(self, file_name: str, extension: str) -> str:
         """
         Creates a new file in the main program directory.
+        
+        Parameters:
+          file_name (str): The base name for the new file.
+          extension (str): The file extension (without the dot).
+          
+        Returns:
+          str: The full path of the newly created file.
         """
         main_program_directory = os.path.dirname(os.path.realpath(sys.argv[0]))
         file_path = os.path.join(main_program_directory, f"{file_name}.{extension}")
 
         try:
             with open(file_path, "w") as file:
-                pass  # Create an empty file
+                pass  # Create an empty file.
             self.logger.info("Successfully created the file: %s", file_path)
             return file_path
         except Exception as e:
-            self.logger.error("An error occurred while creating the file '%s': %s", file_path, e)
-            print(f"An error occurred while creating the file '{file_path}': {e}")
+            self.logger.error("Error creating file '%s': %s", file_path, e)
+            print(f"Error creating file '{file_path}': {e}")
             return None
 
     def read_file(self, file):
         """
-        Reads the file line by line, cleans each line, and returns a list of cleaned lines.
+        Reads from a file generator line by line, cleans each line,
+        and returns a list of non-empty, cleaned lines.
+        
+        Parameters:
+          file: A generator that yields lines from a file.
+          
+        Returns:
+          list[str]: A list of cleaned lines.
         """
         lines = []
         for line in file:
@@ -332,12 +378,18 @@ class FileHandler:
 
     def read_file_raw(self, file_name):
         """
-        Reads the file without modifying its content.
+        Reads the entire file into a list of raw lines without any processing.
+        
+        Parameters:
+          file_name (str): The name/path of the file to read.
+          
+        Returns:
+          list[str] or None: A list of raw lines from the file, or None if an error occurs.
         """
         try:
             file_path = self.find_file(file_name)
             if file_path is None:
-                self.logger.error("Error: Could not find the file '%s'.", file_name)
+                self.logger.error("Could not find the file '%s'.", file_name)
                 print(f"Error: Could not find the file '{file_name}'.")
                 return None
 
@@ -355,11 +407,17 @@ class FileHandler:
     def process_file_char_stream(self, file_name):
         """
         Reads the specified file and yields one character at a time.
+        
+        Parameters:
+          file_name (str): The file to read.
+          
+        Yields:
+          str: Each character in the file.
         """
         try:
             file_path = self.find_file(file_name)
             if file_path is None:
-                self.logger.error("Error: Could not find the file '%s'.", file_name)
+                self.logger.error("Could not find the file '%s'.", file_name)
                 print(f"Error: Could not find the file '{file_name}'.")
                 return
 
@@ -378,12 +436,18 @@ class FileHandler:
 
     def read_file_as_string(self, file_name):
         """
-        Reads the file and returns its contents as a single string.
+        Reads the entire file and returns its content as a single string.
+        
+        Parameters:
+          file_name (str): The file to read.
+          
+        Returns:
+          str or None: The file content as a string, or None if an error occurs.
         """
         try:
             file_path = self.find_file(file_name)
             if file_path is None:
-                self.logger.error("Error: Could not find the file '%s'.", file_name)
+                self.logger.error("Could not find the file '%s'.", file_name)
                 print(f"Error: Could not find the file '{file_name}'.")
                 return None
             with open(file_path, 'r', encoding='utf-8') as file:
@@ -399,7 +463,10 @@ class FileHandler:
 
     def use_system_explorer(self):
         """
-        Opens a system file explorer window using Tkinter for the user to select a file.
+        Opens a system file explorer window using Tkinter so the user can select a file.
+        
+        Returns:
+          str: The selected file path, or prompts for input if Tkinter is unavailable.
         """
         if not tkinter_available:
             return input("Enter the full path to the file: ").strip()
@@ -419,8 +486,19 @@ class FileHandler:
 
     def read_line_from_file(self, line):
         """
-        Cleans a line by removing leading/trailing spaces and everything after '//' (comments).
+        Cleans a single line from the file.
+        
+        It removes leading/trailing whitespace and removes any portion of the line
+        that follows a '//' (used here to indicate inline comments). If the resulting
+        line is empty, it returns None.
+        
+        Parameters:
+          line (str): The line read from the file.
+          
+        Returns:
+          str or None: The cleaned line, or None if the line is empty.
         """
+        # Split the line at '//' and take the part before it, then strip spaces.
         line = line.split("//", 1)[0].strip()
         if not line:
             return None
@@ -428,11 +506,18 @@ class FileHandler:
 
     def write_file(self, file_name, lines):
         """
-        Writes a list of lines to the specified file (creates or overwrites).
+        Writes a list of lines to the specified file, creating or overwriting it.
+        
+        Parameters:
+          file_name (str): The name/path of the file to write to.
+          lines (list[str]): A list of lines to write to the file.
+          
+        Returns:
+          bool: True if the operation was successful, False otherwise.
         """
         file_path = self.find_file(file_name, create_if_missing=True)
         if not file_path:
-            self.logger.error("Error: Could not create or find the file '%s'.", file_name)
+            self.logger.error("Could not create or find the file '%s'.", file_name)
             print(f"Error: Could not create or find the file '{file_name}'.")
             return False
 
@@ -449,11 +534,18 @@ class FileHandler:
 
     def write_string_to_file(self, file_name, content):
         """
-        Writes the provided content to the specified file (creates or overwrites).
+        Writes the given string content to the specified file, creating or overwriting it.
+        
+        Parameters:
+          file_name (str): The file name/path to write to.
+          content (str): The content to write.
+          
+        Returns:
+          bool: True if writing was successful, False otherwise.
         """
         file_path = self.find_file(file_name, create_if_missing=True)
         if not file_path:
-            self.logger.error("Error: Could not create or find the file '%s'.", file_name)
+            self.logger.error("Could not create or find the file '%s'.", file_name)
             print(f"Error: Could not create or find the file '{file_name}'.")
             return False
 
@@ -465,15 +557,22 @@ class FileHandler:
         except Exception as e:
             self.logger.error("An error occurred while writing to the file: %s", e)
             print(f"An error occurred while writing to the file: {e}")
-            return
+            return False
 
     def append_to_file(self, file_name, lines):
         """
-        Appends a list of lines to the specified file (creates if it doesn't exist).
+        Appends a list of lines to the specified file, creating the file if it doesn't exist.
+        
+        Parameters:
+          file_name (str): The file to which lines will be appended.
+          lines (list[str]): The lines to append.
+          
+        Returns:
+          bool: True if appending was successful, False otherwise.
         """
         file_path = self.find_file(file_name, create_if_missing=True)
         if not file_path:
-            self.logger.error("Error: Could not create or find the file '%s'.", file_name)
+            self.logger.error("Could not create or find the file '%s'.", file_name)
             print(f"Error: Could not create or find the file '{file_name}'.")
             return False
 
@@ -490,35 +589,49 @@ class FileHandler:
 
     def file_exists(self, file_name):
         """
-        Checks if a file exists.
+        Checks if a file exists at the given file name/path.
+        
+        Parameters:
+          file_name (str): The file name/path to check.
+          
+        Returns:
+          bool: True if the file exists, False otherwise.
         """
         return os.path.exists(file_name)
 
 
-# Test main program
-if __name__ == "__main__":
-    explorer = FileHandler()
+###############################################################################
+# Full Documentation for FileHandler Class
+###############################################################################
+"""
+Class: FileHandler
+------------------
+The FileHandler class is a comprehensive utility for handling file operations within
+the compiler project. It is used by various programs to perform tasks such as:
 
-    # Check for a command-line argument for the file name.
-    if len(sys.argv) > 1:
-        file_name = sys.argv[1]
-    else:
-        file_name = "example.txt"  # Default file name
+  - **Finding Files:** It checks the main program directory for a given file. If the file is not found,
+    it can prompt the user to manually enter a file path or use a system file explorer.
+  
+  - **Reading Files:** The class provides methods to:
+       * Read the file line by line using generators (e.g., open_file()) to conserve memory.
+       * Read the file fully into a string (read_file_as_string()).
+       * Read the file into a list of raw or processed lines (read_file() and read_file_raw()).
+       * Process a file as a character stream (process_file_char_stream()).
+  
+  - **Writing and Appending Files:** Methods like write_file(), write_string_to_file(), and append_to_file()
+    enable writing or appending data to files, creating the file if necessary.
+  
+  - **User Interaction:** For cases where the file isn't found automatically, prompt_for_file() and
+    handle_invalid_input() provide an interactive mechanism to obtain a valid file path from the user.
+  
+  - **System File Explorer Integration:** If Tkinter is available, use_system_explorer() allows the user
+    to visually select a file.
+  
+  - **Line Processing:** read_line_from_file() cleans individual lines by removing extra whitespace
+    and inline comments.
 
-    lines = explorer.process_file(file_name)
+This class is thoroughly documented so that any programmer, even a beginner, can understand how to
+use its methods in various parts of the application.
+"""
 
-    if lines:
-        print("\nFile Contents:")
-        for line in lines:
-            print(line)
-    else:
-        print("No lines to display.")
-
-    if lines:
-        # Test writing to a file.
-        output_file = "output_example.txt"
-        explorer.write_file(output_file, lines)
-
-        # Test appending to a file.
-        append_lines = ["This is an appended line.", "Appending more lines."]
-        explorer.append_to_file(output_file, append_lines)
+# End of FileHandler.py
