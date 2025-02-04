@@ -14,7 +14,7 @@ BEGIN
 
     -- Character literal tests
     C := 'A';
-    D := 'B''';  -- Represents the character: B followed by an escaped quote
+    D := 'B';  -- Represents the character: B
 
     -- Numeric tests
     X := 42;
