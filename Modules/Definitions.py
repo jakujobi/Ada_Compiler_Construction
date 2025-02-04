@@ -27,13 +27,16 @@ class Definitions:
         Returns the token type for a given token type string.
     """
     def __init__(self):
-        self.TokenType = Enum('TokenType', [
+        self.TokenType = Enum(
+            'TokenType', [
             'PROCEDURE', 'MODULE', 'CONSTANT', 'IS', 'BEGIN', 'END',
             'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP', 'FLOAT',
             'INTEGER', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
             'LITERAL', 'CHAR_LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
             'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
-            'DOT', 'EOF', 'CONCAT'
+            'DOT', 'EOF',
+            # I added this myself:
+            'CONCAT'
         ])
 
         self.reserved_words = {
