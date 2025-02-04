@@ -1,5 +1,5 @@
 # A1 - Lexical Analyzer
-# John A1.py
+# JohnA1.py
 
 import os
 import sys
@@ -101,13 +101,13 @@ class JohnA1:
             return
 
         # Create a table header.
-        header = f"{'Token Type':15} | {'Lexeme':15} | {'Line':5} | {'Column':6} | {'Value'}"
+        header = f"{'Token Type':15} | {'Lexeme':24} | {'Value'}"
         separator = "-" * (len(header) + 10)
         table_lines = [header, separator]
         for token in self.tokens:
             # Extract the name of the token type without the 'TokenType' prefix.
             token_type_name = token.token_type.name
-            row = f"{token_type_name:15} | {token.lexeme:15} | {token.line_number:<5} | {token.column_number:<6} | {token.value}"
+            row = f"{token_type_name:15} | {token.lexeme:24} | {token.value}"
             self.logger.debug(f"Formatted token: {row}")
             table_lines.append(row)
         
