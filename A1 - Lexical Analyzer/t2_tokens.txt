@@ -1,0 +1,33 @@
+Token Type      | Lexeme                   | Value
+------------------------------------------------------------
+PROCEDURE       | PROCEDURE                | None
+ID              | Check                    | None
+IS              | IS                       | None
+SEMICOLON       | ;                        | None
+BEGIN           | BEGIN                    | None
+ID              | X                        | None
+ASSIGN          | :=                       | None
+NUM             | 42                       | 42
+SEMICOLON       | ;                        | None
+IF              | IF                       | None
+ID              | X                        | None
+RELOP           | >                        | None
+NUM             | 10                       | 10
+THEN            | THEN                     | None
+PUT             | PUT                      | None
+LPAREN          | (                        | None
+LITERAL         | "X is greater than 10"   | None
+RPAREN          | )                        | None
+SEMICOLON       | ;                        | None
+ELSE            | ELSE                     | None
+PUT             | PUT                      | None
+LPAREN          | (                        | None
+LITERAL         | "X is 10 or less"        | None
+RPAREN          | )                        | None
+SEMICOLON       | ;                        | None
+END             | END                      | None
+SEMICOLON       | ;                        | None
+END             | END                      | None
+ID              | Check                    | None
+SEMICOLON       | ;                        | None
+EOF             | EOF                      | None
