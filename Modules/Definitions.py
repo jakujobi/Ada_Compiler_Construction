@@ -70,7 +70,7 @@ class Definitions:
             "CHAR_LITERAL": re.compile(r"'(?:[^'\n]|'')(?:"+"'|$)"),
             "REAL": re.compile(r"\d+\.\d+"),
             "NUM": re.compile(r"\d+"),
-            "ID": re.compile(r"[a-zA-Z][a-zA-Z0-9_]{0,16}"),
+            "ID": re.compile(r"[a-zA-Z][a-zA-Z0-9_]*"),
             "ASSIGN": re.compile(r":="),
             "RELOP": re.compile(r"<=|>=|/=|=|<|>"),
             "ADDOP": re.compile(r"\+|-|\bor\b"),
