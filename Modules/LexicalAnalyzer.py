@@ -21,6 +21,7 @@ class LexicalAnalyzer:
         self.defs = Definitions()
         self.stop_on_error = stop_on_error  # Configurable error handling flag
         self.errors = []  # Collect errors for later reporting
+        self.SKIP = None
 
     def analyze(self, source_code: str):
         """Main function to tokenize the given source code."""
@@ -170,6 +171,8 @@ class LexicalAnalyzer:
                 self.errors.append(error_msg)
                 if self.stop_on_error:
                     raise Exception(error_msg)
+                self.logger.debug(f"Skipping to next token at pos {column}.")
+                # return self.SKIP
             return self.defs.TokenType.ID
 
     def _process_num(self, lexeme: str, line: int, column: int):
