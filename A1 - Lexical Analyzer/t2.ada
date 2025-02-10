@@ -7,3 +7,4 @@ BEGIN
         PUT("X is 10 or less");
     END;
 END Check;
+
