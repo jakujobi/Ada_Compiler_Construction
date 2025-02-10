@@ -89,6 +89,10 @@ class LexicalAnalyzer:
                         break
                     pos, line, column = np, nl, nc
 
+            # Add this check to avoid matching tokens when at the end of the source code.
+            if pos >= len(source_code):
+                break
+
             # Try to match a token at the current position.
             token, new_pos, new_line, new_column = self._match_token(source_code, pos, line, column)
             if token is LexicalAnalyzer.SKIP:
