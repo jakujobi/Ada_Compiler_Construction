@@ -94,6 +94,7 @@ end one;
 First broke it into this production
 ``Prog -> procedure idt Args is DeclarativePart Procedures begin SeqOfStatements end idt ;``
 
+---
 ### Mermaid Code
 I've used mermaid code for previous projects, and i used it's html properties to add the underlining.
 
@@ -136,9 +137,11 @@ flowchart TD
 
 ```
 
+---
 ### First Visualization
 I tried using the mermaid renderer of my markdown editor, Obsidian. But, it doesn't quite work well.
 
+```mermaid
 flowchart TD
 %% Top-level node for Program (a):
     A[Prog]
@@ -174,6 +177,8 @@ flowchart TD
     DP4 --> DP5[integert: <u>integer</u>]
     DP5 --> DP6[<u>;</u>]
     DP6 --> DP7[DeclarativePart: ε]
+```
+---
 ### Resolving to Mermaid Chart
 I searched for other good mermaid editors online and found MermaidChart.
 
@@ -184,7 +189,7 @@ host: www.mermaidchart.com
 favicon: https://www.mermaidchart.com/img/favicon.ico
 ```
 
-
+---
 ### Visualized the Parse tree using Mermaid Code
 
 
@@ -290,3 +295,4 @@ flowchart LR
 Also available as mermaid markdown file
 
 ---
+### Parse Tree Visualized

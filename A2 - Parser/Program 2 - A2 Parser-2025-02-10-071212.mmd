@@ -1,0 +1,50 @@
+flowchart TD
+    B[Prog]
+    B1[<u>procedure</u>]
+    B2[idt: <u>two</u>]
+    B3[Args: ε]
+    B4[<u>is</u>]
+    B5[DeclarativePart]
+    B6[Procedures]
+    B7[<u>begin</u>]
+    B8[SeqOfStatements: ε]
+    B9[<u>end</u>]
+    B10[idt: <u>two</u>]
+    B11[<u>;</u>]
+
+    B --> B1
+    B --> B2
+    B --> B3
+    B --> B4
+    B --> B5
+    B --> B6
+    B --> B7
+    B --> B8
+    B --> B9
+    B --> B10
+    B --> B11
+
+    %% DeclarativePart subtree for outer procedure:
+    B5 --> BD1[IdentifierList]
+    BD1 --> BD2[idt: <u>three</u>]
+    BD2 --> BD3[<u>,</u>]
+    BD3 --> BD4[idt: <u>four</u>]
+    BD1 --> BD5[<u>:</u>]
+    BD5 --> BD6[TypeMark]
+    BD6 --> BD7[integert: <u>integer</u>]
+    BD7 --> BD8[<u>;</u>]
+    BD8 --> BD9[DeclarativePart: ε]
+
+    %% Procedures subtree (nested procedure):
+    B6 --> BP1[<b>Prog</>]
+    BP1 --> BP2[<u>procedure</u>]
+    BP1 --> BP3[idt: <u>five</u>]
+    BP1 --> BP4[Args: ε]
+    BP1 --> BP5[<u>is</u>]
+    BP1 --> BP6[DeclarativePart: ε]
+    BP1 --> BP7[Procedures: ε]
+    BP1 --> BP8[<u>begin</u>]
+    BP1 --> BP9[SeqOfStatements: ε]
+    BP1 --> BP10[<u>end</u>]
+    BP1 --> BP11[idt: <u>five</u>]
+    BP1 --> BP12[<u>;</u>]
