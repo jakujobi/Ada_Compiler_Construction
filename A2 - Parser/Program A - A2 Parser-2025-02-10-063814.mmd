@@ -1,0 +1,34 @@
+flowchart TD
+    A[Prog]
+    A1[<u>procedure</u>]
+    A2[idt: <u>one</u>]
+    A3[Args: ε]
+    A4[<u>is</u>]
+    A5[DeclarativePart]
+    A6[Procedures: ε]
+    A7[<u>begin</u>]
+    A8[SeqOfStatements: ε]
+    A9[<u>end</u>]
+    A10[idt: <u>one</u>]
+    A11[<u>;</u>]
+
+    A --> A1
+    A --> A2
+    A --> A3
+    A --> A4
+    A --> A5
+    A --> A6
+    A --> A7
+    A --> A8
+    A --> A9
+    A --> A10
+    A --> A11
+
+    %% DeclarativePart subtree:
+    A5 --> DP1[IdentifierList]
+    DP1 --> DP2[idt: <u>two</u>]
+    DP1 --> DP3[<u>:</u>]
+    DP3 --> DP4[TypeMark]
+    DP4 --> DP5[integert: <u>integer</u>]
+    DP5 --> DP6[<u>;</u>]
+    DP6 --> DP7[DeclarativePart: ε]
