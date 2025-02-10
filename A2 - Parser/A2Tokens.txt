@@ -1,0 +1,69 @@
+Token Type      | Lexeme                   | Value
+------------------------------------------------------------
+PROCEDURE       | procedure                | None
+ID              | one                      | None
+IS              | is                       | None
+ID              | two                      | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+SEMICOLON       | ;                        | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | one                      | None
+SEMICOLON       | ;                        | None
+
+
+PROCEDURE       | procedure                | None
+ID              | two                      | None
+IS              | is                       | None
+ID              | three                    | None
+COMMA           | ,                        | None
+ID              | four                     | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+SEMICOLON       | ;                        | None
+PROCEDURE       | procedure                | None
+ID              | five                     | None
+IS              | is                       | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | five                     | None
+SEMICOLON       | ;                        | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | two                      | None
+SEMICOLON       | ;                        | None
+
+
+
+PROCEDURE       | procedure                | None
+ID              | three                    | None
+IS              | is                       | None
+ID              | four                     | None
+COMMA           | ,                        | None
+ID              | five                     | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+SEMICOLON       | ;                        | None
+PROCEDURE       | procedure                | None
+ID              | six                      | None
+LPAREN          | (                        | None
+ID              | in                       | None
+ID              | seven                    | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+SEMICOLON       | ;                        | None
+ID              | eight                    | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+RPAREN          | )                        | None
+IS              | is                       | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | six                      | None
+SEMICOLON       | ;                        | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | three                    | None
+SEMICOLON       | ;                        | None
+EOF             | EOF                      | None
