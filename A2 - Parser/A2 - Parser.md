@@ -98,9 +98,15 @@ begin
 end one;
 ```
 
+First broke it into this production
+``Prog -> procedure idt Args is DeclarativePart Procedures begin SeqOfStatements end idt ;``
 
-```mermaid
-flowchart LR
+### Mermaid Code
+I've used mermaid code for previous projects, and i used it's html properties to add the underlining.
+
+```mermaidcode
+flowchart TD
+%% Top-level node for Program (a):
     A[Prog]
     A1[<u>procedure</u>]
     A2[idt: <u>one</u>]
@@ -136,3 +142,22 @@ flowchart LR
     DP6 --> DP7[DeclarativePart: ε]
 
 ```
+
+### First Visualization
+
+
+Then i visualized it using MermaidChart
+
+```cardlink
+url: https://www.mermaidchart.com/
+title: "Mermaid Chart - Create complex, visual diagrams with text. A smarter way of creating diagrams."
+host: www.mermaidchart.com
+favicon: https://www.mermaidchart.com/img/favicon.ico
+```
+
+![](Program%20A%20-%20A2%20Parser-2025-02-10-064006.svg)
+
+
+
+---
+# 
