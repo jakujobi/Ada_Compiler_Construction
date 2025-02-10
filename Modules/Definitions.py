@@ -81,7 +81,10 @@ class Definitions:
             "COMMENT": re.compile(r"--.*"),
             
             # WHITESPACE: Matches one or more whitespace characters including space, tab, carriage return, and newline.
-            "WHITESPACE": re.compile(r"[ \t\r\n]+"),
+            "WHITESPACE": re.compile(r"[ \t\r\s\n]+"),
+            #"WHITESPACE": re.compile(r"[ \t\r\n]+"),
+            # "WHITESPACE": re.compile(r"\s+"),
+
             
             # CONCAT: Matches the ampersand character '&', used in Ada for string concatenation.
             "CONCAT": re.compile(r"\&"),
