@@ -420,3 +420,87 @@ flowchart TD
     CA17 --> CA18[integert: <u>integer</u>]
     CA12 --> CA19[MoreArgs: ε]
 ```
+
+---
+### Parse Tree Vixualized
+![](Program%203%20-%20A2%20Parser-2025-02-10-075237.svg)
+
+
+
+
+---
+# Other Context
+
+I used the analyzer from the past homework to identify all tokens. Even though it did not perfectly match the new grammar rules, it was helpful.
+
+```txt
+Token Type      | Lexeme                   | Value
+------------------------------------------------------------
+PROCEDURE       | procedure                | None
+ID              | one                      | None
+IS              | is                       | None
+ID              | two                      | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+SEMICOLON       | ;                        | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | one                      | None
+SEMICOLON       | ;                        | None
+
+
+PROCEDURE       | procedure                | None
+ID              | two                      | None
+IS              | is                       | None
+ID              | three                    | None
+COMMA           | ,                        | None
+ID              | four                     | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+SEMICOLON       | ;                        | None
+PROCEDURE       | procedure                | None
+ID              | five                     | None
+IS              | is                       | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | five                     | None
+SEMICOLON       | ;                        | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | two                      | None
+SEMICOLON       | ;                        | None
+
+
+
+PROCEDURE       | procedure                | None
+ID              | three                    | None
+IS              | is                       | None
+ID              | four                     | None
+COMMA           | ,                        | None
+ID              | five                     | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+SEMICOLON       | ;                        | None
+PROCEDURE       | procedure                | None
+ID              | six                      | None
+LPAREN          | (                        | None
+ID              | in                       | None
+ID              | seven                    | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+SEMICOLON       | ;                        | None
+ID              | eight                    | None
+COLON           | :                        | None
+INTEGER         | integer                  | None
+RPAREN          | )                        | None
+IS              | is                       | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | six                      | None
+SEMICOLON       | ;                        | None
+BEGIN           | begin                    | None
+END             | end                      | None
+ID              | three                    | None
+SEMICOLON       | ;                        | None
+EOF             | EOF                      | None
+```
