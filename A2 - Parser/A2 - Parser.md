@@ -296,3 +296,127 @@ Also available as mermaid markdown file
 
 ---
 ### Parse Tree Visualized
+![](Program%202%20-%20A2%20Parser-2025-02-10-071223.svg)
+
+
+[Ada_Compiler_Construction/A2 - Parser/Program 2 - A2 Parser-2025-02-10-071240.png at main · jakujobi/Ada_Compiler_Construction](https://github.com/jakujobi/Ada_Compiler_Construction/blob/main/A2%20-%20Parser/Program%202%20-%20A2%20Parser-2025-02-10-071240.png)
+
+---
+# Program 3
+```pascal
+procedure three is
+    four, five : integer;
+    procedure six ( in seven : integer ; eight : integer ) is
+    begin
+
+    end six;
+begin
+
+end three;
+```
+
+---
+### Breakdown
+Top level
+`Prog -> procedure idt Args is DeclarativePart Procedures begin SeqOfStatements end idt ;`
+
+Declarative subtree
+`DeclarativePart -> IdentifierList : TypeMark ; DeclarativePart`
+
+Nested procedure
+`procedure six ( in seven : integer ; eight : integer ) is ... end six;`
+
+---
+### Mermaid Code
+
+> [!warning]
+> 
+Unique error i found here was that mermaid has issues with rendering `(` parenthesis `)`. 
+
+> [!success]
+> So i searched and found a fix on stack overflow.
+> - represent `(` with `#40;`
+> - represent `)` with `#41;`
+> - Also saw that there was a lot more that mermaid can do
+
+```MermaidCode
+flowchart TD
+    C[Prog]
+    C1[<u>procedure</u>]
+    C2[idt: <u>three</u>]
+    C3[Args: ε]
+    C4[<u>is</u>]
+    C5[DeclarativePart]
+    C6[Procedures]
+    C7[<u>begin</u>]
+    C8[SeqOfStatements: ε]
+    C9[<u>end</u>]
+    C10[idt: <u>three</u>]
+    C11[<u>;</u>]
+
+    C --> C1
+    C --> C2
+    C --> C3
+    C --> C4
+    C --> C5
+    C --> C6
+    C --> C7
+    C --> C8
+    C --> C9
+    C --> C10
+    C --> C11
+
+    %% DeclarativePart subtree for outer procedure:
+    C5 --> CD1[IdentifierList]
+    CD1 --> CD2[idt: <u>four</u>]
+    CD2 --> CD3[<u>,</u>]
+    CD3 --> CD4[idt: <u>five</u>]
+    CD1 --> CD5[<u>:</u>]
+    CD5 --> CD6[TypeMark]
+    CD6 --> CD7[integert: <u>integer</u>]
+    CD7 --> CD8[<u>;</u>]
+    CD8 --> CD9[DeclarativePart: ε]
+
+    %% Procedures subtree (nested procedure):
+    C6 --> CP1[Prog (nested)]
+    CP1 --> CP2[<u>procedure</u>]
+    CP1 --> CP3[idt: <u>six</u>]
+    CP1 --> CP4[Args]
+    CP1 --> CP5[<u>is</u>]
+    CP1 --> CP6[DeclarativePart: ε]
+    CP1 --> CP7[Procedures: ε]
+    CP1 --> CP8[<u>begin</u>]
+    CP1 --> CP9[SeqOfStatements: ε]
+    CP1 --> CP10[<u>end</u>]
+    CP1 --> CP11[idt: <u>six</u>]
+    CP1 --> CP12[<u>;</u>]
+
+    %% Args subtree for nested procedure:
+    %% Old one, nope didn't work
+    %% CP4 --> CA1[<u>(</u>]
+    %% CP4 --> CA2[ArgList]
+    %% CP4 --> CA3[<u>)</u>]
+
+    %% new one!
+    CP4 --> CA1[<u>#40;</u>]
+    CP4 --> CA2[ArgList]
+    CP4 --> CA3[<u>#41;</u>]
+
+    %% ArgList subtree:
+    CA2 --> CA4[Mode: <u>in</u>]
+    CA2 --> CA5[IdentifierList]
+    CA5 --> CA6[idt: <u>seven</u>]
+    CA2 --> CA7[<u>:</u>]
+    CA2 --> CA8[TypeMark]
+    CA8 --> CA9[integert: <u>integer</u>]
+    CA2 --> CA10[MoreArgs]
+    CA10 --> CA11[<u>;</u>]
+    CA10 --> CA12[ArgList]
+    CA12 --> CA13[Mode: ε]
+    CA12 --> CA14[IdentifierList]
+    CA14 --> CA15[idt: <u>eight</u>]
+    CA12 --> CA16[<u>:</u>]
+    CA12 --> CA17[TypeMark]
+    CA17 --> CA18[integert: <u>integer</u>]
+    CA12 --> CA19[MoreArgs: ε]
+```
