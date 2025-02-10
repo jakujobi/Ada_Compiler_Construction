@@ -50,7 +50,7 @@ begin
 end one;
 ```
 
-#### **(b)**
+#### (b)
 ```ada
 procedure two is
     three, four : integer;
@@ -63,7 +63,7 @@ begin
 end two;
 ```
 
-#### **(c)**
+#### (c)
 ```ada
 procedure three is
     four, five : integer;
@@ -299,10 +299,20 @@ Also available as mermaid markdown file
 ![](Program%202%20-%20A2%20Parser-2025-02-10-071223.svg)
 
 
-[Ada_Compiler_Construction/A2 - Parser/Program 2 - A2 Parser-2025-02-10-071240.png at main · jakujobi/Ada_Compiler_Construction](https://github.com/jakujobi/Ada_Compiler_Construction/blob/main/A2%20-%20Parser/Program%202%20-%20A2%20Parser-2025-02-10-071240.png)
+
+```cardlink
+url: https://github.com/jakujobi/Ada_Compiler_Construction/blob/main/A2%20-%20Parser/Program%202%20-%20A2%20Parser-2025-02-10-071240.png
+title: "Ada_Compiler_Construction/A2 - Parser/Program 2 - A2 Parser-2025-02-10-071240.png at main · jakujobi/Ada_Compiler_Construction"
+description: "Compiler for ADA written in python for CSC 446. Contribute to jakujobi/Ada_Compiler_Construction development by creating an account on GitHub."
+host: github.com
+favicon: https://github.githubassets.com/favicons/favicon.svg
+image: https://opengraph.githubassets.com/d9665a2fed7d6a8818bcf0a467f8ae467031644f09acc210209355d5a20ab876/jakujobi/Ada_Compiler_Construction
+```
+
 
 ---
-# Program 3
+# **Program 3**
+
 ```pascal
 procedure three is
     four, five : integer;
@@ -426,6 +436,17 @@ flowchart TD
 ![](Program%203%20-%20A2%20Parser-2025-02-10-075237.svg)
 
 
+```cardlink
+url: https://github.com/jakujobi/Ada_Compiler_Construction/blob/main/A2%20-%20Parser/Program%203%20-%20A2%20Parser-2025-02-10-075059.png
+title: "Ada_Compiler_Construction/A2 - Parser/Program 3 - A2 Parser-2025-02-10-075059.png at main · jakujobi/Ada_Compiler_Construction"
+description: "Compiler for ADA written in python for CSC 446. Contribute to jakujobi/Ada_Compiler_Construction development by creating an account on GitHub."
+host: github.com
+favicon: https://github.githubassets.com/favicons/favicon.svg
+image: https://opengraph.githubassets.com/d9665a2fed7d6a8818bcf0a467f8ae467031644f09acc210209355d5a20ab876/jakujobi/Ada_Compiler_Construction
+```
+
+
+
 
 
 ---
@@ -503,4 +524,14 @@ END             | end                      | None
 ID              | three                    | None
 SEMICOLON       | ;                        | None
 EOF             | EOF                      | None
+```
+
+
+```cardlink
+url: https://github.com/jakujobi/Ada_Compiler_Construction/blob/main/A2%20-%20Parser/A2Tokens.txt
+title: "Ada_Compiler_Construction/A2 - Parser/A2Tokens.txt at main · jakujobi/Ada_Compiler_Construction"
+description: "Compiler for ADA written in python for CSC 446. Contribute to jakujobi/Ada_Compiler_Construction development by creating an account on GitHub."
+host: github.com
+favicon: https://github.githubassets.com/favicons/favicon.svg
+image: https://opengraph.githubassets.com/d9665a2fed7d6a8818bcf0a467f8ae467031644f09acc210209355d5a20ab876/jakujobi/Ada_Compiler_Construction
 ```
