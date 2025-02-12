@@ -1,0 +1,7 @@
+Token Type      | Lexeme                   | Value
+------------------------------------------------------------
+ID              | literal                  | None
+ID              | with                     | None
+ID              | no                       | None
+ID              | terminator               | None
+EOF             | EOF                      | None

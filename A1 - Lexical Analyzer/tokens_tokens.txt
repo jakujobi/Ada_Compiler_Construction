@@ -1,0 +1,57 @@
+Token Type      | Lexeme                   | Value
+------------------------------------------------------------
+BEGIN           | begin                    | None
+END             | end                      | None
+IF              | if                       | None
+THEN            | then                     | None
+ELSE            | else                     | None
+ELSIF           | elsif                    | None
+WHILE           | while                    | None
+LOOP            | loop                     | None
+ADDOP           | +                        | None
+ADDOP           | -                        | None
+MULOP           | *                        | None
+MULOP           | /                        | None
+ID              | mod                      | None
+ID              | rem                      | None
+ID              | and                      | None
+ID              | or                       | None
+PROCEDURE       | procedure                | None
+ID              | junk                     | None
+IS              | is                       | None
+NUM             | 123                      | 123
+ADDOP           | -                        | None
+REAL            | 12.56                    | 12.56
+ID              | wum                      | None
+PUT             | put                      | None
+LPAREN          | (                        | None
+LITERAL         | "This is literal number one" | None
+RPAREN          | )                        | None
+SEMICOLON       | ;                        | None
+ID              | average                  | None
+CONSTANT        | constant                 | None
+ID              | var                      | None
+ID              | george                   | None
+GET             | get                      | None
+PUT             | put                      | None
+SEMICOLON       | ;                        | None
+COLON           | :                        | None
+COMMA           | ,                        | None
+LPAREN          | (                        | None
+RPAREN          | )                        | None
+RELOP           | /=                       | None
+RELOP           | =                        | None
+RELOP           | <                        | None
+RELOP           | >                        | None
+RELOP           | <=                       | None
+RELOP           | >=                       | None
+ID              | not                      | None
+INTEGER         | integer                  | None
+FLOAT           | float                    | None
+CHAR            | char                     | None
+ASSIGN          | :=                       | None
+MULOP           | *                        | None
+ADDOP           | -                        | None
+MULOP           | /                        | None
+LITERAL         | "String literal number two" | None
+EOF             | EOF                      | None

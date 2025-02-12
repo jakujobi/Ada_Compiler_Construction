@@ -1,0 +1,7 @@
+Token Type      | Lexeme                   | Value
+------------------------------------------------------------
+NUM             | 12                       | 12
+DOT             | .                        | None
+DOT             | .                        | None
+NUM             | 5                        | 5
+EOF             | EOF                      | None

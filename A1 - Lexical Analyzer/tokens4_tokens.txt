@@ -1,0 +1,4 @@
+Token Type      | Lexeme                   | Value
+------------------------------------------------------------
+LITERAL         | "This is literal -- number one" | None
+EOF             | EOF                      | None
