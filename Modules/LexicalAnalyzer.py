@@ -181,8 +181,8 @@ class LexicalAnalyzer:
         Attempt to match a token starting at the given position.
         Iterates through all token patterns (except whitespace and comments) and returns
         the first token it finds along with updated position, line, and column information.
-        If a token is matched but should be skipped (e.g. an identifier that is too long),
-        it returns a special SKIP flag.
+        If a token is matched but should be skipped (e.g. an identifier that is too long
+        or an unterminated string literal), it returns a special SKIP flag.
 
         Parameters:
           source (str): The full source code.
@@ -195,11 +195,34 @@ class LexicalAnalyzer:
                  - token: A Token object, or LexicalAnalyzer.SKIP if the token should be skipped, or None if no match.
         """
         self.logger.debug(f"Attempting to match a token at pos {pos} (line {line}, column {column}).")
-        # Go through each token pattern.
+        # Go through each token pattern defined in our Definitions.
         for token_name, pattern in self.defs.token_patterns.items():
             if token_name in ["WHITESPACE", "COMMENT"]:
                 continue
 
+            # SPECIAL CASE: For string literals, do an extra check for termination.
+            if token_name == "LITERAL":
+                # If the current character is a double quote, check for the next double quote on the same line.
+                if source[pos] == '"':
+                    next_quote = source.find('"', pos + 1)
+                    newline_pos = source.find('\n', pos)
+                    # If no closing quote is found on this line, then it's unterminated.
+                    if next_quote == -1 or (newline_pos != -1 and next_quote > newline_pos):
+                        error_msg = f"Unterminated string literal starting at line {line}, column {column}."
+                        self.logger.error(error_msg)
+                        self.errors.append(error_msg)
+                        # Advance to the end of the line (or end-of-input) so we skip the whole unterminated literal.
+                        if newline_pos == -1:
+                            new_pos = len(source)
+                            new_line = line
+                            new_column = column + (len(source) - pos)
+                        else:
+                            new_pos = newline_pos
+                            new_line = line + 1
+                            new_column = 1
+                        return LexicalAnalyzer.SKIP, new_pos, new_line, new_column
+
+            # Try matching this token pattern.
             match = pattern.match(source, pos)
             if match:
                 lexeme = match.group()
@@ -208,17 +231,12 @@ class LexicalAnalyzer:
                 value = None
                 literal_value = None
 
-                # Process based on token type.
                 if token_name == "ID":
                     token_type = self._process_identifier(lexeme, line, column)
                     if token_type is None:
-                        # The identifier is too long, so skip this token.
                         self.logger.debug(f"Skipping identifier '{lexeme}' (exceeds length limit).")
                         new_line = line + lexeme.count("\n")
-                        if "\n" in lexeme:
-                            new_column = len(lexeme.split("\n")[-1]) + 1
-                        else:
-                            new_column = column + len(lexeme)
+                        new_column = (len(lexeme.split("\n")[-1]) + 1) if "\n" in lexeme else column + len(lexeme)
                         new_pos = match.end()
                         return LexicalAnalyzer.SKIP, new_pos, new_line, new_column
                 elif token_name == "NUM":
@@ -227,6 +245,13 @@ class LexicalAnalyzer:
                     token_type, value = self._process_real(lexeme, line, column)
                 elif token_name == "LITERAL":
                     token_type, literal_value = self._process_literal(lexeme, line, column)
+                    if token_type is None:
+                        # Should not happen now because we check above—but just in case.
+                        self.logger.debug(f"Skipping unterminated literal '{lexeme}'.")
+                        new_line = line + lexeme.count("\n")
+                        new_column = (len(lexeme.split("\n")[-1]) + 1) if "\n" in lexeme else column + len(lexeme)
+                        new_pos = match.end()
+                        return LexicalAnalyzer.SKIP, new_pos, new_line, new_column
                 elif token_name == "CHAR_LITERAL":
                     token_type, literal_value = self._process_char_literal(lexeme, line, column)
                 elif token_name == "CONCAT":
@@ -245,18 +270,17 @@ class LexicalAnalyzer:
                     literal_value=literal_value
                 )
 
-                # Update position, line, and column based on the lexeme.
+                # Update our position info.
                 new_line = line + lexeme.count("\n")
-                if "\n" in lexeme:
-                    new_column = len(lexeme.split("\n")[-1]) + 1
-                else:
-                    new_column = column + len(lexeme)
+                new_column = (len(lexeme.split("\n")[-1]) + 1) if "\n" in lexeme else column + len(lexeme)
                 new_pos = match.end()
                 self.logger.debug(f"Token '{lexeme}' processed. New pos {new_pos}, line {new_line}, column {new_column}.")
                 return token, new_pos, new_line, new_column
 
         self.logger.debug(f"No matching token found at pos {pos} (line {line}, column {column}).")
         return None, pos, line, column
+
+
 
     def _process_identifier(self, lexeme: str, line: int, column: int):
         """
@@ -342,8 +366,8 @@ class LexicalAnalyzer:
         """
         Process a string literal token.
         The lexeme should start and end with a double quote.
-        If it doesn't end with a double quote, log an error.
-        It also replaces doubled double quotes with a single quote.
+        If it doesn't end with a double quote, log an error and signal to skip the token.
+        Otherwise, it replaces doubled double quotes with a single quote.
 
         Parameters:
           lexeme (str): The matched string literal (including the quotes).
@@ -352,20 +376,22 @@ class LexicalAnalyzer:
 
         Returns:
           A tuple (TokenType, literal_value) where literal_value is the inner string.
+          Returns (None, None) if the literal is unterminated.
         """
         token_type = self.defs.TokenType.LITERAL
         self.logger.debug(f"Processing string literal: {lexeme} at line {line}, column {column}.")
+        # Check if the literal ends with a double quote.
         if not lexeme.endswith('"'):
             error_msg = f"Unterminated string literal starting at line {line}, column {column}."
             self.logger.error(error_msg)
             self.errors.append(error_msg)
             if self.stop_on_error:
                 raise Exception(error_msg)
-            # Fallback: take everything after the opening quote.
-            literal_value = lexeme[1:]
+            # Signal that this token is invalid by returning None.
+            return None, None
         else:
             inner_text = lexeme[1:-1]
-            # Replace doubled quotes with a single quote.
+            # Replace any doubled double quotes with a single quote.
             literal_value = inner_text.replace('""', '"')
         self.logger.debug(f"Extracted string literal value: '{literal_value}' from lexeme {lexeme}.")
         return token_type, literal_value
