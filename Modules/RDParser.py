@@ -25,5 +25,8 @@ from Modules.LexicalAnalyzer import LexicalAnalyzer
 
 
 class RDParser:
-    def __init__(self, tokens: List[Token]):
+    def __init__(self, stop_on_error=False):
+        pass
+
+    def parse(self, tokens: List[Token]):
         pass
