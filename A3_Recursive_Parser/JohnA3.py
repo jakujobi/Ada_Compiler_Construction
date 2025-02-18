@@ -45,6 +45,7 @@ class JohnA3:
         # LexicalAnalyzer processes the source code into tokens.
         self.lexical_analyzer = LexicalAnalyzer()
 
+        self.rdparser = RDParser(stop_on_error=False)
         self.source_code_string = None  # Will hold the complete source code as a string.
         self.tokens = []                # List to store tokens produced by the lexer.
 
@@ -65,8 +66,24 @@ class JohnA3:
         self.get_source_code_from_file(self.input_file_name)
         self.print_source_code()
         if self.source_code_string:
+            self.stage1()
+            self.stage2()
+        else:
+            self.logger.error("No source code to process.")
+            self.logger.critical("Exiting program.")
+            sys.exit(1)
+
+# region stage1
+    def stage1(self):
+        if self.source_code_string:
             self.process_tokens()
             self.format_and_output_tokens()
+            self.logger.debug("Stage 1 complete.")
+        else:
+            # If there is no source code, we cannot proceed to the next stage.
+            self.logger.error("No source code to process.")
+            self.logger.critical("Stage 1 failed. Exiting program.")
+            sys.exit(1)
 
     def get_source_code_from_file(self, input_file_name: str):
         """
@@ -165,7 +182,28 @@ class JohnA3:
         except Exception as e:
             self.logger.critical(f"An error occurred while writing to the file '{output_file_name}': {e}")
             return False
+# endregion
 
+    def stage2(self):
+            if self.tokens:
+                self.logger.debug("Starting Stage 2: Recursive Descent Parser.")
+
+                self.logger.debug("Stage 2 complete.")
+            else:
+                self.logger.error("No tokens to parse.")
+                self.logger.critical("Stage 2 failed. Exiting program.")
+                sys.exit(1)
+
+    def parse_with_RDparser(self):
+        """
+        Parse the given list of tokens.
+
+        Parameters:
+          tokens (List[Token]): The list of tokens to parse.
+        """
+        self.logger.debug("Parsing tokens.")
+        self.rd_parser.parse(self.tokens)
+        self.logger.debug("Parsing complete.")
 
 
 def main():
