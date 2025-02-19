@@ -45,7 +45,6 @@ class JohnA3:
         # LexicalAnalyzer processes the source code into tokens.
         self.lexical_analyzer = LexicalAnalyzer()
 
-        self.rdparser = RDParser(stop_on_error=False)
         self.source_code_string = None  # Will hold the complete source code as a string.
         self.tokens = []                # List to store tokens produced by the lexer.
 
@@ -88,20 +87,15 @@ class JohnA3:
     def get_source_code_from_file(self, input_file_name: str):
         """
         Read the source code from a file and store it in the source_code_string attribute.
-
-        Parameters:
-          input_file_name (str): The file path of the source code.
-
-        Raises:
-          FileNotFoundError: If the source file cannot be read.
         """
-        self.logger.debug(f"Attempting to read source code from file: {input_file_name}")
-        self.source_code_string = self.file_handler.read_file_as_string(input_file_name)
-        if self.source_code_string is None:
-            self.logger.critical(f"Error: Could not read the file '{input_file_name}'.")
-            raise FileNotFoundError(f"File '{input_file_name}' not found.")
-        else:
-            self.logger.debug("Source code read successfully as character stream.")
+        self.logger.debug(f"Reading source code from file: {input_file_name}")
+        try:
+            with open(input_file_name, 'r') as file:
+                self.source_code_string = file.read().strip()
+            self.logger.debug("Source code read successfully.")
+        except Exception as e:
+            self.logger.critical(f"Error reading file: {str(e)}")
+            raise
 
     def process_tokens(self):
         """
@@ -110,12 +104,14 @@ class JohnA3:
         This method calls the analyze() function of the lexical analyzer, which returns
         a list of tokens. The tokens are then stored in the tokens attribute.
         """
+        self.logger.debug("Processing tokens from source code.")
         try:
-            self.logger.debug("Processing tokens from source code.")
             self.tokens = self.lexical_analyzer.analyze(self.source_code_string)
-            self.logger.debug(f"Tokenization complete. {len(self.tokens)} tokens produced.")
+        except ValueError as e:
+            self.logger.error(f"Invalid token found: {e}")
         except Exception as e:
             self.logger.critical(f"An error occurred during tokenization: {e}")
+
 
     def print_source_code(self):
         """
@@ -157,6 +153,7 @@ class JohnA3:
         print(table_output)
         self.logger.debug("Token table printed successfully.")
 
+        self.print_tokens()
         # Write the token table to an output file if specified.
         if self.output_file_name:
             success = self.write_output_to_file(self.output_file_name, table_output)
@@ -182,28 +179,54 @@ class JohnA3:
         except Exception as e:
             self.logger.critical(f"An error occurred while writing to the file '{output_file_name}': {e}")
             return False
+
+    def print_tokens(self):
+        """
+        Print the tokens to the console.
+        """
+        if not self.tokens:
+            self.logger.warning("No tokens to print.")
+            return
+        for token in self.tokens:
+            print(token)
+        self.logger.debug("Tokens printed to console.")
 # endregion
 
     def stage2(self):
-            if self.tokens:
-                self.logger.debug("Starting Stage 2: Recursive Descent Parser.")
-
-                self.logger.debug("Stage 2 complete.")
+        if self.tokens:
+            self.logger.debug("Starting Stage 2: Recursive Descent Parser.")
+            
+            # Parse the tokens
+            success = self.parse_with_RDparser()
+            
+            if success:
+                self.logger.info("Parsing completed successfully.")
             else:
-                self.logger.error("No tokens to parse.")
-                self.logger.critical("Stage 2 failed. Exiting program.")
-                sys.exit(1)
+                self.logger.error("Parsing failed with errors.")
+            
+            self.logger.debug("Stage 2 complete.")
+        else:
+            self.logger.error("No tokens to parse.")
+            self.logger.critical("Stage 2 failed. Exiting program.")
+            sys.exit(1)
 
     def parse_with_RDparser(self):
         """
         Parse the given list of tokens.
-
-        Parameters:
-          tokens (List[Token]): The list of tokens to parse.
+        Returns True if parsing was successful, False otherwise.
         """
         self.logger.debug("Parsing tokens.")
-        self.rd_parser.parse(self.tokens)
+        self.rdparser = RDParser(self.tokens, self.lexical_analyzer.defs, stop_on_error=False, panic_mode_recover=False)
+        success = self.rdparser.parse()
         self.logger.debug("Parsing complete.")
+        return success
+
+    def get_processing_status(self) -> dict:
+        return {
+            'tokens_count': len(self.tokens) if self.tokens else 0,
+            'has_source': bool(self.source_code_string),
+            'parsing_complete': hasattr(self, 'parsing_success') and self.parsing_success
+        }
 
 
 def main():
