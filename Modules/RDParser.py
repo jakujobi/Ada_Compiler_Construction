@@ -5,7 +5,7 @@ Recursive Descent Parser for a subset of Ada.
 Author: John Akujobi
 GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
 Date: 2024-02-17
-Version: 1.1
+Version: 1.2
 
 This module defines the RDParser class which receives a list of tokens
 from the lexical analyzer (via JohnA3.py) and verifies the syntactic correctness
@@ -42,8 +42,8 @@ The parser supports configurable error handling:
     - stop_on_error: if True, it stops on error and asks the user whether to continue.
     - panic_mode_recover: if True, it attempts panic-mode recovery.
     
-If build_parse_tree is enabled, the parser constructs a parse tree and provides a
-method to print it with indentation.
+If build_parse_tree is enabled, the parser constructs a parse tree and prints it
+using wide indentation with hyphens and vertical bars.
 A summary report is printed at the end of parsing.
 """
 
@@ -164,7 +164,7 @@ class RDParser:
 
     def print_parse_tree(self):
         """
-        Print the constructed parse tree using indentation.
+        Print the constructed parse tree using a wide indentation style with connectors.
         """
         if not self.build_parse_tree:
             self.logger.info("Parse tree building is disabled.")
@@ -172,18 +172,19 @@ class RDParser:
         if not self.parse_tree_root:
             self.logger.info("No parse tree available.")
             return
-        self._print_tree(self.parse_tree_root, 0)
+        self._print_tree(self.parse_tree_root)
 
-    def _print_tree(self, node, indent):
-        """Recursive helper to print a parse tree node with indentation."""
-        indent_str = "  " * indent
-        # Print node name and token lexeme if available.
-        if node.token:
-            print(f"{indent_str}{node.name}: {node.token.lexeme}")
-        else:
-            print(f"{indent_str}{node.name}")
-        for child in node.children:
-            self._print_tree(child, indent + 1)
+    def _print_tree(self, node, prefix="", is_last=True):
+        """
+        Recursive helper to print a parse tree node with wide indentation.
+        Uses connectors (├──, └──, │) to visually trace the tree structure.
+        """
+        connector = "└── " if is_last else "├── "
+        print(prefix + connector + str(node))
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        child_count = len(node.children)
+        for i, child in enumerate(node.children):
+            self._print_tree(child, new_prefix, i == (child_count - 1))
 
     # ------------------------------
     # Nonterminal Methods (CFG)
@@ -216,7 +217,6 @@ class RDParser:
             self.match_leaf(self.defs.TokenType.SEMICOLON, node)
             return node
         else:
-            # Original behavior without parse tree building.
             self.match(self.defs.TokenType.PROCEDURE)
             self.match(self.defs.TokenType.ID)
             self.parseArgs()
@@ -458,3 +458,4 @@ class ParseTreeNode:
         return self.name
 
 # End of RDParser.py
+#Ada_Compiler_Construction\Modules\RDParser.py  
