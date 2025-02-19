@@ -244,9 +244,10 @@ class JohnA3:
         Returns True if parsing was successful, False otherwise.
         """
         self.logger.debug("Parsing tokens.")
-        self.rdparser = RDParser(self.tokens, self.lexical_analyzer.defs, stop_on_error=False, panic_mode_recover=False)
+        self.rdparser = RDParser(self.tokens, self.lexical_analyzer.defs, stop_on_error=False, panic_mode_recover=False, build_parse_tree=True)
         success = self.rdparser.parse()
         self.logger.debug("Parsing complete.")
+        self.rdparser.print_parse_tree()
         return success
 
     def get_processing_status(self) -> dict:
