@@ -50,12 +50,13 @@ from Modules.Definitions import Definitions
 from Modules.Logger import Logger
 
 class RDParser:
-    def __init__(self, tokens, stop_on_error=False, panic_mode_recover=False):
+    def __init__(self, tokens, defs, stop_on_error=False, panic_mode_recover=False):
         """
         Initialize the recursive descent parser.
 
         Parameters:
           tokens (List[Token]): The list of tokens provided by the lexical analyzer.
+          defs (Definitions): The definitions instance provided by the lexical analyzer.
           stop_on_error (bool): If True, the parser stops on error and prompts the user.
           panic_mode_recover (bool): If True, the parser attempts panic-mode recovery.
         """
@@ -66,10 +67,8 @@ class RDParser:
         self.panic_mode_recover = panic_mode_recover
         self.errors = []
         self.logger = Logger()  # Using the singleton Logger instance
-        # For future extensions: self.parse_tree_root = None
-
-        # For convenience, instantiate Definitions once.
-        self.defs = Definitions()
+        # Use the provided definitions instance.
+        self.defs = defs
 
     def parse(self) -> bool:
         """
