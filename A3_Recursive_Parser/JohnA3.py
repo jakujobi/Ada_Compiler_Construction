@@ -26,6 +26,34 @@ from Modules.RDParser import RDParser
 from Modules.FileHandler import FileHandler
 
 class JohnA3:
+    @classmethod
+    def from_args(cls, args):
+        """
+        Create a JohnA3 instance from command line arguments.
+        
+        Parameters:
+          args (list): Command line arguments (excluding script name)
+          
+        Returns:
+          JohnA3: Instance of JohnA3
+        """
+        logger = Logger(log_level_console=logging.INFO)
+        logger.info("Starting JohnA3 program.")
+        logger.debug("Checking command line arguments.")
+        
+        if len(args) == 2:
+            input_file, output_file = args
+            logger.debug(f"Input file: {input_file}, Output file: {output_file}")
+            return cls(input_file, output_file)
+        elif len(args) == 1:
+            input_file = args[0]
+            logger.debug(f"Input file: {input_file}")
+            return cls(input_file)
+        else:
+            print("Usage: python JohnA3.py <input_file> [output_file]")
+            logger.critical("Invalid number of arguments. Exiting program.")
+            sys.exit(1)
+
     def __init__(self, input_file_name: str, output_file_name: str = None):
         """
         Initialize the JohnA1 object.
@@ -230,39 +258,8 @@ class JohnA3:
 
 
 def main():
-    """
-    Main function for the Lexical Analyzer program.
-
-    It performs the following steps:
-      1. Initializes the Logger (which sets up the logging configuration).
-      2. Checks command-line arguments to determine the input (and optionally output) file.
-      3. Creates an instance of JohnA1 with the provided file names.
-      4. Starts the tokenization process.
-      
-    Usage:
-      python JohnA1.py <input_file> [output_file]
-    """
-    # Initialize the Logger. This creates the logging configuration for the application.
-    logger = Logger(log_level_console=logging.INFO)
-    logger.info("Starting JohnA3 program.")
-    
-    # Read command-line arguments.
-    logger.debug("Checking command line arguments.")
-    args = sys.argv[1:]
-    
-    # Validate arguments and start the process.
-    if len(args) == 2:
-        input_file, output_file = args
-        logger.debug(f"Input file: {input_file}, Output file: {output_file}")
-        JohnA3(input_file, output_file)
-    elif len(args) == 1:
-        input_file = args[0]
-        logger.debug(f"Input file: {input_file}")
-        JohnA3(input_file)
-    else:
-        print("Usage: python JohnA1.py <input_file> [output_file]")
-        logger.critical("Invalid number of arguments. Exiting program.")
-        sys.exit(1)
+    """Main entry point that creates JohnA3 instance from command line args."""
+    JohnA3.from_args(sys.argv[1:])
 
 if __name__ == "__main__":
     main()
