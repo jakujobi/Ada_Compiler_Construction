@@ -33,6 +33,7 @@ class RDParser:
         self.errors = []
         self.parse_tree_root = None
         self.logger = Logger()
+        self.procedure_name = None  # Used to track procedure names for end matching
 
     def parse(self, tokens: List[Token]):
         self.logger.debug("Starting parse with RDParser.")
@@ -61,9 +62,9 @@ class RDParser:
         if self.current_token and self.current_token.token_type == expected_token_type:
             # Store the original identifier if this is an ID token for end procedure name matching
             if expected_token_type == Definitions().TokenType.ID:
-                if not hasattr(self, 'procedure_name'):
+                if not self.procedure_name:
                     self.procedure_name = self.current_token.lexeme.lower()
-                elif expected_token_type == Definitions().TokenType.ID and self.current_token.lexeme.lower() != self.procedure_name:
+                elif self.current_token.lexeme.lower() != self.procedure_name:
                     self.report_error(f"Procedure name mismatch. Expected '{self.procedure_name}', found '{self.current_token.lexeme}'")
             
             self.logger.debug(f"Matched {expected_token_type.name} with token '{self.current_token.lexeme}'.")
@@ -73,7 +74,6 @@ class RDParser:
             self.report_error(f"Expected {expected_token_type.name}, found '{token_name}'")
 
     def report_error(self, message: str):
-        # Only report each unique error once
         line_num = self.current_token.line_number if self.current_token else "unknown"
         col_num = self.current_token.column_number if self.current_token else "unknown"
         full_message = f"Error at line {line_num}, column {col_num}: {message}"
@@ -93,7 +93,7 @@ class RDParser:
         else:
             self.logger.info("\nParsing completed successfully with no errors.")
 
-    # Grammar implementation methods below
+    # Grammar implementation methods
     def parseProg(self):
         self.procedure_name = None  # Reset procedure name at start of each procedure
         self.match(Definitions().TokenType.PROCEDURE)
