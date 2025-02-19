@@ -47,7 +47,9 @@ class Definitions:
                 'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
                 'DOT', 'EOF',
                 # Added this for the string concatenation operator in Ada.
-                'CONCAT'
+                'CONCAT',
+                # Added new token types for parameter modes
+                'IN', 'OUT', 'INOUT'
             ]
         )
 
@@ -69,7 +71,11 @@ class Definitions:
             "CHAR": self.TokenType.CHAR,
             "GET": self.TokenType.GET,
             "PUT": self.TokenType.PUT,
-            "END": self.TokenType.END
+            "END": self.TokenType.END,
+            # Added new reserved words for parameter modes
+            "IN": self.TokenType.IN,
+            "OUT": self.TokenType.OUT,
+            "INOUT": self.TokenType.INOUT
         }
 
         # The token_patterns dictionary holds compiled regular expressions for each token type.
