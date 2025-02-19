@@ -35,26 +35,36 @@ class Definitions:
         Returns the token type from the TokenType enumeration based on the given token type string.
     """
     def __init__(self):
-        # Create an enumeration for token types.
-        # This enumeration includes both language keywords (like PROCEDURE, MODULE, etc.) and generic token types
-        # (like ID for identifier, NUM for integer numbers, REAL for floating point, etc.).
+        # Create an enumeration for token types
         self.TokenType = Enum(
             'TokenType', [
+                # Existing tokens
                 'PROCEDURE', 'MODULE', 'CONSTANT', 'IS', 'BEGIN', 'END',
                 'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP', 'FLOAT',
                 'INTEGER', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
                 'LITERAL', 'CHAR_LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
                 'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
-                'DOT', 'EOF',
-                # Added this for the string concatenation operator in Ada.
-                'CONCAT',
-                # Added new token types for parameter modes
-                'IN', 'OUT', 'INOUT'
+                'DOT', 'EOF', 'CONCAT', 'IN', 'OUT', 'INOUT',
+                # New tokens from Ada 2022
+                'ABORT', 'ABS', 'ABSTRACT', 'ACCEPT', 'ACCESS',
+                'ALIASED', 'ALL', 'AND', 'ARRAY', 'AT',
+                'BODY', 'CASE', 'DECLARE', 'DELAY', 'DELTA',
+                'DIGITS', 'DO', 'ENTRY', 'EXCEPTION', 'EXIT',
+                'FOR', 'FUNCTION', 'GENERIC', 'GOTO',
+                'INTERFACE', 'LIMITED', 'MOD', 'NEW', 'NOT',
+                'NULL', 'OF', 'OR', 'OTHERS', 'OVERRIDING',
+                'PACKAGE', 'PARALLEL', 'PRAGMA', 'PRIVATE',
+                'PROTECTED', 'RAISE', 'RANGE', 'RECORD', 'REM',
+                'RENAMES', 'REQUEUE', 'RETURN', 'REVERSE', 'SELECT',
+                'SEPARATE', 'SOME', 'SUBTYPE', 'SYNCHRONIZED',
+                'TAGGED', 'TASK', 'TERMINATE', 'TYPE', 'UNTIL',
+                'USE', 'WHEN', 'WITH', 'XOR'
             ]
         )
 
-        # Dictionary mapping reserved words (case-insensitive) to their token types.
+        # Dictionary mapping reserved words
         self.reserved_words = {
+            # Existing reserved words
             "BEGIN": self.TokenType.BEGIN,
             "MODULE": self.TokenType.MODULE,
             "CONSTANT": self.TokenType.CONSTANT,
@@ -72,10 +82,71 @@ class Definitions:
             "GET": self.TokenType.GET,
             "PUT": self.TokenType.PUT,
             "END": self.TokenType.END,
-            # Added new reserved words for parameter modes
             "IN": self.TokenType.IN,
             "OUT": self.TokenType.OUT,
-            "INOUT": self.TokenType.INOUT
+            "INOUT": self.TokenType.INOUT,
+            # New reserved words from Ada 2022
+            "ABORT": self.TokenType.ABORT,
+            "ABS": self.TokenType.ABS,
+            "ABSTRACT": self.TokenType.ABSTRACT,
+            "ACCEPT": self.TokenType.ACCEPT,
+            "ACCESS": self.TokenType.ACCESS,
+            "ALIASED": self.TokenType.ALIASED,
+            "ALL": self.TokenType.ALL,
+            "AND": self.TokenType.AND,
+            "ARRAY": self.TokenType.ARRAY,
+            "AT": self.TokenType.AT,
+            "BODY": self.TokenType.BODY,
+            "CASE": self.TokenType.CASE,
+            "DECLARE": self.TokenType.DECLARE,
+            "DELAY": self.TokenType.DELAY,
+            "DELTA": self.TokenType.DELTA,
+            "DIGITS": self.TokenType.DIGITS,
+            "DO": self.TokenType.DO,
+            "ENTRY": self.TokenType.ENTRY,
+            "EXCEPTION": self.TokenType.EXCEPTION,
+            "EXIT": self.TokenType.EXIT,
+            "FOR": self.TokenType.FOR,
+            "FUNCTION": self.TokenType.FUNCTION,
+            "GENERIC": self.TokenType.GENERIC,
+            "GOTO": self.TokenType.GOTO,
+            "INTERFACE": self.TokenType.INTERFACE,
+            "LIMITED": self.TokenType.LIMITED,
+            "MOD": self.TokenType.MOD,
+            "NEW": self.TokenType.NEW,
+            "NOT": self.TokenType.NOT,
+            "NULL": self.TokenType.NULL,
+            "OF": self.TokenType.OF,
+            "OR": self.TokenType.OR,
+            "OTHERS": self.TokenType.OTHERS,
+            "OVERRIDING": self.TokenType.OVERRIDING,
+            "PACKAGE": self.TokenType.PACKAGE,
+            "PARALLEL": self.TokenType.PARALLEL,
+            "PRAGMA": self.TokenType.PRAGMA,
+            "PRIVATE": self.TokenType.PRIVATE,
+            "PROTECTED": self.TokenType.PROTECTED,
+            "RAISE": self.TokenType.RAISE,
+            "RANGE": self.TokenType.RANGE,
+            "RECORD": self.TokenType.RECORD,
+            "REM": self.TokenType.REM,
+            "RENAMES": self.TokenType.RENAMES,
+            "REQUEUE": self.TokenType.REQUEUE,
+            "RETURN": self.TokenType.RETURN,
+            "REVERSE": self.TokenType.REVERSE,
+            "SELECT": self.TokenType.SELECT,
+            "SEPARATE": self.TokenType.SEPARATE,
+            "SOME": self.TokenType.SOME,
+            "SUBTYPE": self.TokenType.SUBTYPE,
+            "SYNCHRONIZED": self.TokenType.SYNCHRONIZED,
+            "TAGGED": self.TokenType.TAGGED,
+            "TASK": self.TokenType.TASK,
+            "TERMINATE": self.TokenType.TERMINATE,
+            "TYPE": self.TokenType.TYPE,
+            "UNTIL": self.TokenType.UNTIL,
+            "USE": self.TokenType.USE,
+            "WHEN": self.TokenType.WHEN,
+            "WITH": self.TokenType.WITH,
+            "XOR": self.TokenType.XOR
         }
 
         # The token_patterns dictionary holds compiled regular expressions for each token type.
