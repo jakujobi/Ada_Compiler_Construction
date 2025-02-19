@@ -58,7 +58,9 @@ class Definitions:
                 'RENAMES', 'REQUEUE', 'RETURN', 'REVERSE', 'SELECT',
                 'SEPARATE', 'SOME', 'SUBTYPE', 'SYNCHRONIZED',
                 'TAGGED', 'TASK', 'TERMINATE', 'TYPE', 'UNTIL',
-                'USE', 'WHEN', 'WITH', 'XOR'
+                'USE', 'WHEN', 'WITH', 'XOR',
+                # Add required token types for grammar
+                'INTEGERT', 'REALT', 'CHART', 'CONST'
             ]
         )
 
@@ -77,8 +79,9 @@ class Definitions:
             "WHILE": self.TokenType.WHILE,
             "LOOP": self.TokenType.LOOP,
             "FLOAT": self.TokenType.FLOAT,
-            "INTEGER": self.TokenType.INTEGER,
-            "CHAR": self.TokenType.CHAR,
+            "INTEGER": self.TokenType.INTEGERT,  # Map INTEGER to INTEGERT
+            "REAL": self.TokenType.REALT,       # Map REAL to REALT
+            "CHAR": self.TokenType.CHART,       # Map CHAR to CHART
             "GET": self.TokenType.GET,
             "PUT": self.TokenType.PUT,
             "END": self.TokenType.END,
