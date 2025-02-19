@@ -32,10 +32,10 @@ class JohnA3:
         Create a JohnA3 instance from command line arguments.
         
         Parameters:
-          args (list): Command line arguments (excluding script name)
-          
+            args (list): Command line arguments (excluding script name)
+        
         Returns:
-          JohnA3: Instance of JohnA3
+            JohnA3: Instance of JohnA3
         """
         logger = Logger(log_level_console=logging.INFO)
         logger.info("Starting JohnA3 program.")
@@ -59,8 +59,8 @@ class JohnA3:
         Initialize the JohnA1 object.
 
         Parameters:
-          input_file_name (str): Name/path of the source code file to process.
-          output_file_name (str, optional): Name/path of the file where tokens will be written.
+            input_file_name (str): Name/path of the source code file to process.
+            output_file_name (str, optional): Name/path of the file where tokens will be written.
         """
         # Get the shared logger instance (Logger is a singleton).
         self.logger = Logger()
@@ -84,10 +84,10 @@ class JohnA3:
         Main function to run the JohnA1 process.
         
         It:
-          - Reads the source file.
-          - Prints the source code.
-          - Processes the source code to extract tokens.
-          - Formats and outputs the tokens.
+            - Reads the source file.
+            - Prints the source code.
+            - Processes the source code to extract tokens.
+            - Formats and outputs the tokens.
         """
         self.logger.debug("Starting run() method.")
         self.get_source_code_from_file(self.input_file_name)
@@ -193,11 +193,11 @@ class JohnA3:
         Write the given content to a file.
 
         Parameters:
-          output_file_name (str): The path of the file to write to.
-          content (str): The string content to write.
+            output_file_name (str): The path of the file to write to.
+            content (str): The string content to write.
 
         Returns:
-          bool: True if writing was successful, False otherwise.
+            bool: True if writing was successful, False otherwise.
         """
         try:
             with open(output_file_name, "w", encoding="utf-8") as f:
