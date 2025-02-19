@@ -1,0 +1,10 @@
+Token Type      | Lexeme                   | Value
+------------------------------------------------------------
+PROCEDURE       | PROCEDURE                | None
+ID              | one                      | None
+IS              | IS                       | None
+BEGIN           | BEGIN                    | None
+END             | END                      | None
+ID              | one                      | None
+SEMICOLON       | ;                        | None
+EOF             | EOF                      | None
