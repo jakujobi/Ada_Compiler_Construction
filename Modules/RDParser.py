@@ -190,14 +190,14 @@ class RDParser:
 
     def parseTypeMark(self):
         """
-        TypeMark -> integert | realt | chart | const assignop Value
+        TypeMark -> integert | realt | chart | const assignop Value 
         Here we assume basic types are represented by INTEGER, REAL, and CHAR.
         For a constant, we expect the CONSTANT keyword, an ASSIGN, then a value.
         """
         self.logger.debug("Parsing TypeMark")
-        if self.current_token.token_type in {self.defs.TokenType.INTEGER, 
-                                               self.defs.TokenType.REAL, 
-                                               self.defs.TokenType.CHAR}:
+        if self.current_token.token_type in {self.defs.TokenType.INTEGERT, 
+                                               self.defs.TokenType.REALT, 
+                                               self.defs.TokenType.CHART}:
             self.match(self.current_token.token_type)
         elif self.current_token.token_type == self.defs.TokenType.CONSTANT:
             self.match(self.defs.TokenType.CONSTANT)
