@@ -11,37 +11,37 @@ This module defines the RDParser class which receives a list of tokens
 from the lexical analyzer (via JohnA3.py) and verifies the syntactic correctness
 of the source program according to the following CFG:
 
-  Prog           ->  procedure idt Args is
-                     DeclarativePart
-                     Procedures
-                     begin
-                     SeqOfStatements
-                     end idt;
+    Prog -> procedure idt Args is
+            DeclarativePart
+            Procedures
+            begin
+            SeqOfStatements
+            end idt;
 
-  DeclarativePart -> IdentifierList : TypeMark ; DeclarativePart | ε
+    DeclarativePart -> IdentifierList : TypeMark ; DeclarativePart | ε
 
-  IdentifierList  -> idt | IdentifierList , idt
+    IdentifierList -> idt | IdentifierList , idt
 
-  TypeMark       -> integert | realt | chart | const assignop Value 
+    TypeMark       -> integert | realt | chart | const assignop Value 
 
-  Value          -> NumericalLiteral
+    Value          -> NumericalLiteral
 
-  Procedures     -> Prog Procedures | ε
+    Procedures     -> Prog Procedures | ε
 
-  Args           -> ( ArgList ) | ε
+    Args           -> ( ArgList ) | ε
 
-  ArgList        -> Mode IdentifierList : TypeMark MoreArgs
+    ArgList        -> Mode IdentifierList : TypeMark MoreArgs
 
-  MoreArgs       -> ; ArgList | ε
+    MoreArgs       -> ; ArgList | ε
 
-  Mode           -> in | out | inout | ε
+    Mode           -> in | out | inout | ε
 
-  SeqOfStatements -> ε
+    SeqOfStatements -> ε
 
 The parser supports configurable error handling:
-  - stop_on_error: if True, it stops on error and asks the user whether to continue.
-  - panic_mode_recover: if True, it attempts panic-mode recovery.
-  
+    - stop_on_error: if True, it stops on error and asks the user whether to continue.
+    - panic_mode_recover: if True, it attempts panic-mode recovery.
+
 A summary report is printed at the end of parsing.
 """
 
@@ -55,10 +55,10 @@ class RDParser:
         Initialize the recursive descent parser.
 
         Parameters:
-          tokens (List[Token]): The list of tokens provided by the lexical analyzer.
-          defs (Definitions): The definitions instance provided by the lexical analyzer.
-          stop_on_error (bool): If True, the parser stops on error and prompts the user.
-          panic_mode_recover (bool): If True, the parser attempts panic-mode recovery.
+            tokens (List[Token]): The list of tokens provided by the lexical analyzer.
+            defs (Definitions): The definitions instance provided by the lexical analyzer.
+            stop_on_error (bool): If True, the parser stops on error and prompts the user.
+            panic_mode_recover (bool): If True, the parser attempts panic-mode recovery.
         """
         self.tokens = tokens
         self.current_index = 0
@@ -128,7 +128,7 @@ class RDParser:
             return
         self.logger.debug("Entering panic-mode recovery.")
         while (self.current_token.token_type not in sync_set and 
-               self.current_token.token_type != self.defs.TokenType.EOF):
+            self.current_token.token_type != self.defs.TokenType.EOF):
             self.advance()
         self.logger.debug("Panic-mode recovery completed.")
 
@@ -195,9 +195,11 @@ class RDParser:
         For a constant, we expect the CONSTANT keyword, an ASSIGN, then a value.
         """
         self.logger.debug("Parsing TypeMark")
-        if self.current_token.token_type in {self.defs.TokenType.INTEGERT, 
-                                               self.defs.TokenType.REALT, 
-                                               self.defs.TokenType.CHART}:
+        if self.current_token.token_type in {
+            self.defs.TokenType.INTEGERT, 
+            self.defs.TokenType.REALT, 
+            self.defs.TokenType.CHART
+        }:
             self.match(self.current_token.token_type)
         elif self.current_token.token_type == self.defs.TokenType.CONSTANT:
             self.match(self.defs.TokenType.CONSTANT)
@@ -264,9 +266,11 @@ class RDParser:
         Mode -> in | out | inout | ε
         """
         self.logger.debug("Parsing Mode")
-        if self.current_token.token_type in {self.defs.TokenType.IN, 
-                                               self.defs.TokenType.OUT, 
-                                               self.defs.TokenType.INOUT}:
+        if self.current_token.token_type in {
+            self.defs.TokenType.IN, 
+            self.defs.TokenType.OUT, 
+            self.defs.TokenType.INOUT
+        }:
             self.match(self.current_token.token_type)
         else:
             self.logger.debug("Mode -> ε")
