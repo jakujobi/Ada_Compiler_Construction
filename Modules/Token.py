@@ -70,4 +70,4 @@ class Token:
         """
         # Note: There's a small typo in the attribute name ("self. Lexeme" with a space).
         # It should be "self.lexeme".
-        return f"<{self.token_type.value}, '{self.lexeme}'>"
+        return f"<{self.token_type}, {self.lexeme}>"
