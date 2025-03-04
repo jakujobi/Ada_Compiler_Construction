@@ -146,7 +146,8 @@ class RDParser:
         if not self.panic_mode_recover:
             return
         self.logger.debug("Entering panic-mode recovery.")
-        while (self.current_token.token_type not in sync_set and 
+        sync_set = {self.defs.TokenType.SEMICOLON, self.defs.TokenType.END, self.defs.TokenType.EOF}
+        while (self.current_token.token_type not in sync_set and
                self.current_token.token_type != self.defs.TokenType.EOF):
             self.advance()
         self.logger.debug("Panic-mode recovery completed.")
@@ -422,16 +423,85 @@ class RDParser:
 
     def parseSeqOfStatements(self):
         """
-        SeqOfStatements -> ε
-        (No statements are defined in the current grammar.)
+        SeqOfStatements -> Statement SeqOfStatements | ε
         """
         if self.build_parse_tree:
             node = ParseTreeNode("SeqOfStatements")
-            node.add_child(ParseTreeNode("ε"))
+        else:
+            node = None
+        self.logger.debug("Parsing SeqOfStatements")
+        if self.current_token.token_type == self.defs.TokenType.ID:
+            child = self.parseStatement()
+            if self.build_parse_tree and child: node.add_child(child)
+            child = self.parseSeqOfStatements()
+            if self.build_parse_tree and child: node.add_child(child)
             return node
         else:
-            self.logger.debug("Parsing SeqOfStatements -> ε")
-            return None
+            if self.build_parse_tree:
+                node.add_child(ParseTreeNode("ε"))
+                return node
+            else:
+                self.logger.debug("SeqOfStatements -> ε")
+                return None
+
+    def parseStatement(self):
+        """
+        Statement -> idt assignop Expression ; | if Condition then SeqOfStatements end if;
+        """
+        if self.build_parse_tree:
+            node = ParseTreeNode("Statement")
+        else:
+            node = None
+        self.logger.debug("Parsing Statement")
+        if self.current_token.token_type == self.defs.TokenType.ID:
+            self.match_leaf(self.defs.TokenType.ID, node)
+            self.match_leaf(self.defs.TokenType.ASSIGN, node)
+            child = self.parseExpression()
+            if self.build_parse_tree and child: node.add_child(child)
+            self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+        elif self.current_token.token_type == self.defs.TokenType.IF:
+            self.match_leaf(self.defs.TokenType.IF, node)
+            child = self.parseCondition()
+            if self.build_parse_tree and child: node.add_child(child)
+            self.match_leaf(self.defs.TokenType.THEN, node)
+            child = self.parseSeqOfStatements()
+            if self.build_parse_tree and child: node.add_child(child)
+            self.match_leaf(self.defs.TokenType.END, node)
+            self.match_leaf(self.defs.TokenType.IF, node)
+            self.match_leaf(self.defs.TokenType.SEMICOLON, node) # Added semicolon to end of IF statement
+        else:
+            self.report_error("Expected an identifier or 'if'.")
+        return node
+
+    def parseCondition(self):
+        """
+        Condition -> NUM RELOP NUM
+        """
+        if self.build_parse_tree:
+            node = ParseTreeNode("Condition")
+        else:
+            node = None
+        self.logger.debug("Parsing Condition")
+        self.match_leaf(self.defs.TokenType.NUM, node)
+        self.match_leaf(self.defs.TokenType.RELOP, node)
+        self.match_leaf(self.defs.TokenType.NUM, node)
+        return node
+
+    def parseExpression(self):
+        """
+        Expression -> NUM ADDOP Expression | NUM
+        """
+        if self.build_parse_tree:
+            node = ParseTreeNode("Expression")
+        else:
+            node = None
+        self.logger.debug("Parsing Expression")
+        self.match_leaf(self.defs.TokenType.NUM, node)
+        if self.current_token.token_type == self.defs.TokenType.ADDOP:
+            self.match_leaf(self.defs.TokenType.ADDOP, node)
+            child = self.parseExpression()
+            if self.build_parse_tree and child: node.add_child(child)
+        return node
 
 # ------------------------------
 # Parse Tree Node Class
@@ -458,4 +528,4 @@ class ParseTreeNode:
         return self.name
 
 # End of RDParser.py
-#Ada_Compiler_Construction\Modules\RDParser.py  
+#Ada_Compiler_Construction\Modules\RDParser.py
