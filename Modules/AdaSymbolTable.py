@@ -1,86 +1,175 @@
+#!/usr/bin/env python3
 # AdaSymbolTable.py
 # Author: John Akujobi
 # GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
-# Date: 2024-02-28
+# Date: 2025-03-13
 # Version: 1.0
-# Description:
-# This module defines the AdaSymbolTable class, which represents a symbol table for an Ada compiler.
-# It manages the storage and retrieval of symbols, such as variables, procedures, and constants,
+"""
+Symbol Table Implementation for Ada Compiler
 
-from enum import Enum
-from typing import Dict, List, Union, Optional, Any
+This module implements a symbol table for an Ada compiler, using a hash table with
+chaining for collision resolution. The symbol table provides operations for
+inserting, looking up, deleting, and writing entries.
+
+The symbol table is designed to support lexical scoping through depth parameters
+and is compatible with the token system used in the lexical analyzer.
+
+Key components:
+- AdaSymbolTable: The main hash table implementation
+- TableEntry: Represents entries in the symbol table
+- VarType: Enumeration for variable types (CHAR, INT, FLOAT)
+- EntryType: Enumeration for entry types (VARIABLE, CONSTANT, PROCEDURE)
+- ParameterMode: Enumeration for parameter passing modes (IN, OUT, INOUT)
+- Parameter: Represents parameters for procedures
+
+Usage:
+    # Create a symbol table
+    symbol_table = AdaSymbolTable()
+    
+    # Insert entries
+    var_entry = symbol_table.insert("counter", token, 1)
+    var_entry.set_variable_info(VarType.INT, 0, 4)
+    
+    # Look up entries
+    found = symbol_table.lookup("counter")
+    
+    # Delete entries at a specific depth
+    symbol_table.deleteDepth(2)
+    
+    # Write out entries at a specific depth
+    entries = symbol_table.writeTable(1)
+"""
+
+from enum import Enum, auto
+from typing import Any, Dict, List, Optional, Set, Union
 
 
 class VarType(Enum):
-    """Enumeration for variable types"""
-    CHAR = 1
-    INT = 2
-    FLOAT = 3
+    """
+    Enumeration for variable types supported in the Ada compiler.
+    
+    These types are used for variables, constants, and procedure return types.
+    """
+    CHAR = auto()
+    INT = auto()
+    FLOAT = auto()
 
 
 class EntryType(Enum):
-    """Enumeration for symbol table entry types"""
-    VARIABLE = 1
-    CONSTANT = 2
-    PROCEDURE = 3
+    """
+    Enumeration for entry types in the symbol table.
+    
+    The symbol table stores different types of entries, each with specific
+    information fields.
+    """
+    VARIABLE = auto()
+    CONSTANT = auto()
+    PROCEDURE = auto()
 
 
 class ParameterMode(Enum):
-    """Enumeration for parameter passing modes"""
-    IN = 1
-    OUT = 2
-    INOUT = 3
+    """
+    Enumeration for parameter passing modes in procedures.
+    
+    - IN: Parameter is read-only within the procedure.
+    - OUT: Parameter is write-only within the procedure.
+    - INOUT: Parameter can be both read and written within the procedure.
+    """
+    IN = auto()
+    OUT = auto()
+    INOUT = auto()
 
 
 class Parameter:
     """
-    Class representing a procedure parameter
+    Class to represent parameters in procedure entries.
+    
+    Stores the parameter type and passing mode, which are used in procedure
+    calls and for semantic analysis.
+    
+    Attributes:
+        param_type (VarType): The data type of the parameter.
+        param_mode (ParameterMode): The passing mode of the parameter.
     """
-    def __init__(self, param_type: VarType, passing_mode: ParameterMode):
+    def __init__(self, param_type: VarType, param_mode: ParameterMode):
         """
-        Initialize a parameter
+        Initialize a parameter with a type and passing mode.
         
-        Parameters:
-            param_type: Type of the parameter
-            passing_mode: How the parameter is passed (IN, OUT, INOUT)
+        Args:
+            param_type: The data type of the parameter (CHAR, INT, FLOAT).
+            param_mode: The passing mode of the parameter (IN, OUT, INOUT).
         """
         self.param_type = param_type
-        self.passing_mode = passing_mode
+        self.param_mode = param_mode
     
-    def __str__(self):
-        return f"Parameter(type={self.param_type.name}, mode={self.passing_mode.name})"
+    def __str__(self) -> str:
+        """
+        Return a string representation of the Parameter.
+        
+        Returns:
+            String in the format 'mode:type', e.g., 'IN:INT'.
+        """
+        return f"{self.param_mode.name}:{self.param_type.name}"
 
 
 class TableEntry:
     """
-    Class representing an entry in the symbol table
+    Class to represent an entry in the symbol table.
+    
+    Stores all information related to a symbol, including its lexeme, token type,
+    scope depth, and specific information based on the entry type (variable,
+    constant, or procedure).
+    
+    Attributes:
+        lexeme (str): The identifier for this entry.
+        token_type (Any): The token type from the lexical analyzer.
+        depth (int): The lexical scope depth.
+        next (Optional[TableEntry]): Pointer to the next entry in the chain for collision resolution.
+        entry_type (Optional[EntryType]): The type of this entry (VARIABLE, CONSTANT, PROCEDURE).
+        
+        # Variable-specific attributes
+        var_type (Optional[VarType]): The data type for variables.
+        offset (Optional[int]): The memory offset for variables.
+        size (Optional[int]): The memory size for variables.
+        
+        # Constant-specific attributes
+        const_type (Optional[VarType]): The data type for constants.
+        const_value (Optional[Any]): The value of the constant.
+        
+        # Procedure-specific attributes
+        local_size (Optional[int]): The size of local variables for procedures.
+        param_count (Optional[int]): The number of parameters for procedures.
+        return_type (Optional[VarType]): The return type for procedures.
+        param_list (Optional[List[Parameter]]): The list of parameters for procedures.
     """
     def __init__(self, lexeme: str, token_type: Any, depth: int):
         """
-        Initialize a table entry
+        Initialize a table entry with the basic information.
         
-        Parameters:
-            lexeme: The identifier name
-            token_type: Token type from lexical analyzer
-            depth: Scope depth of this entry
+        Args:
+            lexeme: The identifier for this entry.
+            token_type: The token type from the lexical analyzer.
+            depth: The lexical scope depth.
         """
-        # Common fields for all entries
+        # Basic information
         self.lexeme = lexeme
         self.token_type = token_type
         self.depth = depth
-        self.entry_type = None  # Will be set based on the type of entry
-        self.next = None  # For linked list implementation (chaining)
+        self.next = None
         
-        # Variable fields (used if entry_type is VARIABLE)
+        # Type of entry
+        self.entry_type = None
+        
+        # Variable-specific fields
         self.var_type = None
         self.offset = None
         self.size = None
         
-        # Constant fields (used if entry_type is CONSTANT)
+        # Constant-specific fields
         self.const_type = None
         self.const_value = None
         
-        # Procedure fields (used if entry_type is PROCEDURE)
+        # Procedure-specific fields
         self.local_size = None
         self.param_count = None
         self.return_type = None
@@ -88,25 +177,25 @@ class TableEntry:
     
     def set_variable_info(self, var_type: VarType, offset: int, size: int):
         """
-        Set information specific to variable entries
+        Set information specific to variable entries.
         
-        Parameters:
-            var_type: Type of the variable
-            offset: Memory offset
-            size: Size in memory
+        Args:
+            var_type: The data type of the variable.
+            offset: The memory offset of the variable.
+            size: The memory size of the variable in bytes.
         """
         self.entry_type = EntryType.VARIABLE
         self.var_type = var_type
         self.offset = offset
         self.size = size
     
-    def set_constant_info(self, const_type: VarType, value: Union[int, float]):
+    def set_constant_info(self, const_type: VarType, value: Any):
         """
-        Set information specific to constant entries
+        Set information specific to constant entries.
         
-        Parameters:
-            const_type: Type of the constant
-            value: Value of the constant
+        Args:
+            const_type: The data type of the constant.
+            value: The value of the constant.
         """
         self.entry_type = EntryType.CONSTANT
         self.const_type = const_type
@@ -118,13 +207,13 @@ class TableEntry:
             return_type: VarType,
             param_list: List[Parameter]):
         """
-        Set information specific to procedure entries
+        Set information specific to procedure entries.
         
-        Parameters:
-            local_size: Size of local variables
-            param_count: Number of parameters
-            return_type: Return type of the procedure
-            param_list: List of parameter information
+        Args:
+            local_size: The size of local variables in bytes.
+            param_count: The number of parameters.
+            return_type: The return type of the procedure.
+            param_list: The list of parameter information.
         """
         self.entry_type = EntryType.PROCEDURE
         self.local_size = local_size
@@ -132,166 +221,199 @@ class TableEntry:
         self.return_type = return_type
         self.param_list = param_list
     
-    def __str__(self):
-        """Return a string representation of the entry"""
+    def __str__(self) -> str:
+        """
+        Return a string representation of the TableEntry.
+        
+        Returns:
+            A string describing the entry, with different formats based on the entry type.
+        """
         base = f"Entry(lexeme='{self.lexeme}', depth={self.depth}"
         
         if self.entry_type == EntryType.VARIABLE:
-            return f"{base}, type=VARIABLE, var_type={self.var_type.name if self.var_type else None})"
+            return f"{base}, type=VARIABLE, var_type={self.var_type.name})"
         elif self.entry_type == EntryType.CONSTANT:
-            return f"{base}, type=CONSTANT, const_type={self.const_type.name if self.const_type else None}, value={self.const_value})"
+            return f"{base}, type=CONSTANT, const_type={self.const_type.name}, value={self.const_value})"
         elif self.entry_type == EntryType.PROCEDURE:
-            return f"{base}, type=PROCEDURE, param_count={self.param_count})"
+            params = ", ".join(str(p) for p in self.param_list) if self.param_list else ""
+            return f"{base}, type=PROCEDURE, return_type={self.return_type.name}, params=[{params}])"
         else:
             return f"{base}, type=UNDEFINED)"
 
 
 class AdaSymbolTable:
     """
-    AdaSymbolTable represents a symbol table for an Ada compiler.
-    It manages the storage and retrieval of symbols, such as variables, procedures, and constants,
-    in the context of Ada programming language.
+    Symbol table implementation for Ada compiler using a hash table with chaining.
+    
+    The symbol table maps lexemes to their associated information, including
+    type, scope, and specific fields based on the entry type. It supports
+    lexical scoping through depth parameters and efficient lookups through
+    a hash function.
+    
+    Attributes:
+        table_size (int): The size of the hash table array.
+        table (List[Optional[TableEntry]]): The hash table array.
     """
     def __init__(self, table_size: int = 211):
         """
-        Initializes an empty symbol table.
+        Initialize a symbol table with a specified size.
         
-        Parameters:
-            table_size: Size of the hash table (default: 211, a prime number)
+        Args:
+            table_size: The size of the hash table; default is 211 (a prime number).
+                        Prime numbers are recommended for hash table sizes to
+                        minimize collisions.
         """
         self.table_size = table_size
-        # Initialize the hash table as a list of None values (empty chains)
         self.table = [None] * table_size
     
     def _hash(self, lexeme: str) -> int:
         """
-        Private hash function for the symbol table.
-        Implements the hashpjw algorithm mentioned in the course notes.
+        Hash function based on the hashpjw algorithm used in many compilers.
         
-        Parameters:
-            lexeme: The identifier to hash
-            
+        This function computes a hash value for a lexeme by considering all
+        characters in the string, making it suitable for compiler symbol tables.
+        
+        Args:
+            lexeme: The lexeme to hash.
+        
         Returns:
-            The hash value (index in the table)
+            An integer hash value in the range [0, table_size).
         """
         h = 0
         g = 0
-        
-        # Process each character in the lexeme
-        for char in lexeme:
-            # Shift h left by 4 bits and add ASCII value of the character
-            h = (h << 4) + ord(char)
-            
-            # Check if any of the 4 high-order bits are set
+        for c in lexeme:
+            h = (h << 4) + ord(c)
             g = h & 0xF0000000
-            
             if g != 0:
-                # If high-order bits are set, shift them right by 24, XOR with h, and reset them
                 h = h ^ (g >> 24)
                 h = h ^ g
-        
-        # Return the hash value modulo table size
         return h % self.table_size
     
     def insert(self, lexeme: str, token_type: Any, depth: int) -> TableEntry:
         """
         Insert a new entry into the symbol table.
         
-        Parameters:
-            lexeme: The identifier name
-            token_type: Token type from lexical analyzer
-            depth: Scope depth of this entry
-            
+        Creates a new entry with the given lexeme, token type, and depth,
+        and inserts it at the front of the appropriate chain. Front insertion
+        ensures that lookups find the most recent declaration first.
+        
+        Args:
+            lexeme: The identifier to insert.
+            token_type: The token type from the lexical analyzer.
+            depth: The lexical scope depth.
+        
         Returns:
-            The created table entry
+            The newly created and inserted table entry.
         """
         # Create a new entry
         entry = TableEntry(lexeme, token_type, depth)
         
-        # Calculate hash value
-        hash_value = self._hash(lexeme)
-        
-        # Insert at the front of the chain (supports scope rules)
-        entry.next = self.table[hash_value]
-        self.table[hash_value] = entry
+        # Insert at the front of the chain
+        hash_val = self._hash(lexeme)
+        entry.next = self.table[hash_val]
+        self.table[hash_val] = entry
         
         return entry
     
     def lookup(self, lexeme: str) -> Optional[TableEntry]:
         """
-        Look up an entry in the symbol table.
+        Look up an entry in the symbol table by lexeme.
         
-        Parameters:
-            lexeme: The identifier to look up
-            
+        Computes the hash value for the lexeme and searches the appropriate
+        chain for a matching entry. Returns the first (most recent) entry
+        found with the given lexeme, or None if not found.
+        
+        Args:
+            lexeme: The identifier to look up.
+        
         Returns:
-            The found entry or None if not found
+            The found table entry, or None if not found.
         """
-        # Calculate hash value
-        hash_value = self._hash(lexeme)
+        hash_val = self._hash(lexeme)
+        entry = self.table[hash_val]
         
-        # Traverse the chain to find the entry
-        current = self.table[hash_value]
-        while current is not None:
-            if current.lexeme == lexeme:
-                return current
-            current = current.next
+        while entry is not None:
+            if entry.lexeme == lexeme:
+                return entry
+            entry = entry.next
         
-        # Entry not found
         return None
     
     def deleteDepth(self, depth: int) -> None:
         """
-        Delete all entries at the specified depth.
+        Delete all entries at a specified depth.
         
-        Parameters:
-            depth: The depth to delete
+        Scans the entire hash table and removes entries at the given depth,
+        updating the chains as needed. This is used when exiting a scope.
+        
+        Args:
+            depth: The lexical scope depth to delete.
         """
-        # Iterate through all chains in the hash table
         for i in range(self.table_size):
-            # Handle the case where the first entry in the chain needs to be deleted
-            while self.table[i] is not None and self.table[i].depth == depth:
-                self.table[i] = self.table[i].next
+            prev = None
+            curr = self.table[i]
             
-            # Handle the case where an entry in the middle or end of the chain needs to be deleted
-            if self.table[i] is not None:
-                current = self.table[i]
-                while current.next is not None:
-                    if current.next.depth == depth:
-                        current.next = current.next.next
+            while curr is not None:
+                if curr.depth == depth:
+                    # Remove this entry
+                    if prev is None:
+                        # This is the first entry in the chain
+                        self.table[i] = curr.next
                     else:
-                        current = current.next
+                        # This is not the first entry
+                        prev.next = curr.next
+                    
+                    # Move to the next entry, but don't update prev
+                    curr = curr.next
+                else:
+                    # Keep this entry, move both pointers
+                    prev = curr
+                    curr = curr.next
     
-    def writeTable(self, depth: int) -> List[str]:
+    def writeTable(self, depth: int) -> Dict[str, TableEntry]:
         """
-        Write out all lexemes at the specified depth.
+        Write out all entries at a specified depth.
         
-        Parameters:
-            depth: The depth to write
-            
+        Scans the entire hash table and collects entries at the given depth
+        into a dictionary mapping lexemes to their entries.
+        
+        Args:
+            depth: The lexical scope depth to write.
+        
         Returns:
-            List of lexemes at the specified depth
+            A dictionary mapping lexemes to their entries.
         """
-        lexemes = []
+        result = {}
         
-        # Iterate through all chains in the hash table
         for i in range(self.table_size):
-            current = self.table[i]
-            while current is not None:
-                if current.depth == depth:
-                    lexemes.append(current.lexeme)
-                current = current.next
+            entry = self.table[i]
+            
+            while entry is not None:
+                if entry.depth == depth:
+                    result[entry.lexeme] = entry
+                entry = entry.next
         
-        return lexemes
+        return result
+
+# Example usage:
+if __name__ == "__main__":
+    # Create a symbol table
+    st = AdaSymbolTable()
     
-    def print_table(self) -> None:
-        """
-        Print the entire symbol table for debugging purposes.
-        """
-        for i in range(self.table_size):
-            if self.table[i] is not None:
-                print(f"Chain {i}:")
-                current = self.table[i]
-                while current is not None:
-                    print(f"  {current}")
-                    current = current.next
+    # Insert entries
+    var1 = st.insert("x", "ID", 1)
+    var1.set_variable_info(VarType.INT, 0, 4)
+    
+    const1 = st.insert("PI", "ID", 1)
+    const1.set_constant_info(VarType.FLOAT, 3.14159)
+    
+    # Demonstrate lookup
+    print(f"Looking up 'x': {st.lookup('x')}")
+    print(f"Looking up 'y': {st.lookup('y')}")
+    
+    # Demonstrate writeTable
+    print(f"Entries at depth 1: {st.writeTable(1)}")
+    
+    # Delete entries
+    st.deleteDepth(1)
+    print(f"After deletion - entries at depth 1: {st.writeTable(1)}")
