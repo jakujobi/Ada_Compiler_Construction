@@ -11,6 +11,8 @@ This project implements a symbol table for an Ada compiler, a crucial component 
 - **Entry Types**: Support for variables, constants, and procedures with type-specific information
 - **Integration Support**: Compatible with the compiler's token system
 
+---
+
 ## Core Components
 
 ### AdaSymbolTable Class
@@ -37,6 +39,8 @@ Represents individual entries in the symbol table with the following attributes:
 - **EntryType**: Enumeration for entry types (VARIABLE, CONSTANT, PROCEDURE)
 - **ParameterMode**: Enumeration for parameter passing modes (IN, OUT, INOUT)
 - **Parameter**: Class for procedure parameters with type and passing mode
+
+---
 
 ## Usage Examples
 
@@ -104,6 +108,10 @@ print(f"Entries at depth 2: {depth2_entries}")
 symbol_table.deleteDepth(2)
 ```
 
+---
+
+
+
 ## Implementation Details
 
 ### Hash Function
@@ -126,6 +134,10 @@ def _hash(self, lexeme: str) -> int:
 ### Collision Resolution
 
 Collisions are resolved using chaining, where entries with the same hash value are linked together in a singly linked list. This approach is memory-efficient and performs well for the expected number of entries in a typical program.
+
+---
+
+
 
 ## Testing
 
@@ -153,14 +165,7 @@ The symbol table is designed to integrate seamlessly with other compiler compone
 - **Semantic Analyzer**: Stores type information needed for semantic checks
 - **Code Generator**: Provides memory offsets and sizes for code generation
 
-## Future Enhancements
-
-Potential improvements for future versions:
-
-- Support for more Ada-specific types and features
-- More sophisticated memory management for variable allocation
-- Enhanced error reporting for semantic analysis
-- Integration with the compiler's error recovery mechanisms
+---
 
 ## Author
 
