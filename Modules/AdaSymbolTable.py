@@ -112,8 +112,11 @@ class TableEntry:
         self.const_type = const_type
         self.const_value = value
     
-    def set_procedure_info(self, local_size: int, param_count: int, 
-                           return_type: VarType, param_list: List[Parameter]):
+    def set_procedure_info(
+            self, local_size: int,
+            param_count: int, 
+            return_type: VarType,
+            param_list: List[Parameter]):
         """
         Set information specific to procedure entries
         
