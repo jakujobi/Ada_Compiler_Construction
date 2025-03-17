@@ -262,7 +262,13 @@ class AdaSymbolTable:
             table_size: The size of the hash table; default is 211 (a prime number).
                         Prime numbers are recommended for hash table sizes to
                         minimize collisions.
+                        
+        Raises:
+            ValueError: If table_size is not positive.
         """
+        if table_size <= 0:
+            raise ValueError("Table size must be positive")
+            
         self.table_size = table_size
         self.table = [None] * table_size
     
@@ -278,7 +284,13 @@ class AdaSymbolTable:
         
         Returns:
             An integer hash value in the range [0, table_size).
+            
+        Raises:
+            ValueError: If lexeme is empty.
         """
+        if not lexeme:
+            raise ValueError("Cannot hash an empty lexeme")
+            
         h = 0
         g = 0
         for c in lexeme:
@@ -304,7 +316,16 @@ class AdaSymbolTable:
         
         Returns:
             The newly created and inserted table entry.
+            
+        Raises:
+            ValueError: If lexeme is empty or depth is negative.
         """
+        if not lexeme:
+            raise ValueError("Cannot insert an empty lexeme")
+
+        if depth < 0:
+            raise ValueError("Depth cannot be negative")
+
         # Create a new entry
         entry = TableEntry(lexeme, token_type, depth)
         
@@ -328,7 +349,13 @@ class AdaSymbolTable:
         
         Returns:
             The found table entry, or None if not found.
+            
+        Raises:
+            ValueError: If lexeme is empty.
         """
+        if not lexeme:
+            raise ValueError("Cannot lookup an empty lexeme")
+            
         hash_val = self._hash(lexeme)
         entry = self.table[hash_val]
         
@@ -336,6 +363,9 @@ class AdaSymbolTable:
             if entry.lexeme == lexeme:
                 return entry
             entry = entry.next
+        
+        # You could uncomment this to raise an exception instead of returning None
+        # raise LookupError(f"Lexeme '{lexeme}' not found in symbol table")
         
         return None
     
@@ -348,7 +378,13 @@ class AdaSymbolTable:
         
         Args:
             depth: The lexical scope depth to delete.
+            
+        Raises:
+            ValueError: If depth is negative.
         """
+        if depth < 0:
+            raise ValueError("Depth cannot be negative")
+            
         for i in range(self.table_size):
             prev = None
             curr = self.table[i]
@@ -382,7 +418,13 @@ class AdaSymbolTable:
         
         Returns:
             A dictionary mapping lexemes to their entries.
+            
+        Raises:
+            ValueError: If depth is negative.
         """
+        if depth < 0:
+            raise ValueError("Depth cannot be negative")
+            
         result = {}
         
         for i in range(self.table_size):
