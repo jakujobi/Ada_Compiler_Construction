@@ -109,9 +109,6 @@ symbol_table.deleteDepth(2)
 ```
 
 ---
-
-
-
 ## Implementation Details
 
 ### Hash Function
@@ -136,9 +133,6 @@ def _hash(self, lexeme: str) -> int:
 Collisions are resolved using chaining, where entries with the same hash value are linked together in a singly linked list. This approach is memory-efficient and performs well for the expected number of entries in a typical program.
 
 ---
-
-
-
 ## Testing
 
 The implementation includes comprehensive tests covering:
