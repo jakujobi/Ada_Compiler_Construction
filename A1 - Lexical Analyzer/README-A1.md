@@ -150,5 +150,5 @@ I prefer this licence because it allows my code to be used by other people on th
 For example:
 - Licensee shall not, whether indirectly or indirectly through agents or assignee: infringe on human rights as outlined by the United Nations Universal Declaration of Human Rights
 - Not for use by or for any Military Activities, Mass Surveillance, Law Enforcement, Ecocide, Removal of Indigenous peoples from their lands.
-True, it sounds a bit extreme, but I have heard of open source projects being used for "special military operations", "exercising the rights of a nation to defend itself through genocide of thousands of families, women and children included". (see events from 2022 to 2025 -at moment of writing)
+True, it sounds a bit extreme, but there have been reports of open-source projects being misused for military and surveillance purposes, raising ethical concerns. 
 ---
