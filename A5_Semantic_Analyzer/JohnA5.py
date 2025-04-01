@@ -103,9 +103,6 @@ class JohnA5:
         # LexicalAnalyzer processes the source code into tokens.
         self.lexical_analyzer = LexicalAnalyzer()
 
-        # Initialize components
-        self.logger.debug("Initializing FileHandler and other components.")
-        self.file_handler = FileHandler()
 
         # Initialize data
         self.source_code = None
