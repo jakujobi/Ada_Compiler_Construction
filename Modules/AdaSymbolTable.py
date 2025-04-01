@@ -17,7 +17,7 @@ and is compatible with the token system used in the lexical analyzer.
 Key components:
 - AdaSymbolTable: The main hash table implementation
 - TableEntry: Represents entries in the symbol table
-- VarType: Enumeration for variable types (CHAR, INT, FLOAT)
+- VarType: Enumeration for variable types (CHAR, INT, FLOAT, REAL)
 - EntryType: Enumeration for entry types (VARIABLE, CONSTANT, PROCEDURE)
 - ParameterMode: Enumeration for parameter passing modes (IN, OUT, INOUT)
 - Parameter: Represents parameters for procedures
@@ -53,6 +53,7 @@ class VarType(Enum):
     CHAR = auto()
     INT = auto()
     FLOAT = auto()
+    REAL = auto()  # Add REAL as an alias to FLOAT for consistency with lexer tokens
 
 
 class EntryType(Enum):
@@ -96,7 +97,7 @@ class Parameter:
         Initialize a parameter with a type and passing mode.
         
         Args:
-            param_type: The data type of the parameter (CHAR, INT, FLOAT).
+            param_type: The data type of the parameter (CHAR, INT, FLOAT, REAL).
             param_mode: The passing mode of the parameter (IN, OUT, INOUT).
         """
         self.param_type = param_type
@@ -368,12 +369,6 @@ class AdaSymbolTable:
             if entry.lexeme == lexeme and (depth is None or entry.depth == depth):
                 return entry
             entry = entry.next
-        
-        # This raises an exception instead of returning None
-        # if depth is None:
-        #     raise LookupError(f"Lexeme '{lexeme}' not found in symbol table")
-        # else:
-        #     raise LookupError(f"Lexeme '{lexeme}' not found at depth {depth} in symbol table")
         
         return None
     
