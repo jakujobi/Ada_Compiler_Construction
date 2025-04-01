@@ -183,6 +183,11 @@ class SemanticAnalyzer:
                 proc_entry.param_count = param_count
                 proc_entry.param_list = param_list
         
+        # Process declarative part (variable/constant declarations)
+        decl_part_node = self.find_child_by_name(node, "DeclarativePart")
+        if decl_part_node:
+            self.logger.debug("Processing declarative part")
+            self.analyze_declarative_part(decl_part_node)
         
         # Process nested procedures
         procedures_node = self.find_child_by_name(node, "Procedures")
@@ -215,10 +220,6 @@ class SemanticAnalyzer:
         
         # Restore parent scope's offset
         self.current_offset = self.depth_offsets[self.current_depth]
-        
-        self.logger.debug(f"Updating procedure entry for '{proc_name}' with local size {self.depth_offsets[self.current_depth]}")
-        self.logger.debug(f"Exiting procedure '{proc_name}' (depth {self.current_depth}):")
-        self.logger.debug(f"Deleting entries at depth {self.current_depth}")
         
         return True
     
@@ -295,23 +296,17 @@ class SemanticAnalyzer:
                 
             # Insert the identifier into the symbol table
             self.logger.debug(f"Inserting '{identifier.lexeme}' into the symbol table")
-            entry = self.symbol_table.insert(identifier.lexeme, identifier.token_type, self.current_depth)
-            
-            if is_constant:
-                self.logger.debug(f"Setting constant info for '{identifier.lexeme}'")
-                # Set constant info
-                entry.set_constant_info(var_type, const_value)
-                entry.entry_type = EntryType.CONSTANT
-            else:
-                # Set variable info - determine size based on type
-                self.logger.debug(f"Setting variable info for '{identifier.lexeme}'")
+            if not is_constant:
                 size = self.type_sizes.get(var_type, 0)
+                entry = self.symbol_table.insert(identifier.lexeme, identifier.token_type, self.current_depth)
                 entry.set_variable_info(var_type, self.current_offset, size)
                 entry.entry_type = EntryType.VARIABLE
-                
-                # Update offset for next variable
                 self.current_offset += size
                 self.depth_offsets[self.current_depth] = self.current_offset
+            else:
+                entry = self.symbol_table.insert(identifier.lexeme, identifier.token_type, self.current_depth)
+                entry.set_constant_info(var_type, const_value)
+                entry.entry_type = EntryType.CONSTANT
         
         # Process the rest of the declarative part (if any)
         self.logger.debug("Processing remaining declarative part")
@@ -319,7 +314,6 @@ class SemanticAnalyzer:
         if semicolon_index != -1 and semicolon_index < len(node.children) - 1:
             next_decl_part = node.children[semicolon_index + 1]
             self.logger.debug("Checking for next declarative part")
-            self.logger.debug("Processing remaining declarative part")
             if next_decl_part.name == "DeclarativePart":
                 self.analyze_declarative_part(next_decl_part)
         
