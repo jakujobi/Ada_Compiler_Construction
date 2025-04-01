@@ -40,8 +40,8 @@ class Definitions:
             'TokenType', [
                 # Existing tokens
                 'PROCEDURE', 'MODULE', 'CONSTANT', 'IS', 'BEGIN', 'END',
-                'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP', 'FLOAT',
-                'INTEGER', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
+                'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP',
+                'INTEGER', 'FLOAT', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
                 'LITERAL', 'CHAR_LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
                 'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
                 'DOT', 'EOF', 'CONCAT', 'IN', 'OUT', 'INOUT',
@@ -60,7 +60,7 @@ class Definitions:
                 'TAGGED', 'TASK', 'TERMINATE', 'TYPE', 'UNTIL',
                 'USE', 'WHEN', 'WITH', 'XOR',
                 # Add required token types for grammar
-                'INTEGERT', 'REALT', 'CHART', 'CONST'
+                'INTEGERT', 'REALT', 'CHART', 'CONST',
             ]
         )
 
@@ -82,6 +82,7 @@ class Definitions:
             "INTEGER": self.TokenType.INTEGERT,  # Map INTEGER to INTEGERT
             "REAL": self.TokenType.REALT,       # Map REAL to REALT
             "CHAR": self.TokenType.CHART,       # Map CHAR to CHART
+            "FLOAT": self.TokenType.FLOAT,
             "GET": self.TokenType.GET,
             "PUT": self.TokenType.PUT,
             "END": self.TokenType.END,
