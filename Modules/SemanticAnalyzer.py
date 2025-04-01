@@ -536,8 +536,8 @@ class SemanticAnalyzer:
             # Check for more arguments
             more_args_node = self.find_child_by_name(current_node, "MoreArgs")
             if more_args_node and more_args_node.children:
-                # Check if it has a semicolon, which indicates more arguments
-                if more_args_node.children[0].token.token_type == "SEMICOLON":
+                # Fix: compare token_type.name instead of token_type directly
+                if more_args_node.children[0].token.token_type.name == "SEMICOLON":
                     # Look for the next ArgList
                     next_arg_list = self.find_child_by_name(more_args_node, "ArgList")
                     if next_arg_list:
