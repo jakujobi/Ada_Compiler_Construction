@@ -144,8 +144,8 @@ class JohnA5:
             self.logger.info("Going into stage 1")
             self.stage1_lexical_analysis()
             self.stage2_syntax_analysis()
-            # self.stage3_semantic_analysis()
-            # self.print_compilation_summary()
+            self.stage3_semantic_analysis()
+            self.print_compilation_summary()
         else:
             self.logger.error("No source code to process.")
             print("No source code to process.")
