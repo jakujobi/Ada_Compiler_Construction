@@ -68,7 +68,7 @@ class JohnA3:
         self.output_file_name = output_file_name
 
         self.logger.debug("Initializing FileHandler and LexicalAnalyzer.")
-        # FileHandler is assumed to be a helper class for file I/O.
+        # FileHandler is the helper class for file I/O.
         self.file_handler = FileHandler()
         # LexicalAnalyzer processes the source code into tokens.
         self.lexical_analyzer = LexicalAnalyzer()
