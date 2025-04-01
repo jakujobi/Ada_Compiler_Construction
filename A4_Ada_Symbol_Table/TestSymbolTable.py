@@ -292,6 +292,42 @@ class TestAdaSymbolTable(unittest.TestCase):
         self.assertEqual(found.depth, 1, "After deletion, lookup should find entry at depth 1")
         self.assertEqual(found.var_type, VarType.INT, "After deletion, lookup should find INT entry")
 
+    def test_lookup_with_depth(self):
+        """Test looking up entries with depth parameter."""
+        # Create entries with the same lexeme at different depths
+        self.symbol_table.insert("variable1", self.tokens['id'], 1).set_variable_info(VarType.INT, 0, 4)
+        self.symbol_table.insert("variable1", self.tokens['id'], 2).set_variable_info(VarType.FLOAT, 4, 8)
+        self.symbol_table.insert("variable1", self.tokens['id'], 3).set_variable_info(VarType.CHAR, 12, 1)
+        
+        # Look up by specific depths
+        entry_depth1 = self.symbol_table.lookup("variable1", 1)
+        self.assertIsNotNone(entry_depth1, "Entry at depth 1 should be found")
+        self.assertEqual(entry_depth1.var_type, VarType.INT, "Entry at depth 1 should have INT type")
+        
+        entry_depth2 = self.symbol_table.lookup("variable1", 2)
+        self.assertIsNotNone(entry_depth2, "Entry at depth 2 should be found")
+        self.assertEqual(entry_depth2.var_type, VarType.FLOAT, "Entry at depth 2 should have FLOAT type")
+        
+        entry_depth3 = self.symbol_table.lookup("variable1", 3)
+        self.assertIsNotNone(entry_depth3, "Entry at depth 3 should be found")
+        self.assertEqual(entry_depth3.var_type, VarType.CHAR, "Entry at depth 3 should have CHAR type")
+        
+        # Non-existent depth should return None
+        entry_depth4 = self.symbol_table.lookup("variable1", 4)
+        self.assertIsNone(entry_depth4, "Entry at depth 4 should not be found")
+        
+        # Default lookup should find the most recent entry (highest depth number)
+        entry_default = self.symbol_table.lookup("variable1")
+        self.assertIsNotNone(entry_default, "Default lookup should find an entry")
+        self.assertEqual(entry_default.depth, 3, "Default lookup should find entry at highest depth")
+        self.assertEqual(entry_default.var_type, VarType.CHAR, "Default lookup should find CHAR type")
+        
+        # After deleting entries at depth 3, default lookup should find depth 2
+        self.symbol_table.deleteDepth(3)
+        entry_after_delete = self.symbol_table.lookup("variable1")
+        self.assertEqual(entry_after_delete.depth, 2, "After deletion, lookup should find entry at depth 2")
+        self.assertEqual(entry_after_delete.var_type, VarType.FLOAT, "After deletion, lookup should find FLOAT type")
+
 
 def simple_test():
     """Run simple tests without unittest framework"""

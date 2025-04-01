@@ -336,36 +336,44 @@ class AdaSymbolTable:
         
         return entry
     
-    def lookup(self, lexeme: str) -> Optional[TableEntry]:
+    def lookup(self, lexeme: str, depth: Optional[int] = None) -> Optional[TableEntry]:
         """
-        Look up an entry in the symbol table by lexeme.
+        Look up an entry in the symbol table by lexeme and optionally by depth.
         
         Computes the hash value for the lexeme and searches the appropriate
-        chain for a matching entry. Returns the first (most recent) entry
-        found with the given lexeme, or None if not found.
+        chain for a matching entry. If depth is specified, returns the first 
+        entry with matching lexeme and depth. If depth is None, returns the 
+        first (most recent) entry found with the given lexeme, regardless of depth.
         
         Args:
             lexeme: The identifier to look up.
+            depth: Optional; the lexical scope depth to match. If None, only lexeme is matched.
         
         Returns:
             The found table entry, or None if not found.
             
         Raises:
-            ValueError: If lexeme is empty.
+            ValueError: If lexeme is empty or depth is negative.
         """
         if not lexeme:
             raise ValueError("Cannot lookup an empty lexeme")
+            
+        if depth is not None and depth < 0:
+            raise ValueError("Depth cannot be negative")
             
         hash_val = self._hash(lexeme)
         entry = self.table[hash_val]
         
         while entry is not None:
-            if entry.lexeme == lexeme:
+            if entry.lexeme == lexeme and (depth is None or entry.depth == depth):
                 return entry
             entry = entry.next
         
-        # You could uncomment this to raise an exception instead of returning None
-        # raise LookupError(f"Lexeme '{lexeme}' not found in symbol table")
+        # This raises an exception instead of returning None
+        # if depth is None:
+        #     raise LookupError(f"Lexeme '{lexeme}' not found in symbol table")
+        # else:
+        #     raise LookupError(f"Lexeme '{lexeme}' not found at depth {depth} in symbol table")
         
         return None
     

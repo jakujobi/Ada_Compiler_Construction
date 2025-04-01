@@ -63,13 +63,37 @@ def main():
     symbol_table.insert("index", "ID", 2).set_variable_info(VarType.INT, 4, 4)
     symbol_table.insert("flag", "ID", 2).set_variable_info(VarType.CHAR, 8, 1)
     
+    # Add an entry with the same name at a different depth
+    symbol_table.insert("counter", "ID", 2).set_variable_info(VarType.FLOAT, 12, 8)
+    
     # Write table at depth 2
     print("Entries at depth 2:", symbol_table.writeTable(2))
     
+    # Demonstrate depth-specific lookup
+    print("\nDepth-specific lookup results:")
+    # Try to find 'counter' at different depths
+    counter_depth1 = symbol_table.lookup("counter", 1)
+    counter_depth2 = symbol_table.lookup("counter", 2)
+    counter_depth3 = symbol_table.lookup("counter", 3)  # Shouldn't exist
+    
+    print(f"  'counter' at depth 1: {counter_depth1.var_type.name if counter_depth1 else 'Not found'}")
+    print(f"  'counter' at depth 2: {counter_depth2.var_type.name if counter_depth2 else 'Not found'}")
+    print(f"  'counter' at depth 3: {counter_depth3.var_type.name if counter_depth3 else 'Not found'}")
+    
+    # Compare with the default lookup that finds the most recent entry
+    counter_any_depth = symbol_table.lookup("counter")
+    print(f"  'counter' at any depth: {counter_any_depth.var_type.name if counter_any_depth else 'Not found'}")
+    print(f"  Found at depth: {counter_any_depth.depth if counter_any_depth else 'N/A'}")
+    
     # Delete entries at depth 2
     symbol_table.deleteDepth(2)
-    print("After deletion - entries at depth 2:", symbol_table.writeTable(2))
+    print("\nAfter deletion - entries at depth 2:", symbol_table.writeTable(2))
     print("Entries at depth 1 (should be unchanged):", symbol_table.writeTable(1))
+    
+    # Check 'counter' again to show we now get the depth 1 version
+    counter_after_delete = symbol_table.lookup("counter")
+    print(f"  'counter' after deletion: {counter_after_delete.var_type.name if counter_after_delete else 'Not found'}")
+    print(f"  Found at depth: {counter_after_delete.depth if counter_after_delete else 'N/A'}")
     
     print("\n3. Testing hash collisions and chaining:")
     # Create two entries with potentially the same hash
