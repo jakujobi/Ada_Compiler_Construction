@@ -241,6 +241,11 @@ class SemanticAnalyzer:
         Returns:
             True if analysis succeeded, False if critical errors were found
         """
+        # If the node is an ε-production, ignore further processing.
+        if len(node.children) == 1 and node.children[0].name == "ε":
+            self.logger.debug("DeclarativePart is ε, nothing to process")
+            return True
+            
         if node.name != "DeclarativePart" or not node.children:
             # Empty declarative part (epsilon production)
             self.logger.debug("Empty declarative part")
@@ -261,7 +266,7 @@ class SemanticAnalyzer:
         # Next should be a colon
         self.logger.debug("Processing colon")
         colon_index = self.find_child_index_by_token_type(node, "COLON")
-        if colon_index == -1 or colon_index >= len(node.children):
+        if colon_index == -1:  # Removed extra length check
             line, column = self.get_location_info(id_list_node)
             self.report_error("Missing colon in declarative part", line, column)
             return False
@@ -403,15 +408,15 @@ class SemanticAnalyzer:
             value_token = value_node.children[0].token
             
             # Determine the constant type based on the token type
-            if value_token.token_type == "NUM" or value_token.token_type == "INTLIT":
+            if value_token.token_type.name in ("NUM", "INTLIT"):
                 return (True, VarType.INT, int(value_token.lexeme))
-            elif value_token.token_type == "REAL" or value_token.token_type == "FLOATLIT":
+            elif value_token.token_type.name in ("REAL", "FLOATLIT"):
                 return (True, VarType.FLOAT, float(value_token.lexeme))
-            elif value_token.token_type == "CHRLIT":
+            elif value_token.token_type.name == "CHRLIT":
                 return (True, VarType.CHAR, value_token.lexeme.strip("'"))
             else:
                 line, column = self.get_location_info(value_token)
-                self.report_error(f"Invalid constant value type: {value_token.token_type}", line, column)
+                self.report_error(f"Invalid constant value type: {value_token.token_type.name}", line, column)
                 return None
         else:
             # Variable type declaration
@@ -435,12 +440,14 @@ class SemanticAnalyzer:
         Analyze an Args node in the parse tree.
         Returns (0, []) if the node does not contain valid arguments.
         """
-        # If no children or first child does not have a token (i.e. is ε), then there are no arguments
+        # If the first child is an epsilon production, no formal parameters exist.
+        if node.children and node.children[0].name == "ε":
+            return (0, [])
         if not node.children or not (hasattr(node.children[0], "token") and node.children[0].token):
             return (0, [])
-        if node.children[0].token.token_type != "LPAREN":
+        if node.children[0].token.token_type.name != "LPAREN":
             return (0, [])
-        # Otherwise, look for ArgList and process
+        # Otherwise, look for ArgList and process.
         arg_list_node = self.find_child_by_name(node, "ArgList")
         if not arg_list_node:
             return (0, [])
@@ -558,11 +565,11 @@ class SemanticAnalyzer:
             return ParameterMode.IN  # Default if not specified
             
         mode_token = node.children[0].token
-        if mode_token.token_type == "IN":
+        if mode_token.token_type.name == "IN":
             return ParameterMode.IN
-        elif mode_token.token_type == "OUT":
+        elif mode_token.token_type.name == "OUT":
             return ParameterMode.OUT
-        elif mode_token.token_type == "INOUT":
+        elif mode_token.token_type.name == "INOUT":
             return ParameterMode.INOUT
         else:
             line, column = self.get_location_info(mode_token)
@@ -815,7 +822,7 @@ class SemanticAnalyzer:
             return -1
             
         for i, child in enumerate(node.children):
-            if child.token and child.token.token_type == token_type:
+            if child.token and child.token.token_type.name == token_type:
                 return i
                 
         return -1

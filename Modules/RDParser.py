@@ -274,7 +274,7 @@ class RDParser:
 
     def parseTypeMark(self):
         """
-        TypeMark -> integert | realt | chart | const assignop Value
+        TypeMark -> integert | realt | chart | float | const/constant assignop Value 
         """
         if self.build_parse_tree:
             node = ParseTreeNode("TypeMark")
@@ -288,13 +288,16 @@ class RDParser:
             self.defs.TokenType.FLOAT
         }:
             self.match_leaf(self.current_token.token_type, node)
-        elif self.current_token.token_type == self.defs.TokenType.CONSTANT:
+        elif (self.current_token.token_type == self.defs.TokenType.CONSTANT or
+              (self.current_token and self.current_token.lexeme.lower() in {"const", "constant"})):
             self.match_leaf(self.defs.TokenType.CONSTANT, node)
             self.match_leaf(self.defs.TokenType.ASSIGN, node)
             child = self.parseValue()
-            if self.build_parse_tree and child: node.add_child(child)
+            if self.build_parse_tree and child:
+                node.add_child(child)
         else:
-            self.report_error("Expected a type (INTEGERT, REALT, CHART) or a constant declaration.")
+            self.report_error("Expected a type (INTEGERT, REALT, CHART, FLOAT) or a constant declaration.", 
+                              self.current_token.line_number, self.current_token.column_number)
         return node
 
     def parseValue(self):
