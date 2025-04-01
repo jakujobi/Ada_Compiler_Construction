@@ -23,18 +23,18 @@ from Modules.Logger import Logger
 
 class Token:
     def __init__(self, token_type, lexeme, line_number, column_number,
-                 value=None, real_value=None, literal_value=None):
+                value=None, real_value=None, literal_value=None):
         """
         Initialize a Token instance.
 
         Parameters:
-          token_type: The type of the token (usually from the TokenType enumeration).
-          lexeme (str): The actual text matched from the source code.
-          line_number (int): The line number in the source code where this token appears.
-          column_number (int): The column number in the source code where this token starts.
-          value: (Optional) The numeric value if this is an integer token.
-          real_value: (Optional) The floating-point value if this is a real number token.
-          literal_value: (Optional) The inner text for string or character literals.
+            token_type: The type of the token (usually from the TokenType enumeration).
+            lexeme (str): The actual text matched from the source code.
+            line_number (int): The line number in the source code where this token appears.
+            column_number (int): The column number in the source code where this token starts.
+            value: (Optional) The numeric value if this is an integer token.
+            real_value: (Optional) The floating-point value if this is a real number token.
+            literal_value: (Optional) The inner text for string or character literals.
         """
         # Create a logger instance to log any issues inside the Token class.
         self.logger = Logger()
