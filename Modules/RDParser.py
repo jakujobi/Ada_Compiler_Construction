@@ -460,6 +460,48 @@ class ParseTreeNode:
     def add_child(self, child):
         self.children.append(child)
 
+    def find_child_by_name(self, name):
+        """
+        Find a child node by name.
+        
+        Args:
+            name (str): The name of the child node to find
+            
+        Returns:
+            The child node if found, None otherwise
+        """
+        for child in self.children:
+            if child.name == name:
+                return child
+        return None
+        
+    def find_children_by_name(self, name):
+        """
+        Find all child nodes with the specified name.
+        
+        Args:
+            name (str): The name of the child nodes to find
+            
+        Returns:
+            List of child nodes with the specified name
+        """
+        return [child for child in self.children if child.name == name]
+        
+    def find_child_by_token_type(self, token_type):
+        """
+        Find a child node by token type.
+        
+        Args:
+            token_type: The token type to search for
+            
+        Returns:
+            The child node if found, None otherwise
+        """
+        for child in self.children:
+            if child.token and child.token.token_type == token_type:
+                return child
+        return None
+
     def __str__(self):
         if self.token:
             return f"{self.name}: {self.token.lexeme}"
