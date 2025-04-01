@@ -284,7 +284,8 @@ class RDParser:
         if self.current_token.token_type in {
             self.defs.TokenType.INTEGERT, 
             self.defs.TokenType.REALT, 
-            self.defs.TokenType.CHART
+            self.defs.TokenType.CHART,
+            self.defs.TokenType.FLOAT
         }:
             self.match_leaf(self.current_token.token_type, node)
         elif self.current_token.token_type == self.defs.TokenType.CONSTANT:
@@ -298,14 +299,21 @@ class RDParser:
 
     def parseValue(self):
         """
-        Value -> NumericalLiteral (assumed to be NUM)
+        Value -> NumericalLiteral (NUM or REAL)
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Value")
         else:
             node = None
         self.logger.debug("Parsing Value")
-        self.match_leaf(self.defs.TokenType.NUM, node)
+        
+        if self.current_token.token_type == self.defs.TokenType.NUM:
+            self.match_leaf(self.defs.TokenType.NUM, node)
+        elif self.current_token.token_type == self.defs.TokenType.REAL:
+            self.match_leaf(self.defs.TokenType.REAL, node)
+        else:
+            self.report_error("Expected a numerical literal (integer or float).")
+        
         return node
 
     def parseProcedures(self):
@@ -458,4 +466,4 @@ class ParseTreeNode:
         return self.name
 
 # End of RDParser.py
-#Ada_Compiler_Construction\Modules\RDParser.py  
+#Ada_Compiler_Construction\Modules\RDParser.py
