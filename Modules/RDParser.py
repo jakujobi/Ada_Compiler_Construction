@@ -502,6 +502,16 @@ class ParseTreeNode:
                 return child
         return None
 
+    @property
+    def line_number(self):
+        """Get the line number from the token, or -1 if not available."""
+        return self.token.line_number if self.token else -1
+    
+    @property
+    def column_number(self):
+        """Get the column number from the token, or -1 if not available."""
+        return self.token.column_number if self.token else -1
+
     def __str__(self):
         if self.token:
             return f"{self.name}: {self.token.lexeme}"
