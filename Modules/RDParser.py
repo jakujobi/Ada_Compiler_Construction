@@ -341,26 +341,27 @@ class RDParser:
 
     def parseArgs(self):
         """
-        Args -> ( ArgList ) | ε
+        Modified Args -> ( ArgList ) | ε.
+        Always returns a ParseTreeNode when build_parse_tree is True.
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Args")
-        else:
-            node = None
-        self.logger.debug("Parsing Args")
-        if self.current_token.token_type == self.defs.TokenType.LPAREN:
-            self.match_leaf(self.defs.TokenType.LPAREN, node)
-            child = self.parseArgList()
-            if self.build_parse_tree and child: node.add_child(child)
-            self.match_leaf(self.defs.TokenType.RPAREN, node)
+            if self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.match_leaf(self.defs.TokenType.LPAREN, node)
+                child = self.parseArgList()
+                if child:
+                    node.add_child(child)
+                self.match_leaf(self.defs.TokenType.RPAREN, node)
+            else:
+                # Add an ε leaf so that semantic analyzer can detect an empty argument list
+                node.add_child(ParseTreeNode("ε"))
             return node
         else:
-            if self.build_parse_tree:
-                node.add_child(ParseTreeNode("ε"))
-                return node
-            else:
-                self.logger.debug("Args -> ε")
-                return None
+            if self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.match(self.defs.TokenType.LPAREN)
+                self.parseArgList()
+                self.match(self.defs.TokenType.RPAREN)
+            return None
 
     def parseArgList(self):
         """
@@ -430,16 +431,37 @@ class RDParser:
 
     def parseSeqOfStatements(self):
         """
-        SeqOfStatements -> ε
-        (No statements are defined in the current grammar.)
+        Modified to parse one or more statements.
         """
         if self.build_parse_tree:
             node = ParseTreeNode("SeqOfStatements")
-            node.add_child(ParseTreeNode("ε"))
+            # Loop until we see the END token
+            while self.current_token.token_type != self.defs.TokenType.END:
+                child = self.parseStatement()
+                if child:
+                    node.add_child(child)
             return node
         else:
-            self.logger.debug("Parsing SeqOfStatements -> ε")
+            while self.current_token.token_type != self.defs.TokenType.END:
+                self.parseStatement()
             return None
+
+    def parseStatement(self):
+        """
+        Statement -> ID ASSIGN Value SEMICOLON
+        """
+        if self.build_parse_tree:
+            node = ParseTreeNode("Statement")
+        else:
+            node = None
+        self.logger.debug("Parsing Statement")
+        self.match_leaf(self.defs.TokenType.ID, node)
+        self.match_leaf(self.defs.TokenType.ASSIGN, node)
+        child = self.parseValue()
+        if self.build_parse_tree and child:
+            node.add_child(child)
+        self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+        return node
 
 # ------------------------------
 # Parse Tree Node Class

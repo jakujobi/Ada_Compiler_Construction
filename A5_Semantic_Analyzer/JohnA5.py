@@ -359,14 +359,14 @@ class JohnA5:
             print(f"Created symbol table with size {self.symbol_table.table_size}")
             
             # Create semantic analyzer
-            self.semantic_analyzer = SemanticAnalyzer(self.symbol_table, self.stop_on_error)
+            self.semantic_analyzer = SemanticAnalyzer(self.symbol_table, self.stop_on_error, logger=self.logger)
             self.logger.info("Created semantic analyzer")
             
             # Add 'type' attribute to parse tree nodes for compatibility with SemanticAnalyzer
             self._add_type_to_parse_tree(self.parser.parse_tree_root)
             
             # Log the parse tree being passed to semantic analyzer
-            self.logger.debug(f"Parse tree root node type: {getattr(self.parser.parse_tree_root, 'type', self.parser.parse_tree_root.name)}")
+            self.logger.info(f"Parse tree root node type: {getattr(self.parser.parse_tree_root, 'type', self.parser.parse_tree_root.name)}")
             
             # Perform semantic analysis
             self.logger.info("Starting semantic analysis...")
