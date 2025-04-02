@@ -17,6 +17,7 @@ procedure Test6 is
 begin
     -- Empty body
 end Test6;
+
 -- EXPECTED OUTPUT
     -- Lexeme: var3
       -- Type: FLOAT

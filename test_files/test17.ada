@@ -6,6 +6,7 @@ procedure Test7 is
 begin
     -- Empty body
 end Test7;
+
 -- EXPECTED OUTPUT
     -- Lexeme: PI
       -- Type: CONST_FLOAT

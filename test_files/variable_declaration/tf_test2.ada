@@ -1,10 +1,16 @@
-procedure Test2 is
-    x, y : integer;     -- Two integers
-    a, b, c : float;    -- Three floats
-    letter : char;  -- Character variable
+-- =====================================
+-- File: tf_test2.ada
+-- Test Type: Analyzer, Semantic
+-- Description: Tests simultaneous variable declarations and type consistency among integer, float, and char types.
+-- Expected: Analyzer ensures proper type checking and declaration handling.
+-- =====================================
+procedure tf_test2 is
+    x, y : integer;     -- Declaration of two integer variables
+    a, b, c : float;    -- Declaration of three float variables
+    letter : char;      -- Single character variable
 begin
     -- Empty body
-end Test2;
+end tf_test2;
 
 -- EXPECTED OUTPUT
     -- Lexeme: a
