@@ -167,41 +167,39 @@ class SemanticAnalyzer:
         proc_entry.set_procedure_info(0, 0, None, [])
         proc_entry.entry_type = EntryType.PROCEDURE
         
-        # Enter new scope for procedure body
-        self.logger.debug(f"Entering scope for procedure '{proc_name}', new depth: {self.current_depth + 1}")
+        # Enter new scope for procedure parameters
+        self.logger.debug(f"Entering parameter scope for procedure '{proc_name}', new depth: {self.current_depth + 1}")
         self.current_depth += 1
         
-        # Reset the offset for the new scope
-        self.logger.debug(f"Resetting offset for new scope at depth {self.current_depth}")
-        self.depth_offsets[self.current_depth] = 0
-        self.current_offset = 0
-        
-        # Process procedure arguments (if any)
-        self.logger.debug("Processing procedure arguments")
+        # Parameters (if any) are inserted in this scope.
         args_node = self.find_child_by_name(node, "Args")
         if args_node:
             param_info = self.analyze_args(args_node)
             if param_info:
                 param_count, param_list = param_info
-                # Update procedure entry with formal parameter info;
-                # Formal parameters are inserted at the new scope (depth + 1)
                 self.logger.debug(f"Updating procedure entry for '{proc_name}' with parameter count {param_count}")
                 proc_entry.param_count = param_count
                 proc_entry.param_list = param_list
         
-        # Process declarative part (variable/constant declarations)
+        # Now, create a new inner scope for local declarations (body)
+        self.logger.debug(f"Entering local declarations scope for procedure '{proc_name}', new depth: {self.current_depth + 1}")
+        self.current_depth += 1
+        self.depth_offsets[self.current_depth] = 0
+        self.current_offset = 0
+        
+        # Process declarative part in the inner (body) scope
         decl_part_node = self.find_child_by_name(node, "DeclarativePart")
         if decl_part_node:
             self.logger.debug("Processing declarative part")
             self.analyze_declarative_part(decl_part_node)
         
-        # Process nested procedures
+        # Process nested procedures in the inner (body) scope
         procedures_node = self.find_child_by_name(node, "Procedures")
         if procedures_node:
             self.logger.debug("Processing nested procedures")
             self.analyze_procedures(procedures_node)
         
-        # Process statements
+        # Process statements in the inner (body) scope
         seq_of_statements_node = self.find_child_by_name(node, "SeqOfStatements")
         if seq_of_statements_node:
             self.logger.debug("Processing statements")
@@ -212,19 +210,19 @@ class SemanticAnalyzer:
         proc_entry.local_size = self.depth_offsets[self.current_depth]
         
         # Print symbol table for this scope
-        self.logger.debug(f"Exiting procedure '{proc_name}' (depth {self.current_depth}):")
+        self.logger.debug(f"Exiting procedure '{proc_name}' (inner scope depth {self.current_depth}):")
         print(f"\nExiting procedure '{proc_name}' (depth {self.current_depth}):")
         self.print_symbol_table(self.current_depth)
         
         # Delete entries at this depth as we exit the scope
-        self.logger.debug(f"Deleting entries at depth {self.current_depth}")
+        self.logger.debug(f"Deleting entries at inner scope depth {self.current_depth}")
         self.symbol_table.deleteDepth(self.current_depth)
         
-        # Exit scope
-        self.logger.debug(f"Exiting scope for procedure '{proc_name}'")
+        # Exit local declarations scope
         self.current_depth -= 1
         
-        # Restore parent scope's offset
+        # Exit parameter scope; parameters remain in the procedure’s symbol table entry.
+        self.current_depth -= 1
         self.current_offset = self.depth_offsets[self.current_depth]
         
         self.logger.info(f"Completed analysis of procedure '{proc_name}'")
@@ -608,15 +606,16 @@ class SemanticAnalyzer:
         Returns:
             Parameter mode (IN, OUT, or INOUT)
         """
-        self.logger.debug(f"Analyzing parameter mode for node: {node.name if node else 'None'}")
-        if not node or not node.children:
-            self.logger.debug("No mode specified, using default IN mode")
+        # If the node is missing or its first child is an epsilon production, default to IN mode.
+        if not node or not node.children or (node.children and node.children[0].name == "ε"):
+            self.logger.debug("No mode specified or epsilon encountered, defaulting to IN mode")
             return ParameterMode.IN
-        
+        # Proceed normally if a valid mode token exists.
         mode_token = node.children[0].token
+        if not mode_token:
+            self.logger.debug("Mode token missing, defaulting to IN mode")
+            return ParameterMode.IN
         token_type_name = mode_token.token_type.name
-        self.logger.debug(f"Mode token: {mode_token.lexeme}, type={token_type_name}")
-        
         if token_type_name == "IN":
             self.logger.debug("Mode determined: IN")
             return ParameterMode.IN
