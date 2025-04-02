@@ -84,7 +84,6 @@ class Definitions:
             "INTEGER": self.TokenType.INTEGERT,  # Map INTEGER to INTEGERT
             "REAL": self.TokenType.REALT,       # Map REAL to REALT
             "CHAR": self.TokenType.CHART,       # Map CHAR to CHART
-            "FLOAT": self.TokenType.FLOAT,
             "GET": self.TokenType.GET,
             "PUT": self.TokenType.PUT,
             "END": self.TokenType.END,
