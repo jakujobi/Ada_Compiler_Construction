@@ -348,28 +348,16 @@ class SemanticAnalyzer:
         Returns:
             List of identifier tokens in the list
         """
+        # Updated method to collect all identifier tokens in the list
         self.logger.debug(f"Analyzing identifier list node: {node.name}")
         identifiers = []
-        current_node = node
-        
-        while current_node:
-            # Look for the identifier token in the current node
-            self.logger.debug("Looking for identifier token")
-            idt_node = None
-            for child in current_node.children:
-                if child.name == "ID":  # Changed from "idt" to "ID"
-                    idt_node = child
-                    identifiers.append(child.token)
-                    break
-            
-            # Check if there's another IdentifierList (for comma-separated lists)
-            next_list_node = self.find_child_by_name(current_node, "IdentifierList")
-            if next_list_node:
-                current_node = next_list_node
-            else:
-                break
-                
-        self.logger.debug(f"Found {len(identifiers)} identifiers: {[id.lexeme for id in identifiers]}")
+        for child in node.children:
+            if child.name == "ID":
+                identifiers.append(child.token)
+            elif child.name == "IdentifierList":
+                identifiers.extend(self.analyze_identifier_list(child))
+            # Ignore tokens such as COMMA
+        self.logger.debug(f"Found {len(identifiers)} identifiers: {[t.lexeme for t in identifiers]}")
         return identifiers
     
     def analyze_type_mark(self, node: ParseTreeNode) -> Optional[Tuple[bool, VarType, Any]]:
