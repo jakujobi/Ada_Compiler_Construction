@@ -274,7 +274,7 @@ class RDParser:
 
     def parseTypeMark(self):
         """
-        TypeMark -> integert | realt | chart | const assignop Value
+        TypeMark -> integert | realt | chart | float | const/constant assignop Value 
         """
         if self.build_parse_tree:
             node = ParseTreeNode("TypeMark")
@@ -288,13 +288,16 @@ class RDParser:
             self.defs.TokenType.FLOAT
         }:
             self.match_leaf(self.current_token.token_type, node)
-        elif self.current_token.token_type == self.defs.TokenType.CONSTANT:
+        elif (self.current_token.token_type == self.defs.TokenType.CONSTANT or
+              (self.current_token and self.current_token.lexeme.lower() in {"const", "constant"})):
             self.match_leaf(self.defs.TokenType.CONSTANT, node)
             self.match_leaf(self.defs.TokenType.ASSIGN, node)
             child = self.parseValue()
-            if self.build_parse_tree and child: node.add_child(child)
+            if self.build_parse_tree and child:
+                node.add_child(child)
         else:
-            self.report_error("Expected a type (INTEGERT, REALT, CHART) or a constant declaration.")
+            self.report_error("Expected a type (INTEGERT, REALT, CHART, FLOAT) or a constant declaration.", 
+                              self.current_token.line_number, self.current_token.column_number)
         return node
 
     def parseValue(self):
@@ -341,26 +344,27 @@ class RDParser:
 
     def parseArgs(self):
         """
-        Args -> ( ArgList ) | ε
+        Modified Args -> ( ArgList ) | ε.
+        Always returns a ParseTreeNode when build_parse_tree is True.
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Args")
-        else:
-            node = None
-        self.logger.debug("Parsing Args")
-        if self.current_token.token_type == self.defs.TokenType.LPAREN:
-            self.match_leaf(self.defs.TokenType.LPAREN, node)
-            child = self.parseArgList()
-            if self.build_parse_tree and child: node.add_child(child)
-            self.match_leaf(self.defs.TokenType.RPAREN, node)
+            if self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.match_leaf(self.defs.TokenType.LPAREN, node)
+                child = self.parseArgList()
+                if child:
+                    node.add_child(child)
+                self.match_leaf(self.defs.TokenType.RPAREN, node)
+            else:
+                # Add an ε leaf so that semantic analyzer can detect an empty argument list
+                node.add_child(ParseTreeNode("ε"))
             return node
         else:
-            if self.build_parse_tree:
-                node.add_child(ParseTreeNode("ε"))
-                return node
-            else:
-                self.logger.debug("Args -> ε")
-                return None
+            if self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.match(self.defs.TokenType.LPAREN)
+                self.parseArgList()
+                self.match(self.defs.TokenType.RPAREN)
+            return None
 
     def parseArgList(self):
         """
@@ -430,16 +434,37 @@ class RDParser:
 
     def parseSeqOfStatements(self):
         """
-        SeqOfStatements -> ε
-        (No statements are defined in the current grammar.)
+        Modified to parse one or more statements.
         """
         if self.build_parse_tree:
             node = ParseTreeNode("SeqOfStatements")
-            node.add_child(ParseTreeNode("ε"))
+            # Loop until we see the END token
+            while self.current_token.token_type != self.defs.TokenType.END:
+                child = self.parseStatement()
+                if child:
+                    node.add_child(child)
             return node
         else:
-            self.logger.debug("Parsing SeqOfStatements -> ε")
+            while self.current_token.token_type != self.defs.TokenType.END:
+                self.parseStatement()
             return None
+
+    def parseStatement(self):
+        """
+        Statement -> ID ASSIGN Value SEMICOLON
+        """
+        if self.build_parse_tree:
+            node = ParseTreeNode("Statement")
+        else:
+            node = None
+        self.logger.debug("Parsing Statement")
+        self.match_leaf(self.defs.TokenType.ID, node)
+        self.match_leaf(self.defs.TokenType.ASSIGN, node)
+        child = self.parseValue()
+        if self.build_parse_tree and child:
+            node.add_child(child)
+        self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+        return node
 
 # ------------------------------
 # Parse Tree Node Class
@@ -459,6 +484,58 @@ class ParseTreeNode:
 
     def add_child(self, child):
         self.children.append(child)
+
+    def find_child_by_name(self, name):
+        """
+        Find a child node by name.
+        
+        Args:
+            name (str): The name of the child node to find
+            
+        Returns:
+            The child node if found, None otherwise
+        """
+        for child in self.children:
+            if child.name == name:
+                return child
+        return None
+        
+    def find_children_by_name(self, name):
+        """
+        Find all child nodes with the specified name.
+        
+        Args:
+            name (str): The name of the child nodes to find
+            
+        Returns:
+            List of child nodes with the specified name
+        """
+        return [child for child in self.children if child.name == name]
+        
+    def find_child_by_token_type(self, token_type):
+        """
+        Find a child node by token type.
+        
+        Args:
+            token_type: The token type to search for
+            
+        Returns:
+            The child node if found, None otherwise
+        """
+        for child in self.children:
+            if child.token and child.token.token_type == token_type:
+                return child
+        return None
+
+    @property
+    def line_number(self):
+        """Get the line number from the token, or -1 if not available."""
+        return self.token.line_number if self.token else -1
+    
+    @property
+    def column_number(self):
+        """Get the column number from the token, or -1 if not available."""
+        return self.token.column_number if self.token else -1
 
     def __str__(self):
         if self.token:

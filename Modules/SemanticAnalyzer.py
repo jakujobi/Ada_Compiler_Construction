@@ -45,17 +45,18 @@ class SemanticAnalyzer:
     tracking of variable offsets.
     """
     
-    def __init__(self, symbol_table: AdaSymbolTable, stop_on_error: bool = False):
+    def __init__(self, symbol_table: AdaSymbolTable, stop_on_error: bool = False, logger: Logger = None):
         """
         Initialize the semantic analyzer.
         
         Args:
             symbol_table: The symbol table to use for semantic analysis
             stop_on_error: Whether to stop at the first error or continue
+            logger: An optional logger instance for logging errors and information
         """
         self.symbol_table = symbol_table
         self.stop_on_error = stop_on_error
-        self.logger = Logger()
+        self.logger = logger if logger else Logger()
         self.errors = []
         self.current_depth = 0
         self.current_offset = 0
@@ -67,8 +68,20 @@ class SemanticAnalyzer:
         self.type_sizes = {
             VarType.INT: 2,      # Integers have size 2
             VarType.CHAR: 1,     # Characters have size 1
-            VarType.FLOAT: 4     # Floats have size 4
+            VarType.FLOAT: 4,    # Floats have size 4
+            VarType.REAL: 4      # Alias for FLOAT
         }
+        
+        # Define mapping from token types to variable types
+        self.token_to_var_type = {
+            "INTEGERT": VarType.INT,
+            "REALT": VarType.FLOAT,
+            "CHART": VarType.CHAR,
+            "FLOAT": VarType.FLOAT
+        }
+        
+        self.logger.info("Semantic Analyzer initialized")
+        self.logger.debug(f"Symbol table size: {symbol_table.table_size}, Stop on error: {stop_on_error}")
     
     def analyze_parse_tree(self, parse_tree_root: ParseTreeNode) -> bool:
         """
@@ -80,13 +93,21 @@ class SemanticAnalyzer:
         Returns:
             True if analysis was successful, False otherwise
         """
+        self.logger.info("Starting semantic analysis of parse tree")
         if not parse_tree_root:
             self.report_error("No parse tree to analyze", line=0, column=0)
             return False
+        else:
+            self.logger.info("There is a parse tree to analyze")
             
         # Start analysis at the program level
         result = self.analyze_prog(parse_tree_root)
         
+        # At the end of analysis, print all entries remaining at depth 0.
+        print("\nRemaining global entries at depth 0:")
+        self.print_symbol_table(0)
+        
+        self.logger.info(f"Semantic analysis complete with {len(self.errors)} errors")
         # Return success only if no errors were found
         return result and len(self.errors) == 0
     
@@ -111,86 +132,100 @@ class SemanticAnalyzer:
         Returns:
             True if analysis succeeded, False if critical errors were found
         """
+        self.logger.info(f"Analyzing program node of type '{node.name}'")
         if node.name != "Prog":
-            self.report_error(f"Expected 'Prog' node, got '{node.name}'")
+            line, column = self.get_location_info(node)
+            self.report_error(f"Expected 'Prog' node, got '{node.name}'", line, column)
             return False
             
         # Navigate through the procedure structure
         # Format: procedure idt Args is DeclarativePart Procedures begin SeqOfStatements end idt;
         
         # Get the procedure name (second child should be the identifier)
-        if len(node.children) < 2 or node.children[1].name != "idt":
-            self.report_error("Missing procedure identifier", 
-                            line=node.children[0].token.line if node.children else 0,
-                            column=node.children[0].token.column if node.children else 0)
+        if len(node.children) < 2 or node.children[1].name != "ID":  # Changed from "idt" to "ID"
+            line, column = self.get_location_info(node.children[0] if node.children else node)
+            self.report_error("Missing procedure identifier", line, column)
             return False
             
         proc_name_node = node.children[1]
         proc_name = proc_name_node.token.lexeme
+        self.logger.info(f"Processing procedure '{proc_name}' at depth {self.current_depth}")
         
         # Check if procedure name already exists at the current depth
         existing_entry = self.symbol_table.lookup(proc_name, self.current_depth)
         if existing_entry:
-            self.report_error(f"Duplicate declaration of procedure '{proc_name}'",
-                            line=proc_name_node.token.line,
-                            column=proc_name_node.token.column)
+            line, column = self.get_location_info(proc_name_node)
+            self.report_error(f"Duplicate declaration of procedure '{proc_name}'", line, column)
             return False
             
         # Insert procedure into symbol table at current depth
+        self.logger.info(f"Inserting procedure '{proc_name}' into symbol table at depth {self.current_depth}")
         proc_entry = self.symbol_table.insert(proc_name, proc_name_node.token.token_type, self.current_depth)
         
         # Set initial procedure info (will update later)
+        self.logger.debug(f"Initializing procedure info for '{proc_name}'")
         proc_entry.set_procedure_info(0, 0, None, [])
         proc_entry.entry_type = EntryType.PROCEDURE
         
-        # Enter new scope for procedure body
+        # Enter new scope for procedure parameters
+        self.logger.debug(f"Entering parameter scope for procedure '{proc_name}', new depth: {self.current_depth + 1}")
         self.current_depth += 1
         
-        # Reset the offset for the new scope
-        self.depth_offsets[self.current_depth] = 0
-        self.current_offset = 0
-        
-        # Process procedure arguments (if any)
+        # Parameters (if any) are inserted in this scope.
         args_node = self.find_child_by_name(node, "Args")
         if args_node:
             param_info = self.analyze_args(args_node)
             if param_info:
                 param_count, param_list = param_info
-                # Update procedure entry with parameter info
+                self.logger.debug(f"Updating procedure entry for '{proc_name}' with parameter count {param_count}")
                 proc_entry.param_count = param_count
                 proc_entry.param_list = param_list
         
-        # Process declarative part (variable/constant declarations)
+        # Now, create a new inner scope for local declarations (body)
+        self.logger.debug(f"Entering local declarations scope for procedure '{proc_name}', new depth: {self.current_depth + 1}")
+        self.current_depth += 1
+        self.depth_offsets[self.current_depth] = 0
+        self.current_offset = 0
+        
+        # Process declarative part in the inner (body) scope
         decl_part_node = self.find_child_by_name(node, "DeclarativePart")
         if decl_part_node:
+            self.logger.debug("Processing declarative part")
             self.analyze_declarative_part(decl_part_node)
         
-        # Process nested procedures
+        # Process nested procedures in the inner (body) scope
         procedures_node = self.find_child_by_name(node, "Procedures")
         if procedures_node:
+            self.logger.debug("Processing nested procedures")
             self.analyze_procedures(procedures_node)
         
-        # Process statements
+        # Process statements in the inner (body) scope
         seq_of_statements_node = self.find_child_by_name(node, "SeqOfStatements")
         if seq_of_statements_node:
+            self.logger.debug("Processing statements")
             self.analyze_seq_of_statements(seq_of_statements_node)
         
         # Update procedure entry with final local size
+        self.logger.debug(f"Updating procedure entry for '{proc_name}' with local size {self.depth_offsets[self.current_depth]}")
         proc_entry.local_size = self.depth_offsets[self.current_depth]
         
         # Print symbol table for this scope
+        self.logger.debug(f"Exiting procedure '{proc_name}' (inner scope depth {self.current_depth}):")
         print(f"\nExiting procedure '{proc_name}' (depth {self.current_depth}):")
         self.print_symbol_table(self.current_depth)
         
         # Delete entries at this depth as we exit the scope
+        self.logger.debug(f"Deleting entries at inner scope depth {self.current_depth}")
         self.symbol_table.deleteDepth(self.current_depth)
         
-        # Exit scope
+        # Exit local declarations scope
         self.current_depth -= 1
         
-        # Restore parent scope's offset
+        # Exit parameter scope; parameters remain in the procedure’s symbol table entry.
+        self.current_depth -= 1
         self.current_offset = self.depth_offsets[self.current_depth]
         
+        self.logger.info(f"Completed analysis of procedure '{proc_name}'")
         return True
     
     def analyze_declarative_part(self, node: ParseTreeNode) -> bool:
@@ -211,79 +246,92 @@ class SemanticAnalyzer:
         Returns:
             True if analysis succeeded, False if critical errors were found
         """
+        self.logger.info(f"Analyzing declarative part at depth {self.current_depth}")
+        # If the node is an ε-production, ignore further processing.
+        if len(node.children) == 1 and node.children[0].name == "ε":
+            self.logger.debug("DeclarativePart is ε (empty), skipping processing")
+            return True
+            
         if node.name != "DeclarativePart" or not node.children:
             # Empty declarative part (epsilon production)
+            self.logger.debug("Empty declarative part")
             return True
             
         # The first child should be IdentifierList
+        self.logger.debug("Processing IdentifierList")
         id_list_node = self.find_child_by_name(node, "IdentifierList")
         if not id_list_node:
-            self.report_error("Missing identifier list in declarative part",
-                            line=node.children[0].token.line if node.children else 0,
-                            column=node.children[0].token.column if node.children else 0)
+            line, column = self.get_location_info(node.children[0] if node.children else node)
+            self.report_error("Missing identifier list in declarative part", line, column)
             return False
             
         # Get list of identifiers
+        self.logger.debug("Getting list of identifiers")
         identifiers = self.analyze_identifier_list(id_list_node)
+        self.logger.debug(f"Found {len(identifiers)} identifiers: {[id.lexeme for id in identifiers]}")
         
         # Next should be a colon
+        self.logger.debug("Processing colon")
         colon_index = self.find_child_index_by_token_type(node, "COLON")
-        if colon_index == -1 or colon_index >= len(node.children):
-            self.report_error("Missing colon in declarative part",
-                            line=id_list_node.token.line if id_list_node.token else 0,
-                            column=id_list_node.token.column if id_list_node.token else 0)
+        if colon_index == -1:  # Removed extra length check
+            line, column = self.get_location_info(id_list_node)
+            self.report_error("Missing colon in declarative part", line, column)
             return False
             
         # Next should be TypeMark
+        self.logger.debug("Processing TypeMark")
         type_mark_node = self.find_child_by_name(node, "TypeMark") 
         if not type_mark_node:
-            self.report_error("Missing type mark in declarative part",
-                            line=node.children[colon_index].token.line,
-                            column=node.children[colon_index].token.column)
+            line, column = self.get_location_info(node.children[colon_index])
+            self.report_error("Missing type mark in declarative part", line, column)
             return False
             
         # Process type mark to get variable type or constant info
+        self.logger.debug("Processing type mark")
         type_info = self.analyze_type_mark(type_mark_node)
         if not type_info:
             return False
             
+        self.logger.debug(f"Type info: is_constant={type_info[0]}, type={type_info[1]}, value={type_info[2]}")
+        
         # Determine if this is a variable or constant declaration
+        self.logger.debug("Determining if this is a variable or constant declaration")
         is_constant, var_type, const_value = type_info
         
         # Insert each identifier into the symbol table
         for identifier in identifiers:
             # Check for duplicate declaration at current depth
+            self.logger.debug(f"Checking for duplicate declaration of '{identifier.lexeme}'")
             existing_entry = self.symbol_table.lookup(identifier.lexeme, self.current_depth)
             if existing_entry:
-                self.report_error(f"Duplicate declaration of '{identifier.lexeme}'",
-                                line=identifier.line,
-                                column=identifier.column)
+                line, column = self.get_location_info(identifier)
+                self.report_error(f"Duplicate declaration of '{identifier.lexeme}'", line, column)
                 continue
                 
             # Insert the identifier into the symbol table
-            entry = self.symbol_table.insert(identifier.lexeme, identifier.token_type, self.current_depth)
-            
-            if is_constant:
-                # Set constant info
-                entry.set_constant_info(var_type, const_value)
-                entry.entry_type = EntryType.CONSTANT
-            else:
-                # Set variable info - determine size based on type
+            self.logger.debug(f"Inserting '{identifier.lexeme}' into the symbol table")
+            if not is_constant:
                 size = self.type_sizes.get(var_type, 0)
+                entry = self.symbol_table.insert(identifier.lexeme, identifier.token_type, self.current_depth)
                 entry.set_variable_info(var_type, self.current_offset, size)
                 entry.entry_type = EntryType.VARIABLE
-                
-                # Update offset for next variable
                 self.current_offset += size
                 self.depth_offsets[self.current_depth] = self.current_offset
+            else:
+                entry = self.symbol_table.insert(identifier.lexeme, identifier.token_type, self.current_depth)
+                entry.set_constant_info(var_type, const_value)
+                entry.entry_type = EntryType.CONSTANT
         
         # Process the rest of the declarative part (if any)
+        self.logger.debug("Processing remaining declarative part")
         semicolon_index = self.find_child_index_by_token_type(node, "SEMICOLON")
         if semicolon_index != -1 and semicolon_index < len(node.children) - 1:
             next_decl_part = node.children[semicolon_index + 1]
+            self.logger.debug("Checking for next declarative part")
             if next_decl_part.name == "DeclarativePart":
                 self.analyze_declarative_part(next_decl_part)
         
+        self.logger.debug(f"Processed all declarations in declarative part")
         return True
     
     def analyze_identifier_list(self, node: ParseTreeNode) -> List[Token]:
@@ -298,32 +346,23 @@ class SemanticAnalyzer:
         Returns:
             List of identifier tokens in the list
         """
+        # Updated method to collect all identifier tokens in the list
+        self.logger.debug(f"Analyzing identifier list node: {node.name}")
         identifiers = []
-        current_node = node
-        
-        while current_node:
-            # Look for the identifier token in the current node
-            idt_node = None
-            for child in current_node.children:
-                if child.name == "idt":
-                    idt_node = child
-                    identifiers.append(child.token)
-                    break
-            
-            # Check if there's another IdentifierList (for comma-separated lists)
-            next_list_node = self.find_child_by_name(current_node, "IdentifierList")
-            if next_list_node:
-                current_node = next_list_node
-            else:
-                break
-                
+        for child in node.children:
+            if child.name == "ID":
+                identifiers.append(child.token)
+            elif child.name == "IdentifierList":
+                identifiers.extend(self.analyze_identifier_list(child))
+            # Ignore tokens such as COMMA
+        self.logger.debug(f"Found {len(identifiers)} identifiers: {[t.lexeme for t in identifiers]}")
         return identifiers
     
     def analyze_type_mark(self, node: ParseTreeNode) -> Optional[Tuple[bool, VarType, Any]]:
         """
         Analyze a TypeMark node in the parse tree.
         
-        Grammar rule: TypeMark -> integert | realt | chart | const assignop Value
+        Grammar rule: TypeMark -> integert | realt | chart | float | const assignop Value
         
         Args:
             node: The TypeMark node to analyze
@@ -331,91 +370,110 @@ class SemanticAnalyzer:
         Returns:
             Tuple of (is_constant, variable_type, constant_value) or None if error
         """
+        self.logger.debug(f"Analyzing type mark node: {node.name}")
         if not node.children:
-            self.report_error("Empty type mark", 
-                            line=node.token.line if node.token else 0,
-                            column=node.token.column if node.token else 0)
+            line, column = self.get_location_info(node)
+            self.report_error("Empty type mark", line, column)
             return None
             
         # Get the first child which should be the type
+        self.logger.debug("Getting first child")
         type_node = node.children[0]
+        self.logger.debug(f"Type node: {type_node.name}, has token: {type_node.token is not None}")
         
         # Check if this is a constant declaration
-        if type_node.name == "const":
+        self.logger.debug("Checking if this is a constant declaration")
+        if type_node.name == "const" or (type_node.token and type_node.token.token_type == "CONSTANT"):
             # Format: const assignop Value
             if len(node.children) < 3:
-                self.report_error("Invalid constant declaration, missing value",
-                                line=type_node.token.line,
-                                column=type_node.token.column)
+                line, column = self.get_location_info(type_node)
+                self.report_error("Invalid constant declaration, missing value", line, column)
                 return None
                 
             # Check for assignment operator
-            if node.children[1].name != "assignop":
-                self.report_error("Invalid constant declaration, missing assignment operator",
-                                line=type_node.token.line,
-                                column=type_node.token.column)
+            assign_node = node.children[1]
+            if assign_node.name != "assignop" and (assign_node.token and assign_node.token.token_type != "ASSIGN"):
+                line, column = self.get_location_info(type_node)
+                self.report_error("Invalid constant declaration, missing assignment operator", line, column)
                 return None
                 
             # Get the value node
             value_node = self.find_child_by_name(node, "Value")
             if not value_node or not value_node.children:
-                self.report_error("Invalid constant declaration, missing value",
-                                line=node.children[1].token.line,
-                                column=node.children[1].token.column)
+                line, column = self.get_location_info(node.children[1])
+                self.report_error("Invalid constant declaration, missing value", line, column)
                 return None
                 
             # Extract the value
             value_token = value_node.children[0].token
             
             # Determine the constant type based on the token type
-            if value_token.token_type == "INTLIT":
-                return (True, VarType.INT, int(value_token.lexeme))
-            elif value_token.token_type == "FLOATLIT":
-                return (True, VarType.FLOAT, float(value_token.lexeme))
-            elif value_token.token_type == "CHRLIT":
-                return (True, VarType.CHAR, value_token.lexeme.strip("'"))
+            if value_token.token_type.name in ("NUM", "INTLIT"):
+                const_type = VarType.INT
+                value = int(value_token.lexeme)
+            elif value_token.token_type.name in ("REAL", "FLOATLIT"):
+                const_type = VarType.FLOAT
+                value = float(value_token.lexeme)
+            elif value_token.token_type.name == "CHRLIT":
+                const_type = VarType.CHAR
+                value = value_token.lexeme.strip("'")
             else:
-                self.report_error(f"Invalid constant value type: {value_token.token_type}",
-                                line=value_token.line,
-                                column=value_token.column)
+                line, column = self.get_location_info(value_token)
+                self.report_error(f"Invalid constant value type: {value_token.token_type.name}", line, column)
                 return None
+            
+            self.logger.debug(f"Constant value determined: type={const_type}, value={value}")
+            return (True, const_type, value)
         else:
             # Variable type declaration
-            if type_node.name == "integert":
-                return (False, VarType.INT, None)
-            elif type_node.name == "realt":
-                return (False, VarType.FLOAT, None)
-            elif type_node.name == "chart":
-                return (False, VarType.CHAR, None)
+            self.logger.debug("Processing variable type declaration")
+            if type_node.token and type_node.token.token_type in self.token_to_var_type:
+                var_type = self.token_to_var_type[type_node.token.token_type]
+            elif type_node.name.lower() == "integert":
+                var_type = VarType.INT
+            elif type_node.name.lower() == "realt":
+                var_type = VarType.FLOAT
+            elif type_node.name.lower() == "chart":
+                var_type = VarType.CHAR
+            elif type_node.name.lower() == "float":
+                var_type = VarType.FLOAT
             else:
-                self.report_error(f"Unknown type: {type_node.name}",
-                                line=type_node.token.line if type_node.token else 0,
-                                column=type_node.token.column if type_node.token else 0)
+                line, column = self.get_location_info(type_node)
+                self.report_error(f"Unknown type: {type_node.name}", line, column)
                 return None
+            
+            self.logger.debug(f"Variable type determined: {var_type}")
+            return (False, var_type, None)
     
     def analyze_args(self, node: ParseTreeNode) -> Optional[Tuple[int, List[Parameter]]]:
         """
         Analyze an Args node in the parse tree.
-        
-        Grammar rule: Args -> ( ArgList ) | ε
-        
-        Args:
-            node: The Args node to analyze
-            
-        Returns:
-            Tuple of (parameter_count, parameter_list) or None if error or no parameters
+        Returns (0, []) if the node does not contain valid arguments.
         """
-        if not node.children or node.children[0].token.token_type != "LPAREN":
-            # No arguments (epsilon production)
+        self.logger.info(f"Analyzing procedure arguments at depth {self.current_depth}")
+        # If the first child is an epsilon production, no formal parameters exist.
+        if node.children and node.children[0].name == "ε":
+            self.logger.debug("Args has epsilon node, no parameters to process")
             return (0, [])
-            
-        # Look for ArgList
+        if not node.children or not (hasattr(node.children[0], "token") and node.children[0].token):
+            self.logger.debug("Args has no valid children, no parameters to process")
+            return (0, [])
+        
+        # Debug the token we're checking
+        token_type_name = node.children[0].token.token_type.name
+        self.logger.debug(f"First token in Args: {token_type_name}")
+        
+        if token_type_name != "LPAREN":
+            self.logger.debug(f"Args does not start with LPAREN, no parameters")
+            return (0, [])
+        
+        # Otherwise, look for ArgList and process.
         arg_list_node = self.find_child_by_name(node, "ArgList")
         if not arg_list_node:
-            # Empty parameter list
+            self.logger.debug("No ArgList node found in Args")
             return (0, [])
-            
-        # Process the argument list
+        
+        self.logger.debug("Found ArgList node, proceeding to parameter processing")
         return self.analyze_arg_list(arg_list_node)
     
     def analyze_arg_list(self, node: ParseTreeNode) -> Tuple[int, List[Parameter]]:
@@ -430,71 +488,73 @@ class SemanticAnalyzer:
         Returns:
             Tuple of (parameter_count, parameter_list)
         """
+        self.logger.debug(f"Starting parameter list analysis for node: {node.name}")
         params = []
         current_node = node
+        param_count = 0
         
         while current_node:
+            self.logger.debug(f"Processing parameter group #{param_count+1}")
+            
             # Process Mode
             mode_node = self.find_child_by_name(current_node, "Mode")
-            param_mode = self.analyze_mode(mode_node) if mode_node else ParameterMode.IN  # Default to IN
+            self.logger.debug(f"Mode node found: {mode_node is not None}")
+            param_mode = self.analyze_mode(mode_node) if mode_node else ParameterMode.IN
+            self.logger.debug(f"Parameter mode: {param_mode.name}")
             
             # Process IdentifierList
             id_list_node = self.find_child_by_name(current_node, "IdentifierList")
             if not id_list_node:
-                self.report_error("Missing identifier list in argument list",
-                                line=current_node.children[0].token.line if current_node.children else 0,
-                                column=current_node.children[0].token.column if current_node.children else 0)
+                self.logger.error("Missing identifier list in parameter group")
                 break
-                
+            
             identifiers = self.analyze_identifier_list(id_list_node)
+            self.logger.debug(f"Found {len(identifiers)} parameter identifiers: {[id.lexeme for id in identifiers]}")
             
             # Verify colon presence
             colon_index = self.find_child_index_by_token_type(current_node, "COLON")
+            self.logger.debug(f"Colon index: {colon_index}")
             if colon_index == -1:
-                self.report_error("Missing colon in parameter declaration",
-                                line=id_list_node.children[-1].token.line if id_list_node.children else 0,
-                                column=id_list_node.children[-1].token.column if id_list_node.children else 0)
+                self.logger.error("Missing colon in parameter declaration")
                 break
-                
+            
             # Process TypeMark
             type_mark_node = self.find_child_by_name(current_node, "TypeMark")
+            self.logger.debug(f"TypeMark node found: {type_mark_node is not None}")
             if not type_mark_node:
-                self.report_error("Missing type mark in parameter declaration",
-                                line=current_node.children[colon_index].token.line,
-                                column=current_node.children[colon_index].token.column)
+                self.logger.error("Missing type mark in parameter declaration")
                 break
-                
+            
             # Get type information
             type_info = self.analyze_type_mark(type_mark_node)
             if not type_info:
+                self.logger.error("Failed to determine parameter type")
                 break
-                
-            # We only support variable parameters, not constant parameters
+            
+            # Debug the type info
             is_constant, var_type, _ = type_info
+            self.logger.debug(f"Parameter type info: constant={is_constant}, type={var_type}")
+            
             if is_constant:
-                self.report_error("Constants cannot be used as parameters",
-                                line=type_mark_node.children[0].token.line,
-                                column=type_mark_node.children[0].token.column)
+                self.logger.error("Constants cannot be used as parameters")
                 break
-                
-            # Create parameter objects for each identifier
+            
+            # Process each identifier
             for identifier in identifiers:
-                # First check if this parameter name already exists at the current depth
                 existing_entry = self.symbol_table.lookup(identifier.lexeme, self.current_depth)
                 if existing_entry:
-                    self.report_error(f"Duplicate declaration of parameter '{identifier.lexeme}'",
-                                    line=identifier.line,
-                                    column=identifier.column)
+                    self.logger.error(f"Duplicate parameter name: '{identifier.lexeme}'")
                     continue
-                    
-                # Create a parameter object
+                
+                self.logger.debug(f"Creating parameter: {identifier.lexeme}, type={var_type.name}, mode={param_mode.name}")
                 param = Parameter(var_type, param_mode)
                 params.append(param)
                 
-                # Insert parameter into symbol table
+                # Insert into symbol table
                 entry = self.symbol_table.insert(identifier.lexeme, identifier.token_type, self.current_depth)
+                self.logger.debug(f"Inserted parameter '{identifier.lexeme}' into symbol table at depth {self.current_depth}")
                 
-                # Set as variable with offset
+                # Set variable info
                 size = self.type_sizes.get(var_type, 0)
                 entry.set_variable_info(var_type, self.current_offset, size)
                 entry.entry_type = EntryType.VARIABLE
@@ -502,21 +562,36 @@ class SemanticAnalyzer:
                 # Update offset
                 self.current_offset += size
                 self.depth_offsets[self.current_depth] = self.current_offset
+                self.logger.debug(f"Updated offset to {self.current_offset} after parameter {identifier.lexeme}")
             
             # Check for more arguments
             more_args_node = self.find_child_by_name(current_node, "MoreArgs")
-            if more_args_node and more_args_node.children:
-                # Check if it has a semicolon, which indicates more arguments
-                if more_args_node.children[0].token.token_type == "SEMICOLON":
-                    # Look for the next ArgList
-                    next_arg_list = self.find_child_by_name(more_args_node, "ArgList")
-                    if next_arg_list:
-                        current_node = next_arg_list
-                        continue
+            self.logger.debug(f"MoreArgs node found: {more_args_node is not None}")
             
-            # No more arguments
+            if more_args_node and more_args_node.children:
+                # Debug what we found in MoreArgs
+                if hasattr(more_args_node.children[0], "token") and more_args_node.children[0].token:
+                    token = more_args_node.children[0].token
+                    token_type_name = token.token_type.name
+                    self.logger.debug(f"First token in MoreArgs: '{token.lexeme}', type={token_type_name}")
+                    
+                    if token_type_name == "SEMICOLON":
+                        self.logger.debug("Found semicolon, looking for next parameter group")
+                        next_arg_list = self.find_child_by_name(more_args_node, "ArgList")
+                        if next_arg_list:
+                            self.logger.debug("Found next parameter group, continuing")
+                            current_node = next_arg_list
+                            param_count += 1
+                            continue
+                        else:
+                            self.logger.debug("No ArgList found after semicolon")
+                else:
+                    self.logger.debug("MoreArgs first child has no token")
+            
+            self.logger.debug("No more parameter groups, breaking loop")
             break
         
+        self.logger.info(f"Parameter analysis complete. Found {len(params)} parameters")
         return (len(params), params)
     
     def analyze_mode(self, node: ParseTreeNode) -> ParameterMode:
@@ -531,21 +606,28 @@ class SemanticAnalyzer:
         Returns:
             Parameter mode (IN, OUT, or INOUT)
         """
-        if not node or not node.children:
-            return ParameterMode.IN  # Default if not specified
-            
-        mode_token = node.children[0].token
-        if mode_token.token_type == "IN":
+        # If the node is missing or its first child is an epsilon production, default to IN mode.
+        if not node or not node.children or (node.children and node.children[0].name == "ε"):
+            self.logger.debug("No mode specified or epsilon encountered, defaulting to IN mode")
             return ParameterMode.IN
-        elif mode_token.token_type == "OUT":
+        # Proceed normally if a valid mode token exists.
+        mode_token = node.children[0].token
+        if not mode_token:
+            self.logger.debug("Mode token missing, defaulting to IN mode")
+            return ParameterMode.IN
+        token_type_name = mode_token.token_type.name
+        if token_type_name == "IN":
+            self.logger.debug("Mode determined: IN")
+            return ParameterMode.IN
+        elif token_type_name == "OUT":
+            self.logger.debug("Mode determined: OUT")
             return ParameterMode.OUT
-        elif mode_token.token_type == "INOUT":
+        elif token_type_name == "INOUT":
+            self.logger.debug("Mode determined: INOUT")
             return ParameterMode.INOUT
         else:
-            self.report_error(f"Invalid parameter mode: {mode_token.lexeme}",
-                            line=mode_token.line,
-                            column=mode_token.column)
-            return ParameterMode.IN  # Default to IN on error
+            self.logger.error(f"Invalid parameter mode: {mode_token.lexeme}")
+            return ParameterMode.IN
     
     def analyze_procedures(self, node: ParseTreeNode) -> bool:
         """
@@ -559,13 +641,15 @@ class SemanticAnalyzer:
         Returns:
             True if analysis succeeded, False if critical errors were found
         """
+        self.logger.info(f"Analyzing nested procedures at depth {self.current_depth}")
         if not node or not node.children:
             # No nested procedures (epsilon production)
             return True
-            
+        
         # Process the first Prog node (nested procedure)
         prog_node = self.find_child_by_name(node, "Prog")
         if prog_node:
+            self.logger.debug(f"Found nested procedure to analyze")
             if not self.analyze_prog(prog_node):
                 return False
         
@@ -573,14 +657,15 @@ class SemanticAnalyzer:
         next_procedures = self.find_child_by_name(node, "Procedures")
         if next_procedures and next_procedures.children:
             return self.analyze_procedures(next_procedures)
-            
+        
+        self.logger.debug("Finished analyzing nested procedures")
         return True
     
     def analyze_seq_of_statements(self, node: ParseTreeNode) -> bool:
         """
         Analyze a SeqOfStatements node in the parse tree.
         
-        Grammar rule: SeqOfStatements -> ε
+        Grammar rule: SeqOfStatements -> Statement ; SeqOfStatements | ε
         
         Args:
             node: The SeqOfStatements node to analyze
@@ -588,7 +673,39 @@ class SemanticAnalyzer:
         Returns:
             True if analysis succeeded, False if critical errors were found
         """
-        # No statements defined in the current grammar
+        self.logger.info(f"Analyzing statements at depth {self.current_depth}")
+        if not node or not node.children:
+            # Empty sequence of statements (epsilon production)
+            return True
+        
+        # Process the first statement
+        statement_node = self.find_child_by_name(node, "Statement")
+        if statement_node:
+            self.analyze_statement(statement_node)
+        
+        # Process the rest of the statements (if any)
+        semicolon_index = self.find_child_index_by_token_type(node, "SEMICOLON")
+        if semicolon_index != -1 and semicolon_index < len(node.children) - 1:
+            next_seq_of_statements = node.children[semicolon_index + 1]
+            if next_seq_of_statements.name == "SeqOfStatements":
+                return self.analyze_seq_of_statements(next_seq_of_statements)
+        
+        self.logger.debug("Completed statement analysis")
+        return True
+    
+    def analyze_statement(self, node: ParseTreeNode) -> bool:
+        """
+        Analyze a Statement node in the parse tree.
+        
+        Grammar rule: Statement -> Assignment | ProcedureCall | IfStatement | LoopStatement
+        
+        Args:
+            node: The Statement node to analyze
+            
+        Returns:
+            True if analysis succeeded, False if critical errors were found
+        """
+        # Placeholder for statement analysis logic
         return True
     
     def print_symbol_table(self, depth: Optional[int] = None) -> None:
@@ -600,9 +717,11 @@ class SemanticAnalyzer:
             depth: The lexical scope depth to print, or None for all depths
         """
         if depth is not None:
+            self.logger.info(f"Printing symbol table for depth {depth}")
             entries = self.symbol_table.writeTable(depth)
             self._print_entries_table(entries, depth)
         else:
+            self.logger.info("Printing full symbol table")
             # Find all depths in the symbol table
             depths = set()
             for i in range(self.symbol_table.table_size):
@@ -615,6 +734,8 @@ class SemanticAnalyzer:
             for d in sorted(depths):
                 entries = self.symbol_table.writeTable(d)
                 self._print_entries_table(entries, d)
+        
+        self.logger.debug("Symbol table printing complete")
     
     def _print_entries_table(self, entries: Dict[str, TableEntry], depth: int) -> None:
         """
@@ -624,10 +745,11 @@ class SemanticAnalyzer:
             entries: Dictionary mapping lexemes to their table entries
             depth: The depth these entries are from
         """
+        self.logger.debug(f"Formatting symbol table for depth {depth}, {len(entries)} entries")
         if not entries:
             print(f"\nNo entries at depth {depth}")
             return
-            
+        
         print(f"\nEntries at depth {depth}:")
         
         # Create a pretty table
@@ -708,6 +830,26 @@ class SemanticAnalyzer:
             if response.lower() != 'y':
                 raise Exception(f"Analysis stopped due to error: {message}")
     
+    def get_location_info(self, node_or_token) -> tuple:
+        """
+        Extract line and column information from a node or token.
+        
+        Args:
+            node_or_token: Either a ParseTreeNode or Token object
+        
+        Returns:
+            Tuple of (line_number, column_number)
+        """
+        if hasattr(node_or_token, "token") and node_or_token.token:
+            # It's a node with a token
+            return (node_or_token.token.line_number, node_or_token.token.column_number)
+        elif hasattr(node_or_token, "line_number") and hasattr(node_or_token, "column_number"):
+            # It's a token
+            return (node_or_token.line_number, node_or_token.column_number)
+        else:
+            # No location info available
+            return (0, 0)
+    
     def find_child_by_name(self, node: ParseTreeNode, name: str) -> Optional[ParseTreeNode]:
         """
         Helper method to find a child node by name.
@@ -743,7 +885,7 @@ class SemanticAnalyzer:
             return -1
             
         for i, child in enumerate(node.children):
-            if child.token and child.token.token_type == token_type:
+            if child.token and child.token.token_type.name == token_type:
                 return i
                 
         return -1

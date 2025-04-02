@@ -66,18 +66,19 @@ class JohnA5:
         if len(args) == 2:
             input_file, output_file = args
             logger.debug(f"Input file: {input_file}, Output file: {output_file}")
-            return cls(input_file, output_file)
+            # Pass logger to the constructor.
+            return cls(input_file, output_file, logger=logger)
         elif len(args) == 1:
             input_file = args[0]
             logger.debug(f"Input file: {input_file}")
-            return cls(input_file)
+            return cls(input_file, logger=logger)
         else:
             print("Usage: python JohnA5.py <input_file> [output_file]")
             logger.critical("Invalid number of arguments. Exiting program.")
             sys.exit(1)
     
 
-    def __init__(self, input_file_name: str, output_file_name: str = None, debug: bool = False, print_tree: bool = True):
+    def __init__(self, input_file_name: str, output_file_name: str = None, debug: bool = False, print_tree: bool = True, logger: Logger = None):
         """
         Initialize the JohnA5 object.
 
@@ -85,9 +86,10 @@ class JohnA5:
             input_file_name (str): Name/path of the source code file to process.
             debug (bool): Whether to enable debug output.
             print_tree (bool): Whether to print the parse tree.
+            logger (Logger): Logger instance to use.
         """
-        # Get the shared logger instance
-        self.logger = Logger()
+        # Use the passed logger instance if provided, otherwise create one.
+        self.logger = logger if logger is not None else Logger()
         self.input_file_name = input_file_name
         self.output_file_name = output_file_name
         
@@ -103,9 +105,6 @@ class JohnA5:
         # LexicalAnalyzer processes the source code into tokens.
         self.lexical_analyzer = LexicalAnalyzer()
 
-        # Initialize components
-        self.logger.debug("Initializing FileHandler and other components.")
-        self.file_handler = FileHandler()
 
         # Initialize data
         self.source_code = None
@@ -144,8 +143,8 @@ class JohnA5:
             self.logger.info("Going into stage 1")
             self.stage1_lexical_analysis()
             self.stage2_syntax_analysis()
-            # self.stage3_semantic_analysis()
-            # self.print_compilation_summary()
+            self.stage3_semantic_analysis()
+            self.print_compilation_summary()
         else:
             self.logger.error("No source code to process.")
             print("No source code to process.")
@@ -362,14 +361,14 @@ class JohnA5:
             print(f"Created symbol table with size {self.symbol_table.table_size}")
             
             # Create semantic analyzer
-            self.semantic_analyzer = SemanticAnalyzer(self.symbol_table, self.stop_on_error)
+            self.semantic_analyzer = SemanticAnalyzer(self.symbol_table, self.stop_on_error, logger=self.logger)
             self.logger.info("Created semantic analyzer")
             
             # Add 'type' attribute to parse tree nodes for compatibility with SemanticAnalyzer
             self._add_type_to_parse_tree(self.parser.parse_tree_root)
             
             # Log the parse tree being passed to semantic analyzer
-            self.logger.debug(f"Parse tree root node type: {getattr(self.parser.parse_tree_root, 'type', self.parser.parse_tree_root.name)}")
+            self.logger.info(f"Parse tree root node type: {getattr(self.parser.parse_tree_root, 'type', self.parser.parse_tree_root.name)}")
             
             # Perform semantic analysis
             self.logger.info("Starting semantic analysis...")

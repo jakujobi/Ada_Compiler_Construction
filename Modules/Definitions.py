@@ -7,7 +7,7 @@
 # It provides a Definitions class that stores an enumeration of token types, a mapping for reserved words,
 # and a dictionary of regex patterns for matching tokens in the source code.
 
-from enum import Enum
+from enum import Enum, auto
 from typing import Dict, Optional
 import re
 
@@ -39,12 +39,12 @@ class Definitions:
         self.TokenType = Enum(
             'TokenType', [
                 # Existing tokens
-                'PROCEDURE', 'MODULE', 'CONSTANT', 'IS', 'BEGIN', 'END',
+                'PROCEDURE', 'MODULE', 'IS', 'BEGIN', 'END',
                 'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP',
                 'INTEGER', 'FLOAT', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
                 'LITERAL', 'CHAR_LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
                 'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
-                'DOT', 'EOF', 'CONCAT', 'IN', 'OUT', 'INOUT',
+                'DOT', 'EOF', 'CONCAT', 'IN', 'OUT',
                 # New tokens from Ada 2022
                 'ABORT', 'ABS', 'ABSTRACT', 'ACCEPT', 'ACCESS',
                 'ALIASED', 'ALL', 'AND', 'ARRAY', 'AT',
@@ -61,6 +61,8 @@ class Definitions:
                 'USE', 'WHEN', 'WITH', 'XOR',
                 # Add required token types for grammar
                 'INTEGERT', 'REALT', 'CHART', 'CONST',
+                # Added new token types (removed duplicate CONSTANT):
+                'CONSTANT', 'INOUT',
             ]
         )
 
@@ -82,7 +84,6 @@ class Definitions:
             "INTEGER": self.TokenType.INTEGERT,  # Map INTEGER to INTEGERT
             "REAL": self.TokenType.REALT,       # Map REAL to REALT
             "CHAR": self.TokenType.CHART,       # Map CHAR to CHART
-            "FLOAT": self.TokenType.FLOAT,
             "GET": self.TokenType.GET,
             "PUT": self.TokenType.PUT,
             "END": self.TokenType.END,
@@ -276,8 +277,6 @@ class Definitions:
 
         Returns
         -------
-        Optional[Enum]
-            The corresponding token type from the TokenType enumeration if it exists; otherwise, None.
         """
         return getattr(self.TokenType, token_type_str, None)
 
