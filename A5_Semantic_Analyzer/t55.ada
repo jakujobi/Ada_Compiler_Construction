@@ -10,3 +10,4 @@ a,b,c,d:real;
   end two;
 begin
 end test5;
+
