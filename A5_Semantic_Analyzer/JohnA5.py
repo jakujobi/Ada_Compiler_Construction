@@ -66,18 +66,19 @@ class JohnA5:
         if len(args) == 2:
             input_file, output_file = args
             logger.debug(f"Input file: {input_file}, Output file: {output_file}")
-            return cls(input_file, output_file)
+            # Pass logger to the constructor.
+            return cls(input_file, output_file, logger=logger)
         elif len(args) == 1:
             input_file = args[0]
             logger.debug(f"Input file: {input_file}")
-            return cls(input_file)
+            return cls(input_file, logger=logger)
         else:
             print("Usage: python JohnA5.py <input_file> [output_file]")
             logger.critical("Invalid number of arguments. Exiting program.")
             sys.exit(1)
     
 
-    def __init__(self, input_file_name: str, output_file_name: str = None, debug: bool = False, print_tree: bool = True):
+    def __init__(self, input_file_name: str, output_file_name: str = None, debug: bool = False, print_tree: bool = True, logger: Logger = None):
         """
         Initialize the JohnA5 object.
 
@@ -85,9 +86,10 @@ class JohnA5:
             input_file_name (str): Name/path of the source code file to process.
             debug (bool): Whether to enable debug output.
             print_tree (bool): Whether to print the parse tree.
+            logger (Logger): Logger instance to use.
         """
-        # Get the shared logger instance
-        self.logger = Logger()
+        # Use the passed logger instance if provided, otherwise create one.
+        self.logger = logger if logger is not None else Logger()
         self.input_file_name = input_file_name
         self.output_file_name = output_file_name
         
