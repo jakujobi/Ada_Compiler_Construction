@@ -1,11 +1,17 @@
-procedure Test7 is
+-- tf_const_and_order.ada
+-- Test Type: Semantic Analysis
+-- Description: Tests a procedure (Test7) that declares constants and variables.
+--  Verifies that constant values, variable offsets, sizes, and scope depths are handled correctly.
+ 
+
+procedure const_and_order is
      PI : constant := 3.14159;
      E  : constant  := 2.71828;
     var1, var2  : integer;
     var3        : char;
 begin
     -- Empty body
-end Test7;
+end const_and_order;
 
 -- EXPECTED OUTPUT
     -- Lexeme: PI

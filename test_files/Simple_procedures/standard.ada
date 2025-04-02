@@ -4,6 +4,7 @@ BEGIN
 END PROC1;
 BEGIN
 END MAIN;
+
 -- EXPECTED OUTPUT
     -- Lexeme: PROC1
       -- Type: PROC

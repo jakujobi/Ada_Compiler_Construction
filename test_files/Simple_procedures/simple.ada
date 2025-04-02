@@ -1,6 +1,7 @@
 PROCEDURE one IS
 BEGIN
 END one;
+
 -- EXPECTED OUTPUT:
 -- //  (OPT.)
 --     Lexeme: one

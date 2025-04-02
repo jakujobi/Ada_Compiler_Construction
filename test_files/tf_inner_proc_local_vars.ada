@@ -1,4 +1,11 @@
-procedure Test8 is
+-- tf_inner_proc_local_vars.ada
+-- Test Type: Semantic Analysis (Scoping & Offset Management)
+-- Description: Tests a procedure with a global variable
+--   and an inner procedure containing two local variables.
+--   Checks that offsets and type sizes are correctly computed.
+ 
+
+procedure inner_local_vars is
     global_var : integer;
 
     procedure InnerProc is
@@ -10,7 +17,9 @@ procedure Test8 is
 
 begin
     -- Empty body
-end Test8;
+end inner_local_vars;
+
+
 -- EXPECTED OUTPUT
     -- Lexeme: local_var1
       -- Type: FLOAT

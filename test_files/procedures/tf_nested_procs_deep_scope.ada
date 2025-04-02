@@ -1,4 +1,10 @@
-procedure Test6 is
+-- Filename: tf_nested_procs_deep_scope_test16.ada
+-- Test Type: Semantic Analysis (Nested Scopes)
+-- Description: Tests a procedure (Test6) with nested procedures (Level1 and Level2).
+Validates offsets, types, and scope depths across multiple nesting levels.
+ 
+
+procedure procs_deep_scope is
 
     procedure Level1 is
         var1 : integer;
@@ -16,7 +22,7 @@ procedure Test6 is
 
 begin
     -- Empty body
-end Test6;
+end procs_deep_scope;
 
 -- EXPECTED OUTPUT
     -- Lexeme: var3

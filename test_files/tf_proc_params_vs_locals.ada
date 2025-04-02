@@ -1,9 +1,17 @@
-procedure Test5(in x :  integer; out y :  float) is
+-- Filename: tf_proc_params_vs_locals_test15.ada
+-- Test Type: Lexical & Semantic Analysis
+-- Description: Tests a procedure (Test5) that distinguishes between parameters and local variables.
+--  Ensures proper offsets, types, and ordering are maintained.
+ 
+
+procedure params_vs_locals(in x :  integer; out y :  float) is
     local1 : integer;
     local2 : float;
 begin
     -- Empty body
-end Test5;
+end params_vs_locals;
+
+
 -- EXPECTED OUTPUT
     -- Lexeme: local1
       -- Type: INT
