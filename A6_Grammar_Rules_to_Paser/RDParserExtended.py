@@ -65,6 +65,69 @@ class RDParserExtended(RDParser):
         super().__init__(tokens, defs, stop_on_error, panic_mode_recover, build_parse_tree)
         self.symbol_table = symbol_table
         self.semantic_errors = []
+        
+    def parseProg(self):
+        """
+        Prog -> procedure idt Args is DeclarativePart Procedures begin SeqOfStatements end idt;
+        
+        Enhanced to check that the procedure identifier at the end matches the one at the beginning.
+        """
+        if self.build_parse_tree:
+            node = ParseTreeNode("Prog")
+        else:
+            node = None
+        
+        self.logger.debug("Parsing Prog")
+        
+        # Match procedure keyword
+        self.match_leaf(self.defs.TokenType.PROCEDURE, node)
+        
+        # Save the procedure identifier (first occurrence)
+        start_id_token = self.current_token
+        procedure_name = start_id_token.lexeme if self.current_token else "unknown"
+        
+        # Match the identifier and continue parsing
+        self.match_leaf(self.defs.TokenType.ID, node)
+        
+        # Parse the rest of the procedure declaration
+        child = self.parseArgs()
+        if child and self.build_parse_tree: 
+            node.add_child(child)
+        
+        self.match_leaf(self.defs.TokenType.IS, node)
+        
+        child = self.parseDeclarativePart()
+        if child and self.build_parse_tree: 
+            node.add_child(child)
+        
+        child = self.parseProcedures()
+        if child and self.build_parse_tree: 
+            node.add_child(child)
+        
+        self.match_leaf(self.defs.TokenType.BEGIN, node)
+        
+        child = self.parseSeqOfStatements()
+        if child and self.build_parse_tree: 
+            node.add_child(child)
+        
+        self.match_leaf(self.defs.TokenType.END, node)
+        
+        # Save the procedure identifier (second occurrence)
+        end_id_token = self.current_token
+        
+        # Match the identifier and continue parsing
+        self.match_leaf(self.defs.TokenType.ID, node)
+        
+        # Check if the procedure identifiers match
+        if end_id_token and start_id_token and end_id_token.lexeme != start_id_token.lexeme:
+            error_msg = f"Procedure name mismatch: procedure '{start_id_token.lexeme}' ends with '{end_id_token.lexeme}'"
+            self.report_error(error_msg)
+            self.report_semantic_error(error_msg, end_id_token.line if hasattr(end_id_token, 'line') else 0, 
+                                    end_id_token.column if hasattr(end_id_token, 'column') else 0)
+        
+        self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+        
+        return node
     
     def parseSeqOfStatements(self):
         """
