@@ -437,6 +437,74 @@ class SemanticAnalyzer:
                 var_type = VarType.CHAR
             elif type_node.name.lower() == "float":
                 var_type = VarType.FLOAT
+            # Check for constant declarations (case-insensitive)
+            elif (type_node.name.upper() == "CONSTANT" or 
+                  (type_node.token and hasattr(type_node.token, 'token_type') and 
+                   (type_node.token.token_type == "CONSTANT" or 
+                    (hasattr(type_node.token, 'token_type') and 
+                     hasattr(type_node.token.token_type, 'name') and 
+                     type_node.token.token_type.name == "CONSTANT")))):
+                # Handle constant without a type (need to infer from value)
+                self.logger.debug(f"Found constant declaration with node structure: {node.name}")
+                self.logger.debug(f"Number of children: {len(node.children)}")
+                for i, child in enumerate(node.children):
+                    self.logger.debug(f"Child {i}: {child.name} - {hasattr(child, 'token')}")
+                
+                # Look for the assignment operator and value
+                assign_node = None
+                value_node = None
+                
+                # Try to find the assignment operator
+                for i, child in enumerate(node.children):
+                    if (child.name == "ASSIGN" or 
+                        (hasattr(child, 'token') and child.token and 
+                         (child.token.token_type == "ASSIGN" or 
+                          (hasattr(child.token, 'token_type') and 
+                           hasattr(child.token.token_type, 'name') and 
+                           child.token.token_type.name == "ASSIGN")))):
+                        assign_node = child
+                        # Value node is typically the next node
+                        if i + 1 < len(node.children):
+                            value_node = node.children[i + 1]
+                        break
+                
+                # If we didn't find it, try looking for a "Value" node directly
+                if not value_node:
+                    value_node = self.find_child_by_name(node, "Value")
+                
+                if not assign_node:
+                    line, column = self.get_location_info(node)
+                    self.report_error("Invalid constant declaration, missing assignment operator", line, column)
+                    return None
+                
+                if not value_node or not value_node.children:
+                    line, column = self.get_location_info(node)
+                    self.report_error("Invalid constant declaration, missing value", line, column)
+                    return None
+                
+                # Extract the value and infer type
+                value_token = value_node.children[0].token
+                self.logger.debug(f"Value token: {value_token.lexeme} - Type: {value_token.token_type}")
+                
+                # Determine constant type based on the token type
+                token_type_name = value_token.token_type.name if hasattr(value_token.token_type, 'name') else value_token.token_type
+                
+                if token_type_name in ("NUM", "INTLIT"):
+                    const_type = VarType.INT
+                    value = int(value_token.lexeme)
+                elif token_type_name in ("REAL", "FLOATLIT"):
+                    const_type = VarType.FLOAT
+                    value = float(value_token.lexeme)
+                elif token_type_name == "CHRLIT":
+                    const_type = VarType.CHAR
+                    value = value_token.lexeme.strip("'")
+                else:
+                    line, column = self.get_location_info(value_token)
+                    self.report_error(f"Invalid constant value type: {token_type_name}", line, column)
+                    return None
+                
+                self.logger.debug(f"Constant type inferred from value: type={const_type}, value={value}")
+                return (True, const_type, value)
             else:
                 line, column = self.get_location_info(type_node)
                 self.report_error(f"Unknown type: {type_node.name}", line, column)
