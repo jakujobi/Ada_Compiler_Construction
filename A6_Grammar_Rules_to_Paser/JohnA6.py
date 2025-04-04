@@ -58,6 +58,7 @@ from Modules.LexicalAnalyzer import LexicalAnalyzer
 from Modules.AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
 from Modules.FileHandler import FileHandler
 from Modules.Logger import Logger
+import logging
 from Modules.SemanticAnalyzer import SemanticAnalyzer
 from Modules.RDParserExtended import RDParserExtended
 
@@ -91,8 +92,8 @@ class JohnA6:
             debug (bool): Whether to enable debug output.
             print_tree (bool): Whether to print the parse tree.
         """
-        # Get the shared logger instance
-        self.logger = Logger()
+        # Get the shared logger instance with console logging set to INFO level
+        self.logger = Logger(log_level_console=logging.INFO)
         self.input_file_name = input_file_name
         self.output_file_name = output_file_name
         
