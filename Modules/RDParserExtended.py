@@ -34,9 +34,6 @@ import sys
 from typing import List, Optional
 import traceback
 
-# Add the parent directory to the path so we can import modules
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
 
 from Modules.RDParser import RDParser, ParseTreeNode
 from Modules.Token import Token

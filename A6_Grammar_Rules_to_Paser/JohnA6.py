@@ -59,7 +59,7 @@ from Modules.AdaSymbolTable import AdaSymbolTable, VarType, EntryType, Parameter
 from Modules.FileHandler import FileHandler
 from Modules.Logger import Logger
 from Modules.SemanticAnalyzer import SemanticAnalyzer
-from RDParserExtended import RDParserExtended
+from Modules.RDParserExtended import RDParserExtended
 
 class JohnA6:
     @classmethod    
