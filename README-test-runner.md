@@ -10,6 +10,9 @@ This tool allows you to easily run any of your driver files (JohnA1, JohnA3, etc
 - Runs the selected driver on the selected test file
 - Displays the output of the test run
 - Allows running multiple tests in succession
+- Configurable through a JSON configuration file
+- Robust error handling and timeout management
+- Output truncation for large test outputs
 
 ## Usage
 
@@ -17,12 +20,44 @@ This tool allows you to easily run any of your driver files (JohnA1, JohnA3, etc
 2. Run the test runner:
 
 ```bash
+# Basic usage
 python test_runner.py
+
+# With a custom configuration file
+python test_runner.py --config test_runner_config.json
 ```
 
 3. Follow the prompts to select a driver and a test file
 4. View the output of the test run
 5. Choose to run another test or exit
+
+## Configuration
+
+The test runner can be configured using a JSON configuration file. The following options are available:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `log_level` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO |
+| `driver_pattern` | Glob pattern to find driver files | JohnA*.py |
+| `test_file_extensions` | List of file extensions to consider as test files | [".ada"] |
+| `test_directory` | Directory containing test files | test_files |
+| `output_format` | Format for output display | text |
+| `timeout` | Maximum time in seconds to wait for a test to complete | 30 |
+| `max_output_lines` | Maximum number of lines to display from test output | 1000 |
+
+Example configuration file:
+
+```json
+{
+    "log_level": "DEBUG",
+    "driver_pattern": "JohnA*.py",
+    "test_file_extensions": [".ada", ".txt"],
+    "test_directory": "test_files",
+    "output_format": "text",
+    "timeout": 60,
+    "max_output_lines": 500
+}
+```
 
 ## How It Works
 
@@ -41,6 +76,8 @@ The test runner:
 - Quickly test any driver on any test file
 - Maintains the ability to run files from their respective directories if needed
 - Provides a consistent interface for testing
+- Configurable to adapt to different testing needs
+- Robust error handling to prevent crashes
 
 ## Example
 
@@ -141,4 +178,6 @@ Run another test? (y/n): n
 
 - The test runner assumes that your driver files accept a test file path as a command-line argument
 - If a driver file requires additional arguments, you may need to modify the test runner
-- The test runner only looks for .ada files in the test_files directory 
+- The test runner only looks for .ada files in the test_files directory by default, but this can be configured
+- The test runner has a timeout of 30 seconds by default, but this can be configured
+- Large test outputs are truncated to prevent overwhelming the console 
