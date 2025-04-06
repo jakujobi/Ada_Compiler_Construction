@@ -116,7 +116,6 @@ class BaseDriver:
         except ValueError as e:
             self.logger.error(f"Invalid token found: {e}")
             self.lexical_errors.append({"message": str(e)})
-        except Exception as e:
             self.logger.critical(f"An error occurred during tokenization: {e}")
             self.lexical_errors.append({"message": str(e)})
 
