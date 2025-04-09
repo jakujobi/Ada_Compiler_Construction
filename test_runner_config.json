@@ -1,0 +1,9 @@
+{
+    "log_level": "DEBUG",
+    "driver_pattern": "JohnA*.py",
+    "test_file_extensions": [".ada", ".txt"],
+    "test_directory": "test_files",
+    "output_format": "text",
+    "timeout": 60,
+    "max_output_lines": 500
+} 

@@ -45,7 +45,7 @@ import argparse
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
 import traceback
-from prettytable import PrettyTable
+# from prettytable import PrettyTable
 
 # Add the parent directory to the path so we can import modules
 repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -58,7 +58,6 @@ from Modules.LexicalAnalyzer import LexicalAnalyzer
 from Modules.AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
 from Modules.FileHandler import FileHandler
 from Modules.Logger import Logger
-import logging
 from Modules.SemanticAnalyzer import SemanticAnalyzer
 from Modules.RDParserExtended import RDParserExtended
 
