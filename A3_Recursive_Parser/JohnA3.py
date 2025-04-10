@@ -19,7 +19,7 @@ import os
 import sys
 import logging
 from pathlib import Path
-
+from typing import Optional, List
 # Add the parent directory to the path so we can import modules
 repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_home_path)
@@ -35,7 +35,7 @@ class JohnA3(BaseDriver):
     Inherits from BaseDriver to reuse common functionality
     """
 
-    def __init__(self, input_file_name: str, output_file_name: str = None, debug: bool = False, logger: Logger = None):
+    def __init__(self, input_file_name: str, output_file_name: Optional[str] = None, debug: bool = False, logger: Optional[Logger] = None):
         """
         Initialize the JohnA3 driver.
 
