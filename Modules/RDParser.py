@@ -46,7 +46,7 @@ If build_parse_tree is enabled, the parser constructs a parse tree and prints it
 using wide indentation with hyphens and vertical bars.
 A summary report is printed at the end of parsing.
 """
-
+from typing import List, Optional, Any, Dict, Union
 from Modules.Token import Token
 from Modules.Definitions import Definitions
 from Modules.Logger import Logger
@@ -65,7 +65,7 @@ class RDParser:
         """
         self.tokens = tokens
         self.current_index = 0
-        self.current_token = tokens[0] if tokens else None
+        self.current_token: Optional[Token] = tokens[0] if tokens else None
         self.stop_on_error = stop_on_error
         self.panic_mode_recover = panic_mode_recover
         self.build_parse_tree = build_parse_tree
@@ -73,6 +73,7 @@ class RDParser:
         self.logger = Logger()  # Using the singleton Logger instance
         self.defs = defs
         self.parse_tree_root = None  # Will hold the root if tree building is enabled
+        self.current_node: Optional[ParseTreeNode] = None
 
     def parse(self) -> bool:
         """
@@ -85,7 +86,7 @@ class RDParser:
         tree = self.parseProg()
         if self.build_parse_tree:
             self.parse_tree_root = tree
-        if self.current_token.token_type != self.defs.TokenType.EOF:
+        if self.current_token and self.current_token.token_type != self.defs.TokenType.EOF:
             self.report_error("Extra tokens found after program end.")
         self.print_summary()
         return len(self.errors) == 0
@@ -98,40 +99,44 @@ class RDParser:
         else:
             self.current_token = Token(self.defs.TokenType.EOF, "EOF", -1, -1)
 
-    def match(self, expected_token_type):
+    def match(self, expected_token_type: Any) -> None:
         """
         Compare the current token against the expected token type.
         If they match, advance to the next token.
         Otherwise, report an error.
         """
-        if self.current_token.token_type == expected_token_type:
+        if self.current_token and self.current_token.token_type == expected_token_type:
             self.logger.debug(f"Matched {expected_token_type.name} with token '{self.current_token.lexeme}'.")
             self.advance()
         else:
-            self.report_error(f"Expected {expected_token_type.name}, found '{self.current_token.lexeme}'")
+            lexeme = self.current_token.lexeme if self.current_token else "None"
+            self.report_error(f"Expected {expected_token_type.name}, found '{lexeme}'")
             # Optionally, panic recovery could be invoked here.
 
-    def match_leaf(self, expected_token_type, parent_node):
+    def match_leaf(self, expected_token_type: Any, parent_node: Optional['ParseTreeNode']) -> None:
         """
         Helper function for parse tree building.
         Matches the expected token type, creates a leaf ParseTreeNode,
         attaches it to parent_node (if provided), and advances the token.
         """
-        if self.current_token.token_type == expected_token_type:
+        if self.current_token and self.current_token.token_type == expected_token_type:
             leaf = ParseTreeNode(expected_token_type.name, self.current_token)
             if parent_node:
                 parent_node.add_child(leaf)
             self.logger.debug(f"Matched {expected_token_type.name} with token '{self.current_token.lexeme}'.")
             self.advance()
         else:
-            self.report_error(f"Expected {expected_token_type.name}, found '{self.current_token.lexeme}'")
+            lexeme = self.current_token.lexeme if self.current_token else "None"
+            self.report_error(f"Expected {expected_token_type.name}, found '{lexeme}'")
 
     def report_error(self, message: str):
         """
         Log and record an error message.
         If stop_on_error is True, prompt the user to continue.
         """
-        full_message = (f"Error at line {self.current_token.line_number}, column {self.current_token.column_number}: {message}")
+        line_number = self.current_token.line_number if self.current_token else "unknown"
+        column_number = self.current_token.column_number if self.current_token else "unknown"
+        full_message = (f"Error at line {line_number}, column {column_number}: {message}")
         self.logger.error(full_message)
         self.errors.append(full_message)
         if self.stop_on_error:
@@ -143,10 +148,11 @@ class RDParser:
         """
         Attempt panic-mode recovery by skipping tokens until a synchronization token is found.
         """
-        if not self.panic_mode_recover:
+        if not self.panic_mode_recover or not self.current_token:
             return
         self.logger.debug("Entering panic-mode recovery.")
-        while (self.current_token.token_type not in sync_set and 
+        while (self.current_token and 
+               self.current_token.token_type not in sync_set and 
                self.current_token.token_type != self.defs.TokenType.EOF):
             self.advance()
         self.logger.debug("Panic-mode recovery completed.")
@@ -203,15 +209,15 @@ class RDParser:
             self.match_leaf(self.defs.TokenType.PROCEDURE, node)
             self.match_leaf(self.defs.TokenType.ID, node)
             child = self.parseArgs()
-            if child: node.add_child(child)
+            if child and node: node.add_child(child)
             self.match_leaf(self.defs.TokenType.IS, node)
             child = self.parseDeclarativePart()
-            if child: node.add_child(child)
+            if child and node: node.add_child(child)
             child = self.parseProcedures()
-            if child: node.add_child(child)
+            if child and node: node.add_child(child)
             self.match_leaf(self.defs.TokenType.BEGIN, node)
             child = self.parseSeqOfStatements()
-            if child: node.add_child(child)
+            if child and node: node.add_child(child)
             self.match_leaf(self.defs.TokenType.END, node)
             self.match_leaf(self.defs.TokenType.ID, node)
             self.match_leaf(self.defs.TokenType.SEMICOLON, node)
@@ -239,18 +245,18 @@ class RDParser:
         else:
             node = None
         self.logger.debug("Parsing DeclarativePart")
-        if self.current_token.token_type == self.defs.TokenType.ID:
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
             child = self.parseIdentifierList()
-            if self.build_parse_tree and child: node.add_child(child)
+            if self.build_parse_tree and child and node: node.add_child(child)
             self.match_leaf(self.defs.TokenType.COLON, node)
             child = self.parseTypeMark()
-            if self.build_parse_tree and child: node.add_child(child)
+            if self.build_parse_tree and child and node: node.add_child(child)
             self.match_leaf(self.defs.TokenType.SEMICOLON, node)
             child = self.parseDeclarativePart()
-            if self.build_parse_tree and child: node.add_child(child)
+            if self.build_parse_tree and child and node: node.add_child(child)
             return node
         else:
-            if self.build_parse_tree:
+            if self.build_parse_tree and node:
                 node.add_child(ParseTreeNode("ε"))
                 return node
             else:
@@ -267,7 +273,7 @@ class RDParser:
             node = None
         self.logger.debug("Parsing IdentifierList")
         self.match_leaf(self.defs.TokenType.ID, node)
-        while self.current_token.token_type == self.defs.TokenType.COMMA:
+        while self.current_token and self.current_token.token_type == self.defs.TokenType.COMMA:
             self.match_leaf(self.defs.TokenType.COMMA, node)
             self.match_leaf(self.defs.TokenType.ID, node)
         return node
@@ -281,23 +287,22 @@ class RDParser:
         else:
             node = None
         self.logger.debug("Parsing TypeMark")
-        if self.current_token.token_type in {
+        if self.current_token and self.current_token.token_type in {
             self.defs.TokenType.INTEGERT, 
             self.defs.TokenType.REALT, 
             self.defs.TokenType.CHART,
             self.defs.TokenType.FLOAT
         }:
             self.match_leaf(self.current_token.token_type, node)
-        elif (self.current_token.token_type == self.defs.TokenType.CONSTANT or
+        elif (self.current_token and self.current_token.token_type == self.defs.TokenType.CONSTANT or
               (self.current_token and self.current_token.lexeme.lower() in {"const", "constant"})):
             self.match_leaf(self.defs.TokenType.CONSTANT, node)
             self.match_leaf(self.defs.TokenType.ASSIGN, node)
             child = self.parseValue()
-            if self.build_parse_tree and child:
+            if self.build_parse_tree and child and node:
                 node.add_child(child)
         else:
-            self.report_error("Expected a type (INTEGERT, REALT, CHART, FLOAT) or a constant declaration.", 
-                              self.current_token.line_number, self.current_token.column_number)
+            self.report_error("Expected a type (INTEGERT, REALT, CHART, FLOAT) or a constant declaration.")
         return node
 
     def parseValue(self):
@@ -310,9 +315,9 @@ class RDParser:
             node = None
         self.logger.debug("Parsing Value")
         
-        if self.current_token.token_type == self.defs.TokenType.NUM:
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.NUM:
             self.match_leaf(self.defs.TokenType.NUM, node)
-        elif self.current_token.token_type == self.defs.TokenType.REAL:
+        elif self.current_token and self.current_token.token_type == self.defs.TokenType.REAL:
             self.match_leaf(self.defs.TokenType.REAL, node)
         else:
             self.report_error("Expected a numerical literal (integer or float).")
@@ -328,14 +333,14 @@ class RDParser:
         else:
             node = None
         self.logger.debug("Parsing Procedures")
-        if self.current_token.token_type == self.defs.TokenType.PROCEDURE:
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.PROCEDURE:
             child = self.parseProg()
-            if self.build_parse_tree and child: node.add_child(child)
+            if self.build_parse_tree and child and node: node.add_child(child)
             child = self.parseProcedures()
-            if self.build_parse_tree and child: node.add_child(child)
+            if self.build_parse_tree and child and node: node.add_child(child)
             return node
         else:
-            if self.build_parse_tree:
+            if self.build_parse_tree and node:
                 node.add_child(ParseTreeNode("ε"))
                 return node
             else:
@@ -349,18 +354,19 @@ class RDParser:
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Args")
-            if self.current_token.token_type == self.defs.TokenType.LPAREN:
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
                 self.match_leaf(self.defs.TokenType.LPAREN, node)
                 child = self.parseArgList()
-                if child:
+                if child and node:
                     node.add_child(child)
                 self.match_leaf(self.defs.TokenType.RPAREN, node)
             else:
                 # Add an ε leaf so that semantic analyzer can detect an empty argument list
-                node.add_child(ParseTreeNode("ε"))
+                if node:
+                    node.add_child(ParseTreeNode("ε"))
             return node
         else:
-            if self.current_token.token_type == self.defs.TokenType.LPAREN:
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
                 self.match(self.defs.TokenType.LPAREN)
                 self.parseArgList()
                 self.match(self.defs.TokenType.RPAREN)
@@ -376,14 +382,14 @@ class RDParser:
             node = None
         self.logger.debug("Parsing ArgList")
         child = self.parseMode()
-        if self.build_parse_tree and child: node.add_child(child)
+        if self.build_parse_tree and child and node: node.add_child(child)
         child = self.parseIdentifierList()
-        if self.build_parse_tree and child: node.add_child(child)
+        if self.build_parse_tree and child and node: node.add_child(child)
         self.match_leaf(self.defs.TokenType.COLON, node)
         child = self.parseTypeMark()
-        if self.build_parse_tree and child: node.add_child(child)
+        if self.build_parse_tree and child and node: node.add_child(child)
         child = self.parseMoreArgs()
-        if self.build_parse_tree and child: node.add_child(child)
+        if self.build_parse_tree and child and node: node.add_child(child)
         return node
 
     def parseMoreArgs(self):
@@ -395,13 +401,13 @@ class RDParser:
         else:
             node = None
         self.logger.debug("Parsing MoreArgs")
-        if self.current_token.token_type == self.defs.TokenType.SEMICOLON:
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.SEMICOLON:
             self.match_leaf(self.defs.TokenType.SEMICOLON, node)
             child = self.parseArgList()
-            if self.build_parse_tree and child: node.add_child(child)
+            if self.build_parse_tree and child and node: node.add_child(child)
             return node
         else:
-            if self.build_parse_tree:
+            if self.build_parse_tree and node:
                 node.add_child(ParseTreeNode("ε"))
                 return node
             else:
@@ -417,7 +423,7 @@ class RDParser:
         else:
             node = None
         self.logger.debug("Parsing Mode")
-        if self.current_token.token_type in {
+        if self.current_token and self.current_token.token_type in {
             self.defs.TokenType.IN, 
             self.defs.TokenType.OUT, 
             self.defs.TokenType.INOUT
@@ -425,7 +431,7 @@ class RDParser:
             self.match_leaf(self.current_token.token_type, node)
             return node
         else:
-            if self.build_parse_tree:
+            if self.build_parse_tree and node:
                 node.add_child(ParseTreeNode("ε"))
                 return node
             else:
@@ -434,18 +440,21 @@ class RDParser:
 
     def parseSeqOfStatements(self):
         """
-        Modified to parse one or more statements.
+        SeqOfStatements -> ε | Statement SeqOfStatements
+        
+        In the current grammar, we have an empty body, but in future versions
+        we'll expand this to support statements.
         """
         if self.build_parse_tree:
             node = ParseTreeNode("SeqOfStatements")
             # Loop until we see the END token
-            while self.current_token.token_type != self.defs.TokenType.END:
+            while self.current_token and self.current_token.token_type != self.defs.TokenType.END:
                 child = self.parseStatement()
-                if child:
+                if child and node:
                     node.add_child(child)
             return node
         else:
-            while self.current_token.token_type != self.defs.TokenType.END:
+            while self.current_token and self.current_token.token_type != self.defs.TokenType.END:
                 self.parseStatement()
             return None
 
@@ -461,7 +470,7 @@ class RDParser:
         self.match_leaf(self.defs.TokenType.ID, node)
         self.match_leaf(self.defs.TokenType.ASSIGN, node)
         child = self.parseValue()
-        if self.build_parse_tree and child:
+        if self.build_parse_tree and child and node:
             node.add_child(child)
         self.match_leaf(self.defs.TokenType.SEMICOLON, node)
         return node
