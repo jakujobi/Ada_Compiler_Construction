@@ -14,7 +14,7 @@ SeqOfStatments -> Statement ; StatTail | ε
 StatTail -> Statement ; StatTail | ε  
 Statement -> AssignStat | IOStat  
 AssignStat -> idt := Expr  
-IOStat -> ε  
+IOStat -> NULL | ε  
 Expr -> Relation  
 Relation -> SimpleExpr  
 SimpleExpr -> Term MoreTerm  
@@ -254,15 +254,19 @@ class RDParserExtended(RDParser):
     
     def parseIOStat(self):
         """
-        IOStat -> ε
+        IOStat -> NULL | ε
         """
         if self.build_parse_tree:
             node = ParseTreeNode("IOStat")
-            node.add_child(ParseTreeNode("ε"))
-            return node
         else:
-            self.logger.debug("IOStat -> ε")
-            return None
+            node = None
+        self.logger.debug("Parsing IOStat")
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.NULL:
+            self.match_leaf(self.defs.TokenType.NULL, node)
+        else:
+            if self.build_parse_tree and node:
+                node.add_child(ParseTreeNode("ε"))
+        return node
     
     def parseExpr(self):
         """
@@ -518,3 +522,24 @@ class RDParserExtended(RDParser):
         }
         self.semantic_errors.append(error)
         self.logger.error(f"Semantic error at line {line}, column {column}: {message}")
+    
+    def parse(self) -> bool:
+        """
+        Override parse to allow multiple top-level procedures.
+        """
+        if self.build_parse_tree:
+            root = ParseTreeNode("ProgramList")
+        else:
+            root = None
+        self.logger.debug("Starting extended parse for multiple procedures.")
+        # Parse all top-level procedures
+        while self.current_token and self.current_token.token_type == self.defs.TokenType.PROCEDURE:
+            child = self.parseProg()
+            if self.build_parse_tree and child:
+                root.add_child(child)
+        # After procedures, expect EOF
+        if self.current_token and self.current_token.token_type != self.defs.TokenType.EOF:
+            self.report_error("Extra tokens found after program end.")
+        if self.build_parse_tree:
+            self.parse_tree_root = root
+        return len(self.errors) == 0

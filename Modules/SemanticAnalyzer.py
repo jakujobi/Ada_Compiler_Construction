@@ -99,9 +99,17 @@ class SemanticAnalyzer:
             return False
         else:
             self.logger.info("There is a parse tree to analyze")
-            
+        
         # Start analysis at the program level
-        result = self.analyze_prog(parse_tree_root)
+        # Handle multiple top-level procedures
+        if parse_tree_root.name == "ProgramList":
+            overall_ok = True
+            for child in parse_tree_root.children:
+                ok = self.analyze_prog(child)
+                overall_ok = overall_ok and ok
+            result = overall_ok
+        else:
+            result = self.analyze_prog(parse_tree_root)
         
         # At the end of analysis, print all entries remaining at depth 0.
         print("\nRemaining global entries at depth 0:")

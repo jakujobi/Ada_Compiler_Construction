@@ -106,7 +106,7 @@ class Logger:
       - Log format: 
             "%(asctime)s - %(levelname)s - %(message)s - %(caller_class)s - %(filename)s:%(lineno)d - %(funcName)s"
       - Date format: "%Y-%m-%d %H:%M:%S"
-      - Colored output: Enabled for console messages.
+      - Colored output: Disabled for console messages.
 
     This class is designed so that every part of your application uses the same logger.
     You can adjust the configuration by passing parameters to the Logger constructor.
@@ -130,7 +130,7 @@ class Logger:
                  source_name=None,
                  fmt=None,
                  datefmt=None,
-                 use_color=True):
+                 use_color=False):
         """
         Initialize the Logger. This sets up the file and console handlers, the log format,
         and any custom filters (like CallerFilter).
@@ -171,6 +171,14 @@ class Logger:
         if self._logger.hasHandlers():
             self._logger.handlers.clear()
 
+        # On Windows, configure stdout to use UTF-8 encoding to avoid encoding errors
+        if os.name == 'nt':
+            try:
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+            except Exception:
+                import io
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+
         # Set default log message format if not provided.
         if fmt is None:
             fmt = "%(asctime)s - %(levelname)s - %(message)s - %(caller_class)s - %(filename)s:%(lineno)d - %(funcName)s"
@@ -178,7 +186,9 @@ class Logger:
             datefmt = "%Y-%m-%d %H:%M:%S"
 
         # Create a formatter for the console with color.
-        console_formatter = ColoredFormatter(fmt=fmt, datefmt=datefmt, use_color=use_color)
+        # Disable ANSI colors on Windows to avoid encoding errors
+        color_flag = use_color and os.name != 'nt'
+        console_formatter = ColoredFormatter(fmt=fmt, datefmt=datefmt, use_color=color_flag)
         # Create a formatter for the file (without colors).
         file_formatter = logging.Formatter(fmt, datefmt)
 

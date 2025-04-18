@@ -259,6 +259,18 @@ class TestRunner:
         print("\nAda Compiler Construction Test Runner")
         print("=====================================")
         
+        # Batch mode: if driver and all-tests flags provided, run all tests automatically
+        if hasattr(self, 'cli_args') and getattr(self.cli_args, 'driver', None) and getattr(self.cli_args, 'all_tests', False):
+            self.logger.info(f"Batch mode: running driver {self.cli_args.driver} against all test files")
+            driver_path = self.driver_files.get(self.cli_args.driver)
+            if not driver_path:
+                self.logger.error(f"Driver not found: {self.cli_args.driver}")
+                return
+            for test_name, test_path in sorted(self.test_files.items()):
+                self.run_test(driver_path, test_path)
+            self.logger.info("Batch run completed")
+            return
+        
         while True:
             # Let the user select a driver
             print("\nDriver Files:")
@@ -336,6 +348,8 @@ def parse_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Test Runner for Ada Compiler Construction")
     parser.add_argument("--config", help="Path to configuration file")
+    parser.add_argument("--driver", help="Driver name to use (e.g., JohnA6)")
+    parser.add_argument("--all-tests", action="store_true", help="Run all test files with selected driver")
     return parser.parse_args()
 
 
@@ -343,6 +357,8 @@ def main() -> None:
     """Main entry point for the test runner."""
     args = parse_arguments()
     test_runner = TestRunner(config_file=args.config)
+    # Attach CLI args for batch processing
+    test_runner.cli_args = args
     test_runner.run()
 
 
