@@ -201,6 +201,23 @@ class TableEntry:
         self.entry_type = EntryType.CONSTANT
         self.const_type = const_type
         self.const_value = value
+        
+    def set_parameter_info(self, var_type: VarType, offset: int, size: int, mode: str):
+        """
+        Set information specific to parameter entries.
+        
+        Args:
+            var_type: The data type of the parameter.
+            offset: The memory offset of the parameter.
+            size: The memory size of the parameter in bytes.
+            mode: The parameter mode ('in', 'out', 'inout').
+        """
+        self.entry_type = EntryType.VARIABLE  # Parameters are treated as variables with mode info
+        self.var_type = var_type
+        self.offset = offset
+        self.size = size
+        self.param_mode = mode.upper()  # Store the parameter mode as uppercase string
+        return self
     
     def set_procedure_info(
             self, local_size: int,
