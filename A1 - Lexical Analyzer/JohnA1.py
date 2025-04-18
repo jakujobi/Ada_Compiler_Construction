@@ -3,7 +3,7 @@
 # Author: John Akujobi
 # GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
 # Date: 2024-03-31
-# Version: 1.0
+# Version: 1.1
 """
 Driver program for Assignment 1: Lexical Analyzer for Ada Compiler
 
@@ -11,6 +11,9 @@ This program demonstrates the lexical analysis phase of the compiler:
 1. Reads source code from a file
 2. Tokenizes the source code using LexicalAnalyzer
 3. Outputs the tokens to console and optionally to a file
+
+The implementation includes proper type annotations with Optional types
+for parameters that can be None, ensuring type safety and improved code quality.
 
 Usage:
     python JohnA1.py <input_file> [output_file]

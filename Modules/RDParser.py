@@ -5,7 +5,7 @@ Recursive Descent Parser for a subset of Ada.
 Author: John Akujobi
 GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
 Date: 2024-02-17
-Version: 1.2
+Version: 1.3
 
 This module defines the RDParser class which receives a list of tokens
 from the lexical analyzer (via JohnA3.py) and verifies the syntactic correctness
@@ -45,6 +45,10 @@ The parser supports configurable error handling:
 If build_parse_tree is enabled, the parser constructs a parse tree and prints it
 using wide indentation with hyphens and vertical bars.
 A summary report is printed at the end of parsing.
+
+The implementation includes comprehensive null safety checks to prevent
+attribute access on potentially None objects, and proper type hints
+to support static type checking.
 """
 from typing import List, Optional, Any, Dict, Union
 from Modules.Token import Token
@@ -62,6 +66,10 @@ class RDParser:
             stop_on_error (bool): If True, the parser stops on error and prompts the user.
             panic_mode_recover (bool): If True, the parser attempts panic-mode recovery.
             build_parse_tree (bool): If True, a parse tree is built during parsing.
+            
+        Note:
+            The parser includes null safety checks to prevent runtime errors
+            when accessing attributes of tokens or nodes that might be None.
         """
         self.tokens = tokens
         self.current_index = 0
@@ -479,22 +487,28 @@ class RDParser:
 # Parse Tree Node Class
 # ------------------------------
 class ParseTreeNode:
-    def __init__(self, name, token=None):
+    def __init__(self, name: str, token: Optional[Token] = None):
         """
         Initialize a parse tree node.
 
         Parameters:
             name (str): The name of the nonterminal or token.
-            token (Token, optional): The token associated with a terminal.
+            token (Optional[Token]): The token associated with a terminal, or None for nonterminals.
         """
         self.name = name
         self.token = token
         self.children = []
 
-    def add_child(self, child):
+    def add_child(self, child: 'ParseTreeNode') -> None:
+        """
+        Add a child node to this node.
+        
+        Parameters:
+            child (ParseTreeNode): The child node to add
+        """
         self.children.append(child)
 
-    def find_child_by_name(self, name):
+    def find_child_by_name(self, name: str) -> Optional['ParseTreeNode']:
         """
         Find a child node by name.
         
@@ -502,14 +516,14 @@ class ParseTreeNode:
             name (str): The name of the child node to find
             
         Returns:
-            The child node if found, None otherwise
+            Optional[ParseTreeNode]: The child node if found, None otherwise
         """
         for child in self.children:
             if child.name == name:
                 return child
         return None
         
-    def find_children_by_name(self, name):
+    def find_children_by_name(self, name: str) -> List['ParseTreeNode']:
         """
         Find all child nodes with the specified name.
         
@@ -517,11 +531,11 @@ class ParseTreeNode:
             name (str): The name of the child nodes to find
             
         Returns:
-            List of child nodes with the specified name
+            List[ParseTreeNode]: List of child nodes with the specified name
         """
         return [child for child in self.children if child.name == name]
         
-    def find_child_by_token_type(self, token_type):
+    def find_child_by_token_type(self, token_type: Any) -> Optional['ParseTreeNode']:
         """
         Find a child node by token type.
         
@@ -529,7 +543,7 @@ class ParseTreeNode:
             token_type: The token type to search for
             
         Returns:
-            The child node if found, None otherwise
+            Optional[ParseTreeNode]: The child node if found, None otherwise
         """
         for child in self.children:
             if child.token and child.token.token_type == token_type:
@@ -537,16 +551,32 @@ class ParseTreeNode:
         return None
 
     @property
-    def line_number(self):
-        """Get the line number from the token, or -1 if not available."""
+    def line_number(self) -> Union[int, str]:
+        """
+        Get the line number from the token, or -1 if not available.
+        
+        Returns:
+            Union[int, str]: The line number or -1 if no token is present
+        """
         return self.token.line_number if self.token else -1
     
     @property
-    def column_number(self):
-        """Get the column number from the token, or -1 if not available."""
+    def column_number(self) -> Union[int, str]:
+        """
+        Get the column number from the token, or -1 if not available.
+        
+        Returns:
+            Union[int, str]: The column number or -1 if no token is present
+        """
         return self.token.column_number if self.token else -1
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """
+        String representation of the node.
+        
+        Returns:
+            str: A string representation including the node name and token lexeme if present
+        """
         if self.token:
             return f"{self.name}: {self.token.lexeme}"
         return self.name

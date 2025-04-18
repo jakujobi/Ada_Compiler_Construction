@@ -3,13 +3,16 @@
 # Author: John Akujobi
 # GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
 # Date: 2024-03-31
-# Version: 1.0
+# Version: 1.1
 """
 Driver program for Assignment 3: Recursive Descent Parser for Ada Compiler
 
 This program demonstrates the syntax analysis phase of the compiler:
 1. Lexical Analysis: Tokenizes the source code
 2. Syntax Analysis: Parses the tokens using a recursive descent parser
+
+The implementation includes proper type annotations with Optional types
+for parameters that can be None, ensuring type safety and improved code quality.
 
 Usage:
     python JohnA3.py <input_file> [output_file]
