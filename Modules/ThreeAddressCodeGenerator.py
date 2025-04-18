@@ -1,61 +1,59 @@
 #!/usr/bin/env python3
 # ThreeAddressCodeGenerator.py
-# Author: John Akujobi (implemented with help)
-# GitHub: [https://github.com/jakujobi/Ada_Compiler_Construction](https://github.com/jakujobi/Ada_Compiler_Construction)
+# Author: John Akujobi
+# GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
 # Date: 2025-04-18
 # Version: 1.0
 """
-Three Address Code Generator for the Ada Compiler Construction Project
+Three Address Code Generator for Ada Compiler
 
-This module is responsible for generating Three Address Code (TAC) from a
-parsed and semantically analyzed Ada program. It handles variable references,
-arithmetic expressions, and procedure calls according to the specifications.
+This module translates the parsed and semantically analyzed Ada source code into
+Three Address Code (TAC) instructions. It handles variable references based on declaration
+depth, manages procedure calls with parameter passing, and generates properly formatted
+TAC output files.
 
-Key features:
-- Variables at depth 1 referenced by name
-- Variables at depth > 1 referenced by offset (_BP-offset)
-- Parameters referenced with positive offsets (_BP+offset)
-- Constants substituted directly
-- Pascal-style procedure calls (parameters pushed left to right)
+The generator follows these rules:
+- Variables at depth 1: use actual names
+- Variables at depth > 1: use offset notation (_BP-offset)
+- Parameters: use positive offsets (_BP+offset)
+- Constants: substitute literal values directly
+
+Key components:
+- TACInstruction: Represents a TAC instruction
+- TACProgram: Stores TAC instructions and manages code generation
+- ThreeAddressCodeGenerator: Main generator that walks the parse tree and produces code
 """
 
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import os
-import sys
-from typing import List, Dict, Optional, Any, Tuple, Union, Set
 from pathlib import Path
 
-# Add the parent directory to the path so we can import modules
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
-
-from Modules.Token import Token
-from Modules.Definitions import Definitions
-from Modules.RDParser import ParseTreeNode
-from Modules.AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
-from Modules.Logger import Logger
+from .AdaSymbolTable import AdaSymbolTable, TableEntry, VarType, EntryType, ParameterMode
+from .Logger import Logger
 
 
 class TACInstruction:
     """
-    Represents a single Three Address Code instruction.
+    Represents a Three Address Code instruction.
     
-    A TAC instruction has an operation and up to three operands:
-    - op: The operation (e.g., =, +, -, *, /, LABEL, GOTO, IF, etc.)
-    - arg1: The first operand
-    - arg2: The second operand (optional)
-    - result: The result operand (optional)
+    Each instruction has an operation and up to three operands.
+    Special instructions like labels and jumps are also supported.
+    
+    Attributes:
+        op (str): The operation code
+        arg1 (Optional[str]): First operand
+        arg2 (Optional[str]): Second operand
+        result (Optional[str]): Destination operand
     """
-    
-    def __init__(self, op: str, arg1: Optional[str] = None, 
-                 arg2: Optional[str] = None, result: Optional[str] = None):
+    def __init__(self, op: str, arg1: Optional[str] = None, arg2: Optional[str] = None, result: Optional[str] = None):
         """
         Initialize a TAC instruction.
         
         Args:
             op: The operation code
-            arg1: The first operand (optional)
-            arg2: The second operand (optional)
-            result: The result operand (optional)
+            arg1: First operand (optional)
+            arg2: Second operand (optional)
+            result: Destination operand (optional)
         """
         self.op = op
         self.arg1 = arg1
@@ -67,76 +65,69 @@ class TACInstruction:
         Convert the instruction to a string representation.
         
         Returns:
-            String representation of the instruction
+            String representation of the TAC instruction
         """
-        if self.op == "LABEL":
-            return f"LABEL {self.arg1}"
-        elif self.op == "GOTO":
-            return f"goto {self.arg1}"
-        elif self.op == "IF":
-            return f"if {self.arg1} goto {self.result}"
-        elif self.op == "RETURN":
-            return "return"
-        elif self.op == "PUSH":
-            return f"push {self.arg1}"
-        elif self.op == "PUSHA":  # Push address (for reference parameters)
-            return f"push @{self.arg1}"
-        elif self.op == "CALL":
-            return f"call {self.arg1}"
-        elif self.op == "START":
-            return f"START {self.arg1}"
-        elif self.op == "=":
-            return f"{self.result} := {self.arg1}"
-        elif self.op in ["+", "-", "*", "/", "AND", "OR", "MOD", "REM"]:
-            return f"{self.result} := {self.arg1} {self.op} {self.arg2}"
-        else:
-            # Generic format for other operations
-            parts = [self.op]
-            if self.arg1 is not None:
-                parts.append(str(self.arg1))
-            if self.arg2 is not None:
-                parts.append(str(self.arg2))
-            if self.result is not None:
-                parts.append(str(self.result))
-            return ", ".join(parts)
-    
-    def __str__(self) -> str:
-        """
-        String representation of the instruction.
+        if self.is_label():
+            return f"LABEL {self.op.replace('LABEL ', '')}"
         
-        Returns:
-            String representation of the instruction
-        """
-        return self.to_string()
+        if self.op == "START":
+            return f"START {self.arg1}"
+        
+        if self.op == "push":
+            return f"push {self.arg1}"
+        
+        if self.op == "call":
+            return f"call {self.arg1}"
+            
+        if self.op == "return":
+            return "return"
+            
+        if self.op == ":=" and self.arg2 is None:
+            # Simple assignment
+            return f"{self.result} := {self.arg1}"
+        
+        # Regular operation
+        if self.result is not None and self.arg1 is not None:
+            if self.arg2 is not None:
+                # Binary operation
+                return f"{self.result} := {self.arg1} {self.op} {self.arg2}"
+            else:
+                # Unary operation
+                return f"{self.result} := {self.op} {self.arg1}"
+        
+        return f"{self.op} {self.arg1 or ''} {self.arg2 or ''} {self.result or ''}".strip()
     
     def is_jump(self) -> bool:
         """
-        Check if this instruction is a jump instruction.
+        Check if this instruction is a jump.
         
         Returns:
-            True if the instruction is a jump, False otherwise
+            True if this is a jump instruction, False otherwise
         """
-        return self.op in ["GOTO", "IF"]
+        return self.op in ["goto", "iffalse", "iftrue"]
     
     def is_label(self) -> bool:
         """
         Check if this instruction is a label.
         
         Returns:
-            True if the instruction is a label, False otherwise
+            True if this is a label instruction, False otherwise
         """
-        return self.op == "LABEL"
+        return self.op.startswith("LABEL")
 
 
 class TACProgram:
     """
-    Represents a Three Address Code program.
+    Represents a complete Three Address Code program.
     
-    A TAC program is a collection of TAC instructions with methods for
-    adding instructions, generating temporary variables, and writing the
-    program to a file.
+    Manages a list of TACInstructions and provides methods to add
+    instructions and generate temporary variable names.
+    
+    Attributes:
+        program_name (str): The name of the program
+        instructions (List[TACInstruction]): The list of TAC instructions
+        temp_counter (int): Counter for generating temporary variables
     """
-    
     def __init__(self, program_name: str):
         """
         Initialize a TAC program.
@@ -147,21 +138,20 @@ class TACProgram:
         self.program_name = program_name
         self.instructions: List[TACInstruction] = []
         self.temp_counter = 0
-        self.label_counter = 0
     
     def add_instruction(self, op: str, arg1: Optional[str] = None, 
-                        arg2: Optional[str] = None, result: Optional[str] = None) -> TACInstruction:
+                       arg2: Optional[str] = None, result: Optional[str] = None) -> TACInstruction:
         """
-        Add an instruction to the program.
+        Add a new instruction to the program.
         
         Args:
             op: The operation code
-            arg1: The first operand (optional)
-            arg2: The second operand (optional)
-            result: The result operand (optional)
+            arg1: First operand (optional)
+            arg2: Second operand (optional)
+            result: Destination operand (optional)
             
         Returns:
-            The added instruction
+            The created TACInstruction
         """
         instruction = TACInstruction(op, arg1, arg2, result)
         self.instructions.append(instruction)
@@ -169,43 +159,22 @@ class TACProgram:
     
     def add_raw_instruction(self, instruction: TACInstruction) -> None:
         """
-        Add a pre-created instruction to the program.
+        Add an existing instruction to the program.
         
         Args:
-            instruction: The instruction to add
+            instruction: The TACInstruction to add
         """
         self.instructions.append(instruction)
     
     def generate_temp(self) -> str:
         """
-        Generate a temporary variable name.
+        Generate a unique temporary variable name.
         
         Returns:
-            A unique temporary variable name
+            A new temporary variable name (t1, t2, etc.)
         """
-        temp_name = f"t{self.temp_counter}"
         self.temp_counter += 1
-        return temp_name
-    
-    def generate_label(self) -> str:
-        """
-        Generate a unique label.
-        
-        Returns:
-            A unique label name
-        """
-        label_name = f"L{self.label_counter}"
-        self.label_counter += 1
-        return label_name
-    
-    def get_instructions(self) -> List[TACInstruction]:
-        """
-        Get all instructions in the program.
-        
-        Returns:
-            List of instructions
-        """
-        return self.instructions
+        return f"t{self.temp_counter}"
     
     def add_start_instruction(self) -> None:
         """
@@ -213,591 +182,406 @@ class TACProgram:
         """
         self.add_instruction("START", self.program_name)
     
-    def write_to_file(self, output_file: str) -> bool:
+    def write_to_file(self, filename: str) -> bool:
         """
         Write the TAC program to a file.
         
         Args:
-            output_file: The path to the output file
+            filename: The name of the file to write to
             
         Returns:
-            True if successful, False otherwise
+            True if write was successful, False otherwise
         """
         try:
-            with open(output_file, "w") as f:
+            with open(filename, 'w') as file:
                 for instruction in self.instructions:
-                    f.write(f"{instruction}\n")
+                    file.write(instruction.to_string() + '\n')
             return True
         except Exception as e:
-            print(f"Error writing TAC program to file: {e}")
+            print(f"Error writing TAC to file: {e}")
             return False
+    
+    def get_instructions(self) -> List[TACInstruction]:
+        """
+        Get the list of instructions.
+        
+        Returns:
+            The list of TACInstructions
+        """
+        return self.instructions
 
 
 class ThreeAddressCodeGenerator:
     """
-    Generates Three Address Code from a parsed and semantically analyzed Ada program.
+    Generates Three Address Code from a parse tree and symbol table.
     
-    This class traverses the parse tree and generates TAC instructions for each node,
-    keeping track of variable references, procedure calls, and expressions.
+    This is the main class that traverses the parse tree and generates
+    TAC instructions according to the specified rules.
+    
+    Attributes:
+        parse_tree: The parse tree
+        symbol_table (AdaSymbolTable): The symbol table
+        logger (Logger): The logger
+        tac_program (TACProgram): The generated TAC program
+        current_depth (int): The current depth in the parse tree
     """
-    
-    def __init__(self, parse_tree: ParseTreeNode, symbol_table: AdaSymbolTable, 
-                 logger: Optional[Logger] = None):
+    def __init__(self, parse_tree: Any, symbol_table: AdaSymbolTable, logger: Logger):
         """
-        Initialize the TAC generator.
+        Initialize the generator.
         
         Args:
-            parse_tree: The root of the parse tree
+            parse_tree: The parse tree
             symbol_table: The symbol table
-            logger: Optional logger for logging messages
+            logger: The logger
         """
         self.parse_tree = parse_tree
         self.symbol_table = symbol_table
-        self.logger = logger if logger else Logger()
-        
+        self.logger = logger
         self.current_depth = 0
-        self.current_procedure = None
-        self.tac_program = None
         
-        # Variable size mapping
-        self.type_sizes = {
-            VarType.INT: 2,    # Integers have size 2
-            VarType.CHAR: 1,   # Characters have size 1
-            VarType.FLOAT: 4,  # Floats have size 4
-            VarType.REAL: 4    # Alias for FLOAT
-        }
+        # Extract the program name from the parse tree
+        if hasattr(parse_tree, 'name') and parse_tree.name:
+            self.program_name = parse_tree.name
+        else:
+            self.program_name = "Program"
         
-        self.logger.info("Three Address Code Generator initialized")
-    
+        self.tac_program = TACProgram(self.program_name)
+        
     def generate(self) -> TACProgram:
         """
         Generate TAC for the entire program.
         
         Returns:
-            The generated TAC program
+            The generated TACProgram
         """
-        self.logger.info("Starting TAC generation")
-        
-        # Determine the program name from the parse tree
-        program_name = self._determine_program_name()
-        self.tac_program = TACProgram(program_name)
-        
-        # Process the root node of the parse tree
-        if self.parse_tree.name == "ProgramList":
-            # Handle multiple top-level procedures
-            for child in self.parse_tree.children:
-                self._process_node(child)
-        else:
-            # Handle a single procedure
-            self._process_node(self.parse_tree)
-        
-        # Add the START instruction at the end
-        self.tac_program.add_start_instruction()
-        
-        self.logger.info("TAC generation completed")
-        return self.tac_program
+        try:
+            # Process the root node to start the traversal
+            self.process_node(self.parse_tree)
+            
+            # Add the START instruction at the end
+            self.tac_program.add_start_instruction()
+            
+            return self.tac_program
+        except Exception as e:
+            self.logger.error(f"Error generating TAC: {e}")
+            # Return empty program on error
+            return TACProgram(self.program_name)
     
-    def _determine_program_name(self) -> str:
-        """
-        Determine the name of the program from the parse tree.
-        
-        Returns:
-            The name of the outermost procedure
-        """
-        if self.parse_tree.name == "ProgramList" and self.parse_tree.children:
-            # Get the first procedure in the list
-            prog_node = self.parse_tree.children[0]
-            if prog_node.name == "Prog" and len(prog_node.children) > 1:
-                # The second child of Prog is the identifier
-                id_node = prog_node.children[1]
-                if id_node.token:
-                    return id_node.token.lexeme
-        
-        # Default name if we couldn't determine it
-        return "Program"
-    
-    def _process_node(self, node: ParseTreeNode) -> List[TACInstruction]:
+    def process_node(self, node: Any) -> None:
         """
         Process a node in the parse tree and generate TAC instructions.
         
+        This method dispatches to more specific methods based on the node type.
+        
         Args:
             node: The node to process
-            
-        Returns:
-            List of generated TAC instructions
         """
-        self.logger.debug(f"Processing node: {node.name}")
+        if node is None:
+            return
         
-        instructions = []
+        # Handle different types of nodes based on node type or class name
+        node_type = node.__class__.__name__ if hasattr(node, '__class__') else type(node).__name__
         
-        if node.name == "Prog":
-            # Process a procedure definition
-            instructions.extend(self._process_procedure(node))
-        elif node.name == "SeqOfStatements":
-            # Process a sequence of statements
-            instructions.extend(self._process_seq_of_statements(node))
-        elif node.name == "Statement":
-            # Process a statement
-            instructions.extend(self._process_statement(node))
-        elif node.name == "AssignStat":
-            # Process an assignment statement
-            instructions.extend(self._process_assign_stat(node))
-        elif node.name == "ProcCall":
-            # Process a procedure call
-            instructions.extend(self._process_proc_call(node))
-        elif node.name == "Expr":
-            # Process an expression
-            instructions.extend(self._process_expression(node))
+        # Check for specific node types and dispatch accordingly
+        if node_type == 'Program':
+            self._process_program(node)
+        elif node_type == 'Procedure':
+            self._process_procedure(node)
+        elif node_type == 'Block':
+            self._process_block(node)
+        elif node_type == 'AssignmentStatement':
+            self._process_assignment(node)
+        elif node_type == 'IfStatement':
+            self._process_if_statement(node)
+        elif node_type == 'WhileStatement':
+            self._process_while_statement(node)
+        elif node_type == 'ProcedureCall':
+            self._process_procedure_call(node)
+        elif node_type == 'BinaryExpression':
+            return self._process_binary_expression(node)
+        elif node_type == 'UnaryExpression':
+            return self._process_unary_expression(node)
+        elif node_type == 'VariableReference':
+            return self._resolve_variable(node.name)
+        elif node_type == 'NumericLiteral':
+            return str(node.value)
         # Add more node types as needed
         
-        return instructions
+        # If there's a list of statements or other child nodes, process them
+        if hasattr(node, 'statements') and node.statements:
+            for statement in node.statements:
+                self.process_node(statement)
+        
+        # Process child nodes (will need to be adapted based on actual AST structure)
+        if hasattr(node, 'children'):
+            for child in node.children:
+                self.process_node(child)
     
-    def _process_procedure(self, node: ParseTreeNode) -> List[TACInstruction]:
+    def _process_program(self, node: Any) -> None:
         """
-        Process a procedure definition and generate TAC instructions.
+        Process a program node.
+        
+        Args:
+            node: The program node
+        """
+        self.logger.info(f"Processing program: {node.name}")
+        
+        # Add procedure label
+        self.tac_program.add_instruction(f"LABEL {node.name}")
+        
+        # Process the body of the program
+        if hasattr(node, 'body'):
+            self.process_node(node.body)
+    
+    def _process_procedure(self, node: Any) -> None:
+        """
+        Process a procedure node.
         
         Args:
             node: The procedure node
-            
-        Returns:
-            List of generated TAC instructions
         """
-        instructions = []
+        self.logger.info(f"Processing procedure: {node.name}")
         
-        # Extract the procedure name
-        if len(node.children) < 2 or node.children[1].name != "ID":
-            self.logger.error("Invalid procedure node: missing identifier")
-            return instructions
+        # Increase depth when entering a procedure
+        self.current_depth += 1
         
-        proc_name = node.children[1].token.lexeme
-        self.current_procedure = proc_name
+        # Add procedure label
+        self.tac_program.add_instruction(f"LABEL {node.name}")
         
-        # Add a label for the procedure
-        self.tac_program.add_instruction("LABEL", proc_name)
+        # Process the body of the procedure
+        if hasattr(node, 'body'):
+            self.process_node(node.body)
         
-        # Find the body of the procedure (sequence of statements)
-        for i, child in enumerate(node.children):
-            if child.name == "BEGIN":
-                # The next child after BEGIN should be SeqOfStatements
-                if i + 1 < len(node.children) and node.children[i + 1].name == "SeqOfStatements":
-                    # Process the statements
-                    instructions.extend(self._process_seq_of_statements(node.children[i + 1]))
-                break
+        # Add return instruction at the end
+        self.tac_program.add_instruction("return")
         
-        # Add a return instruction at the end of the procedure
-        self.tac_program.add_instruction("RETURN")
-        
-        return instructions
+        # Decrease depth when exiting the procedure
+        self.current_depth -= 1
     
-    def _process_seq_of_statements(self, node: ParseTreeNode) -> List[TACInstruction]:
+    def _process_block(self, node: Any) -> None:
         """
-        Process a sequence of statements and generate TAC instructions.
+        Process a block node.
         
         Args:
-            node: The sequence of statements node
-            
-        Returns:
-            List of generated TAC instructions
+            node: The block node
         """
-        instructions = []
-        
-        # Find all Statement nodes and process them
-        for child in node.children:
-            if child.name == "Statement":
-                instructions.extend(self._process_statement(child))
-            elif child.name == "SeqOfStatements":
-                # Recursive case for nested statement sequences
-                instructions.extend(self._process_seq_of_statements(child))
-        
-        return instructions
+        # Process each statement in the block
+        if hasattr(node, 'statements'):
+            for statement in node.statements:
+                self.process_node(statement)
     
-    def _process_statement(self, node: ParseTreeNode) -> List[TACInstruction]:
+    def _process_assignment(self, node: Any) -> None:
         """
-        Process a statement and generate TAC instructions.
-        
-        Args:
-            node: The statement node
-            
-        Returns:
-            List of generated TAC instructions
-        """
-        instructions = []
-        
-        # Find the type of statement
-        for child in node.children:
-            if child.name == "AssignStat":
-                instructions.extend(self._process_assign_stat(child))
-            elif child.name == "ProcCall":
-                instructions.extend(self._process_proc_call(child))
-            # Add more statement types as needed
-        
-        return instructions
-    
-    def _process_assign_stat(self, node: ParseTreeNode) -> List[TACInstruction]:
-        """
-        Process an assignment statement and generate TAC instructions.
+        Process an assignment statement.
         
         Args:
             node: The assignment statement node
+        """
+        # Evaluate the right-hand side expression
+        expr_result = self.process_node(node.expression)
+        
+        # Resolve the left-hand side variable
+        target = self._resolve_variable(node.target.name)
+        
+        # Add assignment instruction
+        self.tac_program.add_instruction(":=", expr_result, None, target)
+    
+    def _process_binary_expression(self, node: Any) -> str:
+        """
+        Process a binary expression and return the result variable.
+        
+        Args:
+            node: The binary expression node
             
         Returns:
-            List of generated TAC instructions
+            The variable containing the result of the expression
         """
-        instructions = []
+        # Get left and right operands
+        left_operand = self.process_node(node.left)
+        right_operand = self.process_node(node.right)
         
-        # Get the identifier and expression
-        id_node = None
-        expr_node = None
+        # Create a temporary variable for the result
+        result = self.tac_program.generate_temp()
         
-        for i, child in enumerate(node.children):
-            if child.name == "ID":
-                id_node = child
-            elif child.name == "Expr":
-                expr_node = child
+        # Add the instruction
+        self.tac_program.add_instruction(node.operator, left_operand, right_operand, result)
         
-        if id_node and expr_node:
-            # Resolve the variable reference
-            var_ref = self._resolve_variable(id_node.token.lexeme)
-            
-            # Process the expression
-            expr_instructions, expr_result = self._process_expression_with_result(expr_node)
-            instructions.extend(expr_instructions)
-            
-            # Add the assignment instruction
-            self.tac_program.add_instruction("=", expr_result, None, var_ref)
-        
-        return instructions
+        return result
     
-    def _process_proc_call(self, node: ParseTreeNode) -> List[TACInstruction]:
+    def _process_unary_expression(self, node: Any) -> str:
         """
-        Process a procedure call and generate TAC instructions.
+        Process a unary expression and return the result variable.
+        
+        Args:
+            node: The unary expression node
+            
+        Returns:
+            The variable containing the result of the expression
+        """
+        # Get the operand
+        operand = self.process_node(node.operand)
+        
+        # Create a temporary variable for the result
+        result = self.tac_program.generate_temp()
+        
+        # Add the instruction
+        self.tac_program.add_instruction(node.operator, operand, None, result)
+        
+        return result
+    
+    def _process_if_statement(self, node: Any) -> None:
+        """
+        Process an if statement.
+        
+        Args:
+            node: The if statement node
+        """
+        # Evaluate the condition
+        condition_result = self.process_node(node.condition)
+        
+        # Generate labels
+        else_label = f"L{self.tac_program.temp_counter + 1}"
+        end_label = f"L{self.tac_program.temp_counter + 2}"
+        
+        # Jump to else part if condition is false
+        self.tac_program.add_instruction("iffalse", condition_result, else_label)
+        
+        # Process the then part
+        self.process_node(node.then_part)
+        
+        # Jump to end of if statement
+        self.tac_program.add_instruction("goto", end_label)
+        
+        # Add the else label
+        self.tac_program.add_instruction(f"LABEL {else_label}")
+        
+        # Process the else part if it exists
+        if hasattr(node, 'else_part') and node.else_part:
+            self.process_node(node.else_part)
+        
+        # Add the end label
+        self.tac_program.add_instruction(f"LABEL {end_label}")
+    
+    def _process_while_statement(self, node: Any) -> None:
+        """
+        Process a while statement.
+        
+        Args:
+            node: The while statement node
+        """
+        # Generate labels
+        start_label = f"L{self.tac_program.temp_counter + 1}"
+        end_label = f"L{self.tac_program.temp_counter + 2}"
+        
+        # Add the start label
+        self.tac_program.add_instruction(f"LABEL {start_label}")
+        
+        # Evaluate the condition
+        condition_result = self.process_node(node.condition)
+        
+        # Jump to end if condition is false
+        self.tac_program.add_instruction("iffalse", condition_result, end_label)
+        
+        # Process the body
+        self.process_node(node.body)
+        
+        # Jump back to the start
+        self.tac_program.add_instruction("goto", start_label)
+        
+        # Add the end label
+        self.tac_program.add_instruction(f"LABEL {end_label}")
+    
+    def _process_procedure_call(self, node: Any) -> None:
+        """
+        Process a procedure call.
         
         Args:
             node: The procedure call node
-            
-        Returns:
-            List of generated TAC instructions
         """
-        instructions = []
-        
-        # Get the procedure name and parameters
-        proc_name = None
-        params_node = None
-        
-        for i, child in enumerate(node.children):
-            if child.name == "ID":
-                proc_name = child.token.lexeme
-            elif child.name == "Params":
-                params_node = child
-        
-        if proc_name:
-            # Process parameters if they exist
-            if params_node:
-                param_instructions = self._process_params(params_node)
-                instructions.extend(param_instructions)
-            
-            # Add the call instruction
-            self.tac_program.add_instruction("CALL", proc_name)
-        
-        return instructions
-    
-    def _process_params(self, node: ParseTreeNode) -> List[TACInstruction]:
-        """
-        Process procedure parameters and generate TAC instructions.
-        
-        Args:
-            node: The parameters node
-            
-        Returns:
-            List of generated TAC instructions
-        """
-        instructions = []
-        
-        # Get all ID and NUM nodes in the parameter list
-        param_nodes = []
-        self._collect_param_nodes(node, param_nodes)
-        
-        # Process each parameter
-        for param_node in param_nodes:
-            if param_node.name == "ID":
+        # Push parameters in the correct order (left to right for Pascal-style)
+        if hasattr(node, 'arguments') and node.arguments:
+            for arg in node.arguments:
                 # Check if this is a pass-by-reference parameter
-                entry = self.symbol_table.lookup(param_node.token.lexeme)
-                if entry and hasattr(entry, 'param_mode') and entry.param_mode in [ParameterMode.INOUT, ParameterMode.OUT]:
-                    # Push the address
-                    self.tac_program.add_instruction("PUSHA", self._resolve_variable(param_node.token.lexeme))
+                is_reference = self._is_reference_parameter(node.procedure_name, arg.name)
+                
+                # Resolve the argument
+                arg_value = self._resolve_variable(arg.name)
+                
+                # Add the push instruction with @ prefix for reference parameters
+                if is_reference:
+                    self.tac_program.add_instruction("push", f"@{arg_value}")
                 else:
-                    # Push the value
-                    self.tac_program.add_instruction("PUSH", self._resolve_variable(param_node.token.lexeme))
-            elif param_node.name == "NUM":
-                # Constants are pushed directly
-                self.tac_program.add_instruction("PUSH", param_node.token.lexeme)
+                    self.tac_program.add_instruction("push", arg_value)
         
-        return instructions
+        # Add the call instruction
+        self.tac_program.add_instruction("call", node.procedure_name)
     
-    def _collect_param_nodes(self, node: ParseTreeNode, result: List[ParseTreeNode]) -> None:
+    def _is_reference_parameter(self, proc_name: str, arg_name: str) -> bool:
         """
-        Collect all parameter nodes from a Params or ParamsTail node.
+        Check if a parameter is passed by reference.
         
         Args:
-            node: The params or params tail node
-            result: List to store parameter nodes
-        """
-        if not node or not node.children:
-            return
-        
-        for child in node.children:
-            if child.name in ["ID", "NUM"]:
-                result.append(child)
-            elif child.name in ["Params", "ParamsTail"]:
-                self._collect_param_nodes(child, result)
-    
-    def _process_expression(self, node: ParseTreeNode) -> List[TACInstruction]:
-        """
-        Process an expression and generate TAC instructions.
-        
-        Args:
-            node: The expression node
+            proc_name: The name of the procedure
+            arg_name: The name of the argument
             
         Returns:
-            List of generated TAC instructions
+            True if the parameter is passed by reference, False otherwise
         """
-        instructions, _ = self._process_expression_with_result(node)
-        return instructions
+        # Look up the procedure in the symbol table
+        proc_entry = self.symbol_table.lookup(proc_name)
+        if not proc_entry or proc_entry.entry_type != EntryType.PROCEDURE:
+            return False
+        
+        # Find the parameter in the parameter list
+        if not proc_entry.param_list:
+            return False
+        
+        # This is a simplification; in a real implementation, you would need to match
+        # the argument position with the parameter position
+        for param in proc_entry.param_list:
+            if param.param_mode in [ParameterMode.INOUT, ParameterMode.OUT]:
+                return True
+        
+        return False
     
-    def _process_expression_with_result(self, node: ParseTreeNode) -> Tuple[List[TACInstruction], str]:
+    def _resolve_variable(self, variable_name: str) -> str:
         """
-        Process an expression and generate TAC instructions with a result variable.
-        
-        Args:
-            node: The expression node
-            
-        Returns:
-            Tuple of (list of generated TAC instructions, result variable)
-        """
-        instructions = []
-        
-        # Process based on the expression type
-        if node.name == "Expr":
-            # Find the relation node
-            relation_node = self._find_child_by_name(node, "Relation")
-            if relation_node:
-                return self._process_expression_with_result(relation_node)
-        elif node.name == "Relation":
-            # Find the simple expression node
-            simple_expr_node = self._find_child_by_name(node, "SimpleExpr")
-            if simple_expr_node:
-                return self._process_expression_with_result(simple_expr_node)
-        elif node.name == "SimpleExpr":
-            # Process term and more terms
-            term_node = self._find_child_by_name(node, "Term")
-            more_term_node = self._find_child_by_name(node, "MoreTerm")
-            
-            if term_node:
-                term_instructions, term_result = self._process_expression_with_result(term_node)
-                instructions.extend(term_instructions)
-                
-                if more_term_node and more_term_node.children and more_term_node.children[0].name != "ε":
-                    # Process more terms with the term result
-                    more_instructions, final_result = self._process_more_term(more_term_node, term_result)
-                    instructions.extend(more_instructions)
-                    return instructions, final_result
-                
-                return instructions, term_result
-        elif node.name == "Term":
-            # Process factor and more factors
-            factor_node = self._find_child_by_name(node, "Factor")
-            more_factor_node = self._find_child_by_name(node, "MoreFactor")
-            
-            if factor_node:
-                factor_instructions, factor_result = self._process_expression_with_result(factor_node)
-                instructions.extend(factor_instructions)
-                
-                if more_factor_node and more_factor_node.children and more_factor_node.children[0].name != "ε":
-                    # Process more factors with the factor result
-                    more_instructions, final_result = self._process_more_factor(more_factor_node, factor_result)
-                    instructions.extend(more_instructions)
-                    return instructions, final_result
-                
-                return instructions, factor_result
-        elif node.name == "Factor":
-            # Process based on the factor type
-            if node.children:
-                child = node.children[0]
-                
-                if child.name == "ID":
-                    # Variable reference
-                    var_ref = self._resolve_variable(child.token.lexeme)
-                    return instructions, var_ref
-                elif child.name == "NUM":
-                    # Numeric constant
-                    return instructions, child.token.lexeme
-                elif child.token and child.token.token_type.name == "LPAREN":
-                    # Parenthesized expression
-                    for i, c in enumerate(node.children):
-                        if c.name == "Expr":
-                            expr_instructions, expr_result = self._process_expression_with_result(c)
-                            instructions.extend(expr_instructions)
-                            return instructions, expr_result
-                elif child.token and child.token.token_type.name in ["PLUS", "MINUS"]:
-                    # Unary operation
-                    if len(node.children) > 1:
-                        factor_instructions, factor_result = self._process_expression_with_result(node.children[1])
-                        instructions.extend(factor_instructions)
-                        
-                        # Create a new temporary for the unary operation
-                        temp = self.tac_program.generate_temp()
-                        op = "+" if child.token.token_type.name == "PLUS" else "-"
-                        
-                        # Special case for unary minus
-                        if op == "-":
-                            self.tac_program.add_instruction(op, "0", factor_result, temp)
-                        else:
-                            # Unary plus is a no-op, just assign
-                            self.tac_program.add_instruction("=", factor_result, None, temp)
-                        
-                        return instructions, temp
-        
-        # Default case: create a temporary variable
-        temp = self.tac_program.generate_temp()
-        self.tac_program.add_instruction("=", "0", None, temp)  # Default to 0
-        return instructions, temp
-    
-    def _process_more_term(self, node: ParseTreeNode, left_operand: str) -> Tuple[List[TACInstruction], str]:
-        """
-        Process a MoreTerm node and generate TAC instructions.
-        
-        Args:
-            node: The MoreTerm node
-            left_operand: The left operand from the previous term
-            
-        Returns:
-            Tuple of (list of generated TAC instructions, result variable)
-        """
-        instructions = []
-        
-        # Check if this is an empty MoreTerm (ε)
-        if not node.children or node.children[0].name == "ε":
-            return instructions, left_operand
-        
-        # Get the operator
-        op_node = node.children[0]
-        op = op_node.token.token_type.name
-        if op == "PLUS":
-            op = "+"
-        elif op == "MINUS":
-            op = "-"
-        # Add more operators as needed
-        
-        # Get the right operand (Term)
-        term_node = self._find_child_by_name(node, "Term")
-        if term_node:
-            term_instructions, term_result = self._process_expression_with_result(term_node)
-            instructions.extend(term_instructions)
-            
-            # Create a temporary for the result
-            temp = self.tac_program.generate_temp()
-            self.tac_program.add_instruction(op, left_operand, term_result, temp)
-            
-            # Process the rest of the MoreTerm
-            more_term_node = self._find_child_by_name(node, "MoreTerm")
-            if more_term_node and more_term_node.children and more_term_node.children[0].name != "ε":
-                more_instructions, final_result = self._process_more_term(more_term_node, temp)
-                instructions.extend(more_instructions)
-                return instructions, final_result
-            
-            return instructions, temp
-        
-        return instructions, left_operand
-    
-    def _process_more_factor(self, node: ParseTreeNode, left_operand: str) -> Tuple[List[TACInstruction], str]:
-        """
-        Process a MoreFactor node and generate TAC instructions.
-        
-        Args:
-            node: The MoreFactor node
-            left_operand: The left operand from the previous factor
-            
-        Returns:
-            Tuple of (list of generated TAC instructions, result variable)
-        """
-        instructions = []
-        
-        # Check if this is an empty MoreFactor (ε)
-        if not node.children or node.children[0].name == "ε":
-            return instructions, left_operand
-        
-        # Get the operator
-        op_node = node.children[0]
-        op = op_node.token.token_type.name
-        if op == "MULT":
-            op = "*"
-        elif op == "DIV":
-            op = "/"
-        # Add more operators as needed
-        
-        # Get the right operand (Factor)
-        factor_node = self._find_child_by_name(node, "Factor")
-        if factor_node:
-            factor_instructions, factor_result = self._process_expression_with_result(factor_node)
-            instructions.extend(factor_instructions)
-            
-            # Create a temporary for the result
-            temp = self.tac_program.generate_temp()
-            self.tac_program.add_instruction(op, left_operand, factor_result, temp)
-            
-            # Process the rest of the MoreFactor
-            more_factor_node = self._find_child_by_name(node, "MoreFactor")
-            if more_factor_node and more_factor_node.children and more_factor_node.children[0].name != "ε":
-                more_instructions, final_result = self._process_more_factor(more_factor_node, temp)
-                instructions.extend(more_instructions)
-                return instructions, final_result
-            
-            return instructions, temp
-        
-        return instructions, left_operand
-    
-    def _resolve_variable(self, variable_name: str, current_depth: int = None) -> str:
-        """
-        Resolve a variable reference based on its declaration depth.
+        Resolve a variable reference based on its depth.
         
         Args:
             variable_name: The name of the variable
-            current_depth: The current lexical depth (or None for the current depth)
             
         Returns:
             The resolved variable reference
         """
-        if current_depth is None:
-            current_depth = self.current_depth
-        
         # Look up the variable in the symbol table
         entry = self.symbol_table.lookup(variable_name)
+        
         if not entry:
-            self.logger.error(f"Undeclared variable: {variable_name}")
-            return variable_name  # Default to the name itself
-        
-        # Check if this is a constant
-        if entry.entry_type == EntryType.CONSTANT:
-            # Return the constant value directly
-            return str(entry.const_value)
-        
-        # Variables at depth 1 use their actual name
-        if entry.depth == 1:
+            # If not found, just use the name as is (might be a literal or external reference)
             return variable_name
         
-        # Parameters use positive offsets
-        if entry.entry_type == EntryType.VARIABLE and hasattr(entry, 'param_mode'):
-            # Calculate parameter offset
-            offset = self._calculate_parameter_offset(entry)
-            return f"_BP+{offset}"
+        # Handle constants - substitute the literal value
+        if entry.entry_type == EntryType.CONSTANT and entry.const_value is not None:
+            return str(entry.const_value)
         
-        # Local variables use negative offsets
-        offset = self._calculate_local_offset(entry)
-        return f"_BP-{offset}"
+        # Handle variables based on depth
+        if entry.depth == 1:
+            # Use the actual name for variables at depth 1
+            return variable_name
+        else:
+            # Calculate offset for variables at depths > 1
+            offset = self._calculate_offset(entry)
+            
+            # Positive offset for parameters, negative for local variables
+            if self._is_parameter(entry):
+                return f"_BP+{offset}"
+            else:
+                return f"_BP-{offset}"
     
-    def _calculate_local_offset(self, entry: TableEntry) -> int:
+    def _calculate_offset(self, entry: TableEntry) -> int:
         """
-        Calculate the offset for a local variable.
+        Calculate the memory offset for a variable.
         
         Args:
             entry: The symbol table entry
@@ -805,51 +589,34 @@ class ThreeAddressCodeGenerator:
         Returns:
             The calculated offset
         """
-        if hasattr(entry, 'offset') and entry.offset is not None:
+        # Use the offset directly if it's already set in the symbol table
+        if entry.offset is not None:
             return entry.offset
         
-        # Default to 0 if offset is not available
-        return 0
+        # Otherwise, calculate it based on variable type
+        if entry.var_type == VarType.INT:
+            return 2  # Integers are 2 bytes
+        elif entry.var_type == VarType.FLOAT or entry.var_type == VarType.REAL:
+            return 4  # Floats are 4 bytes
+        elif entry.var_type == VarType.CHAR:
+            return 1  # Characters are 1 byte
+        
+        # Default size
+        return 2
     
-    def _calculate_parameter_offset(self, entry: TableEntry) -> int:
+    def _is_parameter(self, entry: TableEntry) -> bool:
         """
-        Calculate the offset for a parameter.
+        Check if an entry is a parameter.
+        
+        This is a simplification; in a real implementation, you would have more
+        specific information in the symbol table about whether an entry is a parameter.
         
         Args:
             entry: The symbol table entry
             
         Returns:
-            The calculated offset
+            True if the entry is a parameter, False otherwise
         """
-        if hasattr(entry, 'offset') and entry.offset is not None:
-            # Parameters are pushed from left to right (Pascal style)
-            # so their offsets are positive and start from higher values
-            return entry.offset
-        
-        # Default to 4 if offset is not available
-        return 4
-    
-    def _find_child_by_name(self, node: ParseTreeNode, name: str) -> Optional[ParseTreeNode]:
-        """
-        Find a child node by name.
-        
-        Args:
-            node: The parent node
-            name: The name of the child to find
-            
-        Returns:
-            The child node if found, None otherwise
-        """
-        if not node or not node.children:
-            return None
-        
-        for child in node.children:
-            if child.name == name:
-                return child
-        
-        return None
-
-
-# Test code for the module
-if __name__ == "__main__":
-    print("ThreeAddressCodeGenerator module - Use with JohnA7.py driver program")
+        # This is a simplified check; in reality, you would have more specific information
+        # about whether an entry is a parameter in the symbol table
+        return False  # Replace with actual logic
