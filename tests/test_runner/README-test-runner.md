@@ -16,18 +16,18 @@ This tool allows you to easily run any of your driver files (JohnA1, JohnA3, etc
 
 ## Usage
 
-1. Navigate to the Ada_Compiler_Construction directory
-1. Run the test runner:
+1. Navigate to the project root directory (where you ran `pip install -e .`).
+2. Run the test runner tool:
 
 ```bash
-# Basic usage
-python test_runner.py
+# Interactive mode
+python tests/test_runner/test_runner.py
 
 # With a custom configuration file
-python test_runner.py --config test_runner_config.json
+python tests/test_runner/test_runner.py --config test_runner_config.json
 
 # Batch mode: run all tests with a specific driver
-python test_runner.py --driver JohnA6 --all-tests
+python tests/test_runner/test_runner.py --driver JohnA6 --all-tests
 ```
 
 1. Follow the prompts to select a driver and a test file

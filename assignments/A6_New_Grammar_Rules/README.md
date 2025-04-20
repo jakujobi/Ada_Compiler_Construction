@@ -1,5 +1,23 @@
 # Assignment 6: Ada Compiler - Semantic Analysis
 
+## Installation and Usage
+
+To install the `jakadac` package and make drivers available:
+```bash
+cd <project-root>
+pip install -e .
+```
+
+To run the A6 compiler driver on an Ada source file:
+```bash
+python assignments/A6_New_Grammar_Rules/JohnA6.py <source_file.ada>
+```
+
+Or use the central test runner for batch/interactive mode:
+```bash
+python tests/test_runner/test_runner.py --driver JohnA6 [--all-tests]
+```
+
 ## Overview
 
 This assignment extends the Ada compiler with semantic analysis capabilities, focusing on type checking, symbol table management, and constant declaration handling. The compiler now performs a three-stage process: lexical analysis, syntax analysis, and semantic analysis.
