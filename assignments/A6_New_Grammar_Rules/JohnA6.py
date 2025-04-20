@@ -47,19 +47,34 @@ from typing import List, Dict, Optional, Any, Tuple
 import traceback
 # from prettytable import PrettyTable
 
-# Add the parent directory to the path so we can import modules
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
 
-# Import modules
-from Modules.Token import Token
-from Modules.Definitions import Definitions
-from Modules.LexicalAnalyzer import LexicalAnalyzer
-from Modules.AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
-from Modules.FileHandler import FileHandler
-from Modules.Logger import Logger
-from Modules.SemanticAnalyzer import SemanticAnalyzer
-from Modules.RDParserExtended import RDParserExtended
+try:
+    import jakadac
+    from jakadac.modules.Driver import BaseDriver
+    from jakadac.modules.Logger import Logger
+    from jakadac.modules.AdaSymbolTable import *
+    from jakadac.modules.SemanticAnalyzer import *
+    from jakadac.modules.RDParser import *
+    from jakadac.modules.RDParserExtended import *
+    from jakadac.modules.FileHandler import *
+    from jakadac.modules.Token import *
+    from jakadac.modules.Definitions import *
+    from jakadac.modules.LexicalAnalyzer import *
+except:
+    # Add 'src' directory to path for local imports
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    sys.path.append(repo_root)
+    from src.jakadac.modules.Driver import BaseDriver
+    from src.jakadac.modules.Logger import Logger
+    from src.jakadac.modules.AdaSymbolTable import *
+    from src.jakadac.modules.SemanticAnalyzer import *
+    from src.jakadac.modules.RDParser import *
+    from src.jakadac.modules.RDParserExtended import *
+    from src.jakadac.modules.FileHandler import *
+    from src.jakadac.modules.Token import *
+    from src.jakadac.modules.Definitions import *
+    from src.jakadac.modules.LexicalAnalyzer import *
+
 
 class JohnA6:
     @classmethod    
