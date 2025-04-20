@@ -16,7 +16,7 @@ authors = [
 ]
 
 # --- MODIFIED SECTION START ---
-license = { file = "LICENSE" } # Points to the LICENSE file you created in the root
+license = { file = "LICENSE.MD" } # Points to the LICENSE file you created in the root
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
