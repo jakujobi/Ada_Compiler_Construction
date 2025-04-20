@@ -90,11 +90,11 @@ import sys
 import os
 import logging
 
-# Set the repository home path for module imports.
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
+# # Set the repository home path for module imports.
+# repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# sys.path.append(repo_home_path)
 
-from Modules.Logger import Logger
+from .Logger import Logger
 
 # Try to import Tkinter for GUI file explorer; if not available, fall back to manual input.
 try:

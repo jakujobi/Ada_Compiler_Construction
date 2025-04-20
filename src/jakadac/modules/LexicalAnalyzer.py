@@ -15,13 +15,13 @@ import logging
 from typing import List, Optional
 from pathlib import Path
 
-# Setup the repository home path so that we can import modules from the parent directory.
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
+# # Setup the repository home path so that we can import modules from the parent directory.
+# repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# sys.path.append(repo_home_path)
 
-from Modules.Token import Token
-from Modules.Definitions import Definitions
-from Modules.Logger import Logger
+from .Token import Token
+from .Definitions import Definitions
+from .Logger import Logger
 
 class LexicalAnalyzer:
     # A special marker (object) used to signal that a token should be skipped.

@@ -15,13 +15,13 @@ import logging
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
-from Modules.Token import Token
-from Modules.Definitions import Definitions
-from Modules.Logger import Logger
-from Modules.LexicalAnalyzer import LexicalAnalyzer
-from Modules.FileHandler import FileHandler
-from Modules.RDParser import RDParser
-from Modules.SemanticAnalyzer import SemanticAnalyzer
+from .Token import Token
+from .Definitions import Definitions
+from .Logger import Logger
+from .LexicalAnalyzer import LexicalAnalyzer
+from .FileHandler import FileHandler
+from .RDParser import RDParser
+from .SemanticAnalyzer import SemanticAnalyzer
 
 
 class BaseDriver:

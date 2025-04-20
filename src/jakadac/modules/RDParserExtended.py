@@ -35,11 +35,11 @@ from typing import List, Optional
 import traceback
 
 
-from Modules.RDParser import RDParser, ParseTreeNode
-from Modules.Token import Token
-from Modules.Definitions import Definitions
-from Modules.Logger import Logger
-from Modules.AdaSymbolTable import AdaSymbolTable
+from .RDParser import RDParser, ParseTreeNode
+from .Token import Token
+from .Definitions import Definitions
+from .Logger import Logger
+from .AdaSymbolTable import AdaSymbolTable
 
 
 class RDParserExtended(RDParser):
