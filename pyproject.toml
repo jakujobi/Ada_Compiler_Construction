@@ -1,0 +1,48 @@
+# Ada_Compiler_Construction/pyproject.toml
+
+[build-system]
+# Specifies that setuptools will be used to build the package
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jakadac"
+version = "0.1.0"
+description = "An Ada compiler front-end implemented in Python."
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+  { name="Your Name", email="your.email@example.com" }, # Replace with your details
+]
+
+# --- MODIFIED SECTION START ---
+license = { file = "LICENSE" } # Points to the LICENSE file you created in the root
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    # Use a general classifier as Hippocratic License isn't OSI approved/standard PyPI list
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Topic :: Software Development :: Compilers",
+]
+# --- MODIFIED SECTION END ---
+
+keywords = ["ada", "compiler", "parser", "lexer", "semantic analyzer", "python"]
+
+# Optional: Project URLs
+# [project.urls]
+# Homepage = "https://github.com/your_username/Ada_Compiler_Construction"
+# Repository = "https://github.com/your_username/Ada_Compiler_Construction"
+# License = "https://firstdonoharm.dev/version/3/0/bod-cl-eco-law-media-mil-sv.html" # Good place to add the URL
+
+# ... (Keep other sections like [tool.setuptools.packages.find] as they were) ...
+
+[tool.setuptools.packages.find]
+where = ["src"]
