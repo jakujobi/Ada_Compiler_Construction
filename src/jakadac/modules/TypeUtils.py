@@ -11,7 +11,7 @@ This module provides utility functions and mappings for type conversion
 between different representations of types across the compiler components.
 """
 
-from Modules.AdaSymbolTable import VarType
+from .AdaSymbolTable import VarType
 
 class TypeUtils:
     """

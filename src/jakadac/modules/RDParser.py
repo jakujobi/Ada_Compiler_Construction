@@ -51,9 +51,10 @@ attribute access on potentially None objects, and proper type hints
 to support static type checking.
 """
 from typing import List, Optional, Any, Dict, Union
-from Modules.Token import Token
-from Modules.Definitions import Definitions
-from Modules.Logger import Logger
+
+from .Token import Token
+from .Definitions import Definitions
+from .Logger import Logger
 
 class RDParser:
     def __init__(self, tokens, defs, stop_on_error=False, panic_mode_recover=False, build_parse_tree=False):

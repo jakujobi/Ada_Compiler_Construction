@@ -23,16 +23,17 @@ when possible, or stops at the first error if configured to do so.
 import os
 import sys
 from typing import List, Dict, Optional, Any, Tuple
+from prettytable import PrettyTable
 
-# Add the parent directory to the path so we can import modules
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
+# # Add the parent directory to the path so we can import modules
+# repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# sys.path.append(repo_home_path)
 
-from Modules.Token import Token
-from Modules.Definitions import Definitions
-from Modules.RDParser import ParseTreeNode
-from Modules.AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
-from Modules.Logger import Logger
+from .Token import Token
+from .Definitions import Definitions
+from .RDParser import ParseTreeNode
+from .AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
+from .Logger import Logger
 
 
 class SemanticAnalyzer:

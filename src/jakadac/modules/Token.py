@@ -15,11 +15,14 @@ import sys
 from typing import List, Optional
 from pathlib import Path
 
-# Set up the repository home path so that we can import modules from the parent directory.
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
+# # Set up the repository home path so that we can import modules from the parent directory.
+# repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# sys.path.append(repo_home_path)
 
-from Modules.Logger import Logger
+# from Modules.Logger import Logger
+
+from .Logger import Logger
+
 
 class Token:
     def __init__(self, token_type, lexeme, line_number, column_number,

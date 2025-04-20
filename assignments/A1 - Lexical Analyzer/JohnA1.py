@@ -21,16 +21,25 @@ Usage:
 
 import os
 import sys
+
 import logging
 from pathlib import Path
 from typing import Optional
 
-# Add the parent directory to the path so we can import modules
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
+# Attempt to import from installed package; fallback for local development
+try:
+    import jakadac
+    from jakadac.modules.Driver import BaseDriver
+    from jakadac.modules.Logger import Logger
+except:
+    # Add 'src' directory to path for local imports
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    sys.path.append(repo_root)
+    from src.jakadac.modules.Driver import BaseDriver
+    from src.jakadac.modules.Logger import Logger
 
-from Modules.Driver import BaseDriver
-from Modules.Logger import Logger
+
+
 
 
 class JohnA1(BaseDriver):
