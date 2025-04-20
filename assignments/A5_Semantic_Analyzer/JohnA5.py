@@ -36,7 +36,7 @@ try:
     from jakadac.modules.Token import *
     from jakadac.modules.Definitions import *
     from jakadac.modules.LexicalAnalyzer import *
-except (ImportError, FileNotFoundError):
+except (ImportError, FileNotFoundError): # Handle cases where jakadac is not installed or files are missing
     # Add 'src' directory to path for local imports
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     sys.path.append(repo_root)
