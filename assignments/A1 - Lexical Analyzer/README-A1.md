@@ -52,30 +52,31 @@ Detailed debugging and logging are provided via a custom Logger, and file operat
     Serves as the main driver. It uses FileHandler to read a source file, invokes the LexicalAnalyzer to tokenize the file, and then prints (and optionally writes) the token table.
 
 ---
-## How to Run
+## Installation and Usage
+
+To install the compiler package in editable mode:
+```bash
+cd <project-root>
+pip install -e .
+```
+
+To run the Lexical Analyzer:
+```bash
+python assignments/A1\ -\ Lexical\ Analyzer/JohnA1.py <input_file.ada> [output_file.txt]
+```
+
+Or use the test runner to batch or interactive test:
+```bash
+python tests/test_runner/test_runner.py --driver JohnA1 [--all-tests]
+```
 
 ### Prerequisites
-- **Python 3.6+**
-- Tkinter (optional): For the file explorer functionality. If not installed, the program will prompt you to enter file paths manually.
-
-### Installation
-1. **Clone the Repository:**
-    ```bash
-    git clone https://github.com/jakujobi/Ada_Compiler_Construction.git
-    ```
-2. Navigate to the Directory:**
-    ```bash
-    cd Ada_Compiler_Construction
-    cd A1 - lexical Analyzer
-    ```
-3. **Set Up a Virtual Environment (Optional):**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate  # For Windows: venv\Scripts\activate
-    ```
+- Python 3.6+
+- Tkinter (optional for file explorer)
+- prettytable (optional for symbol table)
 
 ### Running the Analyzer
-To run the lexical analyzer, use the following command:
+To run the lexical analyzer, use:
 ```bash
 python3 JohnA1.py <input_file.ada> [output_file.txt]
 ```

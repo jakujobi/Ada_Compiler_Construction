@@ -8,13 +8,21 @@ This document outlines the improvements made to the Ada Compiler Construction co
 2. Implementing null safety checks
 3. Improving error handling
 
+- Added `pip install -e .` support to install the `jakadac` package in editable mode (src layout).
+- Updated directory layout to use **src/jakadac**, **assignments**, **tests/unit_tests**, and **tests/test_runner**.
+- Moved test files under `tests/test_files` and updated the TestRunner to point there.
+- Refactored `_print_tree` in `RDParser.py` to use ASCII connectors (+--, |--) instead of Unicode box-drawing characters to avoid encoding issues.
+
 ## Modified Files
 
-The following files were updated:
+The following key files were updated:
 
-- `Modules/RDParser.py`
-- `A3_Recursive_Parser/JohnA3.py`
-- `A1 - Lexical Analyzer/JohnA1.py`
+- **pyproject.toml**: Added `prettytable` dependency and configured src layout.
+- **src/jakadac/modules/RDParser.py**: Switched parse-tree connectors to ASCII.
+- **tests/test_runner/test_runner.py**: Adjusted import paths; updated test-files directory to `tests/test_files`.
+- **README.md** &mdash; Updated installation and usage instructions for editable installs and new layout.
+- **tests/test_runner/README-test-runner.md**: Updated runner invocation paths and examples.
+- **Assignment README.md files**: Added clear instructions to install via `pip install -e .` and updated sample commands to use `tests/test_files` and `tests/test_runner` paths.
 
 ## Type Annotation Improvements
 
@@ -134,6 +142,9 @@ For future code maintenance, consider:
 3. Implementing a more robust error recovery strategy
 4. Adding function-level pre and post-condition checks
 5. Adopting a more systematic approach to error reporting
+
+- Consider replacing `prettytable` with `tabulate` or `rich` for lighter-weight or more flexible table rendering.
+- Add console entry points (via `setup.cfg` or `pyproject.toml` `[project.scripts]`) to run drivers and the test runner more directly (e.g., `jakadac-a1`, `jakadac-test`).
 
 ## Conclusion
 

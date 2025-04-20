@@ -1,5 +1,23 @@
 # Ada Compiler Construction - Assignment 5: Semantic Analyzer
 
+## Installation and Usage
+
+To install the compiler package in editable (development) mode:
+```bash
+cd <project-root>
+pip install -e .
+```
+
+To run the semantic analyzer driver on an Ada source file:
+```bash
+python assignments/A5_Semantic_Analyzer/JohnA5.py <input_file.ada>
+```
+
+To run all tests or interactive runs via the central test runner:
+```bash
+python tests/test_runner/test_runner.py --driver JohnA5 [--all-tests]
+```
+
 ## Overview
 
 This project implements a compiler for a subset of the Ada programming language, focusing on the integration of lexical analysis, syntax analysis, and semantic analysis phases. The main component, `JohnA5.py`, orchestrates these phases and ensures they work together seamlessly.

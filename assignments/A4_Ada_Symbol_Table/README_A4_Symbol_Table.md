@@ -4,6 +4,29 @@
 
 This project implements a symbol table for an Ada compiler, a crucial component for managing identifiers and their associated information during the compilation process. The symbol table tracks variables, constants, procedures, and their attributes across different scopes.
 
+## Installation and Usage
+
+To install the `jakadac` package in editable (development) mode:
+```bash
+cd <project-root>
+pip install -e .
+```
+
+To run the symbol table demonstration driver:
+```bash
+python assignments/A4_Ada_Symbol_Table/JohnA4.py
+```
+
+To run the symbol-table unit tests:
+```bash
+python assignments/A4_Ada_Symbol_Table/TestSymbolTable.py
+```
+
+Or use the centralized test runner:
+```bash
+python tests/test_runner/test_runner.py --driver JohnA4 [--all-tests]
+```
+
 ## Key Features
 
 - **Hash Table Implementation**: Efficient lookup using a hash table with chaining for collision resolution
