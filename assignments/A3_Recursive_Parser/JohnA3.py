@@ -35,7 +35,7 @@ except (ImportError, FileNotFoundError):
     sys.path.append(repo_root)
     from src.jakadac.modules.Driver import BaseDriver
     from src.jakadac.modules.Logger import Logger
-    from src.jakadac.modules.RDParser import RDParser
+except (ImportError, FileNotFoundError): # Handle cases where jakadac is not installed or files are missing
 class JohnA3(BaseDriver):
     """
     Driver class for Assignment 3: Recursive Descent Parser
