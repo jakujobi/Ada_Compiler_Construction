@@ -37,7 +37,7 @@ except (ImportError, FileNotFoundError):
     from src.jakadac.modules.Driver import BaseDriver
     from src.jakadac.modules.Logger import Logger
     from src.jakadac.modules.RDParser import RDParser
-    from src.jakadac.modules.RDParser import RDParser
+
 class JohnA3(BaseDriver):
     """
     Driver class for Assignment 3: Recursive Descent Parser
