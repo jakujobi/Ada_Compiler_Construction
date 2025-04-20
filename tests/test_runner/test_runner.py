@@ -24,18 +24,27 @@ import json
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Any, Union
 
-# Add the parent directory to the path so we can import modules
-repo_home_path = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(repo_home_path)
+try:
+    import jakadac
+    from jakadac.modules.Logger import Logger
+except (ImportError, FileNotFoundError):
+    # Add 'src' directory to path for local imports
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    sys.path.append(repo_root)
+    from src.jakadac.modules.Logger import Logger
 
-from Modules.Logger import Logger
-
+# Determine project root and test files directory
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+TEST_FILES_DIR = os.path.join(PROJECT_ROOT, 'tests', 'test_files')
 
 class TestRunner:
     """
     Test Runner for Ada Compiler Construction
     Allows running any driver file on any test file
     """
+
+    # CLI args annotation for batch mode
+    cli_args: Optional[argparse.Namespace]
 
     def __init__(self, config_file: Optional[str] = None):
         """
@@ -44,6 +53,9 @@ class TestRunner:
         Args:
             config_file: Optional path to a configuration file
         """
+        # Initialize CLI args to None
+        self.cli_args = None
+
         # Load configuration
         self.config = self._load_config(config_file)
         
@@ -52,13 +64,13 @@ class TestRunner:
         self.logger = Logger(log_level_console=log_level)
         self.logger.info("Initializing Test Runner")
         
-        # Get the repository home path
-        self.repo_home = repo_home_path
+        # Set repository home path
+        self.repo_home = PROJECT_ROOT
         
         # Find all driver files
         self.driver_files = self._find_driver_files()
         
-        # Find all test files
+        # Find all test files under tests/test_files
         self.test_files = self._find_test_files()
         
         self.logger.info(f"Found {len(self.driver_files)} driver files and {len(self.test_files)} test files")
@@ -131,13 +143,13 @@ class TestRunner:
 
     def _find_test_files(self) -> Dict[str, str]:
         """
-        Find all test files in the test_files directory and its subdirectories.
+        Find all test files in the tests/test_files directory and its subdirectories.
         
         Returns:
             Dict mapping test file name to full path
         """
         test_files = {}
-        test_dir = os.path.join(self.repo_home, self.config.get('test_directory', 'test_files'))
+        test_dir = TEST_FILES_DIR
         extensions = self.config.get('test_file_extensions', ['.ada'])
         
         if not os.path.exists(test_dir):
@@ -145,18 +157,14 @@ class TestRunner:
             return test_files
         
         try:
-            # Find all test files with specified extensions
             for ext in extensions:
                 for file_path in glob.glob(os.path.join(test_dir, "**", f"*{ext}"), recursive=True):
-                    # Get the relative path from the test_files directory
                     rel_path = os.path.relpath(file_path, test_dir)
                     test_files[rel_path] = file_path
-                    
             return test_files
-            
         except Exception as e:
             self.logger.error(f"Error finding test files: {e}")
-            return {}
+            return test_files
 
     def _display_menu(self, title: str, items: Dict[str, str]) -> Optional[str]:
         """
@@ -260,16 +268,19 @@ class TestRunner:
         print("=====================================")
         
         # Batch mode: if driver and all-tests flags provided, run all tests automatically
-        if hasattr(self, 'cli_args') and getattr(self.cli_args, 'driver', None) and getattr(self.cli_args, 'all_tests', False):
-            self.logger.info(f"Batch mode: running driver {self.cli_args.driver} against all test files")
-            driver_path = self.driver_files.get(self.cli_args.driver)
-            if not driver_path:
-                self.logger.error(f"Driver not found: {self.cli_args.driver}")
+        if self.cli_args is not None:
+            driver = getattr(self.cli_args, 'driver', None)
+            all_tests = getattr(self.cli_args, 'all_tests', False)
+            if driver and all_tests:
+                self.logger.info(f"Batch mode: running driver {driver} against all test files")
+                driver_path = self.driver_files.get(driver)
+                if not driver_path:
+                    self.logger.error(f"Driver not found: {driver}")
+                    return
+                for test_name, test_path in sorted(self.test_files.items()):
+                    self.run_test(driver_path, test_path)
+                self.logger.info("Batch run completed")
                 return
-            for test_name, test_path in sorted(self.test_files.items()):
-                self.run_test(driver_path, test_path)
-            self.logger.info("Batch run completed")
-            return
         
         while True:
             # Let the user select a driver
