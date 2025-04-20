@@ -27,7 +27,7 @@ try:
     from jakadac.modules.Driver import BaseDriver
     from jakadac.modules.Logger import Logger
     from jakadac.modules.AdaSymbolTable import *
-except ImportError:
+except (ImportError, FileNotFoundError):
     # Add 'src' directory to path for local imports
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     sys.path.append(repo_root)
