@@ -26,8 +26,8 @@ from typing import List, Dict, Optional, Any, Tuple
 
 try:
     from prettytable import PrettyTable
-except ImportError:
-    raise ImportError("prettytable is not installed. Please install it using 'pip install prettytable'.")
+except Exception as e:
+    raise ImportError(f"Failed to import prettytable: {e}")
 
 # # Add the parent directory to the path so we can import modules
 # repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
