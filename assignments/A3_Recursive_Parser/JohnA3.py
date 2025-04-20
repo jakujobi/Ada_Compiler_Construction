@@ -29,13 +29,13 @@ try:
     import jakadac
     from jakadac.modules.Driver import BaseDriver
     from jakadac.modules.Logger import Logger
-except:
+except ImportError:
     # Add 'src' directory to path for local imports
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     sys.path.append(repo_root)
     from src.jakadac.modules.Driver import BaseDriver
     from src.jakadac.modules.Logger import Logger
-    from src.jakadac.modules.Logger import RDParser
+    from src.jakadac.modules.RDParser import RDParser
 class JohnA3(BaseDriver):
     """
     Driver class for Assignment 3: Recursive Descent Parser
