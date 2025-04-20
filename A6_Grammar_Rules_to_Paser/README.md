@@ -6,7 +6,11 @@ This assignment extends the Ada compiler with semantic analysis capabilities, fo
 
 ## Features Implemented
 
-### 1. Semantic Analysis
+### 1. Multiple Procedure Support
+
+- Extended parser handles `ProgramList` root, allowing multiple top-level procedures in one source file.
+
+### 2. Semantic Analysis
 
 - Type checking for variable and constant declarations
 - Symbol table management for tracking identifiers and their types
@@ -14,13 +18,13 @@ This assignment extends the Ada compiler with semantic analysis capabilities, fo
 - Scope management for nested procedures
 - Parameter mode handling (IN, OUT, INOUT)
 
-### 2. Constant Declaration Handling
+### 3. Constant Declaration Handling
 
 - Type inference from assigned values
 - Proper registration in the symbol table
 - Error reporting for invalid constant declarations
 
-### 3. Symbol Table
+### 4. Symbol Table
 
 - Tracks variables, constants, and procedures
 - Maintains type information
@@ -78,6 +82,7 @@ This will:
 - Fixed constant declaration handling to properly infer types from assigned values
 - Improved error reporting for invalid constant declarations
 - Enhanced logging configuration to reduce console clutter
+- Added multiple procedure support in parser (ProgramList root)
 
 ## Compilation Process
 

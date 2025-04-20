@@ -123,6 +123,9 @@ class JohnA6:
         self.syntax_errors = []
         self.semantic_errors = []
 
+        # Detect interactive mode for verbose output
+        self.interactive = sys.stdout.isatty()
+        
         # Start the process
         self.run()
 
@@ -204,6 +207,8 @@ class JohnA6:
         if not self.source_code:
             self.logger.warning("No source code to print.")
             return
+        if not getattr(self, 'interactive', True):
+            return
         print(self.source_code)
         self.logger.debug("Source code printed to console.")
 
@@ -217,6 +222,9 @@ class JohnA6:
         """
         if not self.tokens:
             self.logger.warning("No tokens to format.")
+            return
+        if not getattr(self, 'interactive', True):
+            self.logger.debug("Skipping token table printing (non-interactive mode).")
             return
 
         # Create a header for the token table.
@@ -268,6 +276,8 @@ class JohnA6:
         """
         if not self.tokens:
             self.logger.warning("No tokens to print.")
+            return
+        if not getattr(self, 'interactive', True):
             return
         for token in self.tokens:
             print(token)

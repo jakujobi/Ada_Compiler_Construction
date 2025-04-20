@@ -17,7 +17,7 @@ This tool allows you to easily run any of your driver files (JohnA1, JohnA3, etc
 ## Usage
 
 1. Navigate to the Ada_Compiler_Construction directory
-2. Run the test runner:
+1. Run the test runner:
 
 ```bash
 # Basic usage
@@ -25,11 +25,14 @@ python test_runner.py
 
 # With a custom configuration file
 python test_runner.py --config test_runner_config.json
+
+# Batch mode: run all tests with a specific driver
+python test_runner.py --driver JohnA6 --all-tests
 ```
 
-3. Follow the prompts to select a driver and a test file
-4. View the output of the test run
-5. Choose to run another test or exit
+1. Follow the prompts to select a driver and a test file
+1. View the output of the test run
+1. Choose to run another test or exit
 
 ## Configuration
 
@@ -81,7 +84,7 @@ The test runner:
 
 ## Example
 
-```
+```text
 Ada Compiler Construction Test Runner
 =====================================
 
@@ -180,4 +183,11 @@ Run another test? (y/n): n
 - If a driver file requires additional arguments, you may need to modify the test runner
 - The test runner only looks for .ada files in the test_files directory by default, but this can be configured
 - The test runner has a timeout of 30 seconds by default, but this can be configured
-- Large test outputs are truncated to prevent overwhelming the console 
+- Large test outputs are truncated to prevent overwhelming the console
+
+## Batch Mode
+
+To run all available tests with a specific driver:
+
+```bash
+python test_runner.py --driver JohnA6 --all-tests

@@ -3,13 +3,16 @@
 # Author: John Akujobi
 # GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
 # Date: 2024-03-31
-# Version: 1.0
+# Version: 1.1
 """
 Driver program for Assignment 3: Recursive Descent Parser for Ada Compiler
 
 This program demonstrates the syntax analysis phase of the compiler:
 1. Lexical Analysis: Tokenizes the source code
 2. Syntax Analysis: Parses the tokens using a recursive descent parser
+
+The implementation includes proper type annotations with Optional types
+for parameters that can be None, ensuring type safety and improved code quality.
 
 Usage:
     python JohnA3.py <input_file> [output_file]
@@ -19,7 +22,7 @@ import os
 import sys
 import logging
 from pathlib import Path
-
+from typing import Optional, List
 # Add the parent directory to the path so we can import modules
 repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_home_path)
@@ -35,7 +38,7 @@ class JohnA3(BaseDriver):
     Inherits from BaseDriver to reuse common functionality
     """
 
-    def __init__(self, input_file_name: str, output_file_name: str = None, debug: bool = False, logger: Logger = None):
+    def __init__(self, input_file_name: str, output_file_name: Optional[str] = None, debug: bool = False, logger: Optional[Logger] = None):
         """
         Initialize the JohnA3 driver.
 
