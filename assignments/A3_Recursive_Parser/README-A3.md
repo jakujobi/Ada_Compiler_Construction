@@ -95,8 +95,27 @@ SeqOfStatements -> ε
 
 ---
 ## How to Run
++## Installation and Usage
++
++To install the `jakadac` package and make the parser driver available:
++```bash
++cd <project-root>
++pip install -e .
++```
++
++Then you can run the parser directly from the assignments folder:
++```bash
++python assignments/A3_Recursive_Parser/JohnA3.py <input_file.ada> [output_file.txt]
++```
++
++Or use the central test runner:
++```bash
++python tests/test_runner/test_runner.py --driver JohnA3 [--all-tests]
++```
+
 ### Prerequisites
 - **Python 3.10+**
+- **prettytable** (optional for symbol table)
 - Ensure you have the **Lexical Analyzer** (`JohnA1.py`) working, as it generates the token list.
 ### Installation
 #### 1. Clone the Repository:

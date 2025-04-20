@@ -25,43 +25,48 @@ For detailed information about the code improvements, see [IMPROVEMENTS.md](./IM
 
 ## Project Structure
 
-- **A1 - Lexical Analyzer**: Tokenizes Ada source code
-- **A3_Recursive_Parser**: Parses tokens using recursive descent
-- **A4_Ada_Symbol_Table**: Implements symbol table management
-- **A5_Semantic_Analyzer**: Performs semantic analysis
-- **A6_Grammar_Rules_to_Paser**: Handles enhanced grammar rules and supports multiple procedures
-- **Modules**: Common modules used across different compiler phases
-- **test_files**: Test cases for different compiler features
+- **src**: The `jakadac` package containing all compiler modules (lexer, parser, semantic analyzer, etc.)
+- **assignments**: Driver scripts and test files for each assignment phase
+- **tests**: Unit tests and the test runner tool
+- **docs**: Additional documentation (IMPROVEMENTS.md)
+- **requirements.txt**: Runtime dependencies
+- **pyproject.toml**: Build and project metadata
 
-## Testing
+## Installation
 
-The project includes a test runner that makes it easier to run different compiler phases with various test files. For detailed usage, see [README-test-runner.md](./README-test-runner.md).
-
-### Sample Commands
+Go to the root of the repository
 
 ```bash
-# Interactive mode
-python test_runner.py
+cd Ada_Compiler_Construction
+```
 
-# Batch mode: run all tests with a specific driver
-python test_runner.py --driver JohnA6 --all-tests
+To install the package in editable (development) mode:
+
+```bash
+pip install -e .
 ```
 
 ## Getting Started
 
-1. Clone the repository
-2. Navigate to the Ada_Compiler_Construction directory
-3. Run individual driver files or use the test runner:
+After installation, you can run individual drivers or use the test runner from the project root.
 
 ```bash
 # Run a specific driver on a test file
-python A1\ -\ Lexical\ Analyzer/JohnA1.py test_files/tf_add.ada
+python assignments/A1\ -\ Lexical\ Analyzer/JohnA1.py tests/test_files/tf_add.ada
 
-# Use the test runner
-python test_runner.py
+# Run the test runner tool
+python tests/test_runner/test_runner.py
+```
+
+## Testing
+
+You can also use the test runner in batch mode:
+
+```bash
+python tests/test_runner/test_runner.py --driver JohnA6 --all-tests
 ```
 
 ## Author
 
-John Akujobi  
-GitHub: [jakujobi](https://github.com/jakujobi/Ada_Compiler_Construction) 
+John Akujobi
+GitHub: [jakujobi](https://github.com/jakujobi/Ada_Compiler_Construction)

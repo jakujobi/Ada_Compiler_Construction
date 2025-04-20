@@ -192,11 +192,12 @@ class RDParser:
     def _print_tree(self, node, prefix="", is_last=True):
         """
         Recursive helper to print a parse tree node with wide indentation.
-        Uses connectors (├──, └──, │) to visually trace the tree structure.
+        Uses ASCII connectors (+--, |--) to avoid Unicode rendering issues.
         """
-        connector = "└── " if is_last else "├── "
+        # Use ASCII connectors to avoid Unicode issues
+        connector = "+-- " if is_last else "|-- "
         print(prefix + connector + str(node))
-        new_prefix = prefix + ("    " if is_last else "│   ")
+        new_prefix = prefix + ("    " if is_last else "|   ")
         child_count = len(node.children)
         for i, child in enumerate(node.children):
             self._print_tree(child, new_prefix, i == (child_count - 1))

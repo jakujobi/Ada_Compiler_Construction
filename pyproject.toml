@@ -36,6 +36,10 @@ classifiers = [
 
 keywords = ["ada", "compiler", "parser", "lexer", "semantic analyzer", "python"]
 
+dependencies = [
+  "prettytable>=3.0.0"  # Specify prettytable. You can adjust the version constraint if needed.
+]
+
 # Optional: Project URLs
 # [project.urls]
 # Homepage = "https://github.com/your_username/Ada_Compiler_Construction"
