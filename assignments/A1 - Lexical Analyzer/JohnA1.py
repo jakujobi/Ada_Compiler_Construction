@@ -31,7 +31,7 @@ try:
     import jakadac
     from jakadac.modules.Driver import BaseDriver
     from jakadac.modules.Logger import Logger
-except (ImportError, FileNotFoundError):
+except (ImportError, FileNotFoundError): # Handle cases where jakadac is not installed or files are missing
     # Add 'src' directory to path for local imports
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     sys.path.append(repo_root)
