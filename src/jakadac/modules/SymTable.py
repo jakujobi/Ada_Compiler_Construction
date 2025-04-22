@@ -43,7 +43,8 @@ except ImportError:
 
 
 try:
-    from .Token import Token
+    # Import Token (shared); ignore type mismatches
+    from .Token import Token  # type: ignore
 except ImportError:
     # Define a dummy Token for standalone testing if needed
     class Token:
@@ -294,6 +295,51 @@ class SymbolTable:
         if not self._scope_stack:
             return {}
         return self._scope_stack[-1].copy() # Return a copy
+
+    def __str__(self) -> str:
+        """
+        Return a formatted string representation of the current scope's symbol table.
+        """
+        symbols = self.get_current_scope_symbols()
+        depth = self.current_depth
+        lines = []
+        lines.append(f"=== Symbol Table at depth {depth} ===")
+        if not symbols:
+            lines.append("<empty>")
+            return "\n".join(lines)
+        # Define columns
+        headers = ["Lexeme", "Class", "Type", "Offset", "Size", "Value", "Params", "LocalSize"]
+        rows = []
+        for sym in symbols.values():
+            lex = sym.name
+            cls = sym.entry_type.name
+            typ = ""
+            offset = ""
+            size = ""
+            value = ""
+            params = ""
+            localsz = ""
+            if sym.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
+                typ = sym.var_type.name if sym.var_type else ""
+                offset = str(sym.offset) if sym.offset is not None else ""
+                size = str(sym.size) if sym.size is not None else ""
+            elif sym.entry_type == EntryType.CONSTANT:
+                typ = sym.var_type.name if sym.var_type else ""
+                value = str(sym.const_value)
+            elif sym.entry_type == EntryType.PROCEDURE:
+                params = str(len(sym.param_list) if sym.param_list else 0)
+                localsz = str(sym.local_size if sym.local_size is not None else 0)
+            rows.append([lex, cls, typ, offset, size, value, params, localsz])
+        # Compute column widths
+        col_widths = [max(len(headers[i]), *(len(row[i]) for row in rows)) for i in range(len(headers))]
+        # Build table
+        header_line = " | ".join(headers[i].ljust(col_widths[i]) for i in range(len(headers)))
+        separator = "-+-".join("-" * col_widths[i] for i in range(len(headers)))
+        lines.append(header_line)
+        lines.append(separator)
+        for row in rows:
+            lines.append(" | ".join(row[i].ljust(col_widths[i]) for i in range(len(headers))))
+        return "\n".join(lines)
 
 # --- Example Usage ---
 if __name__ == "__main__":
