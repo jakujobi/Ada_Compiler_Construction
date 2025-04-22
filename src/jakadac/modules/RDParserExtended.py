@@ -518,9 +518,9 @@ class RDParserExtended(RDParser):
         """
         Check if a token type is an addopt operator (+ | - | or)
         """
+        # Lexical ADDOP covers + and -, reserved OR covers 'or'
         return token_type in {
-            self.defs.TokenType.PLUS,
-            self.defs.TokenType.MINUS,
+            self.defs.TokenType.ADDOP,
             self.defs.TokenType.OR
         }
     
@@ -528,11 +528,9 @@ class RDParserExtended(RDParser):
         """
         Check if a token type is a mulopt operator (* | / | mod | rem | and)
         """
+        # Lexical MULOP covers *, /, mod, rem; reserved AND covers 'and'
         return token_type in {
-            self.defs.TokenType.MULT,
-            self.defs.TokenType.DIV,
-            self.defs.TokenType.MOD,
-            self.defs.TokenType.REM,
+            self.defs.TokenType.MULOP,
             self.defs.TokenType.AND
         }
     
@@ -540,10 +538,8 @@ class RDParserExtended(RDParser):
         """
         Check if a token type is a signopt operator (+ | -)
         """
-        return token_type in {
-            self.defs.TokenType.PLUS,
-            self.defs.TokenType.MINUS
-        }
+        # Sign operators are lexed as ADDOP
+        return token_type == self.defs.TokenType.ADDOP
     
     def report_semantic_error(self, message, line=0, column=0):
         """
