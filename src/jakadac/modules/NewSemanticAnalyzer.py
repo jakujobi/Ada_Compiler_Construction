@@ -59,20 +59,37 @@ class NewSemanticAnalyzer:
         self.offsets[depth0] = 0
         self.param_offsets[depth0] = 0
 
-        # Process the main program/procedure node (inserts program, enters body scope)
-        self._visit_program(self.root)
+        # Process program(s): handle single Prog node or a ProgramList
+        if hasattr(self.root, 'name') and self.root.name == 'ProgramList':  # multiple procs
+            for prog_node in self.root.children or []:
+                self._visit_program(prog_node)
+        else:
+            # Single program/procedure node
+            self._visit_program(self.root)
 
         # Dump remaining global symbols at depth0
         self._dump_scope(self.symtab.current_depth)
         return len(self.errors) == 0
+
+    def _find_first_id(self, node: ParseTreeNode) -> Optional[ParseTreeNode]:
+        """Recursively find the first ID node in the parse subtree."""
+        # Direct ID leaf
+        if node.name == "ID" and node.token:
+            return node
+        # Recurse into children
+        for child in getattr(node, 'children', []):
+            found = self._find_first_id(child)
+            if found:
+                return found
+        return None
 
     def _visit_program(self, node: ParseTreeNode) -> None:
         """
         Visit a 'Prog' node to insert procedure, process params, declarations, nested procs.
         """
         depth = self.symtab.current_depth
-        # Get procedure name
-        id_node = node.find_child_by_name("ID")
+        # Get program/procedure name from first ID leaf in subtree
+        id_node = self._find_first_id(node)
         if id_node is None or id_node.token is None:
             self._error("Missing program/procedure name")
             return

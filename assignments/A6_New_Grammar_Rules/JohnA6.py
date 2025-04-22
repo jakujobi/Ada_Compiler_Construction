@@ -24,12 +24,16 @@ from typing import Optional
 try:
     from jakadac.modules.Driver import BaseDriver  # type: ignore[import]
     from jakadac.modules.Logger import Logger      # type: ignore[import]
+    from jakadac.modules.SymTable import SymbolTable  # type: ignore[import]
+    from jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer  # type: ignore[import]
 except ImportError:
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     src_root = os.path.join(repo_root, "src")
     sys.path.append(src_root)
-    from jakadac.modules.Driver import BaseDriver 
-    from jakadac.modules.Logger import Logger     
+    from jakadac.modules.Driver import BaseDriver
+    from jakadac.modules.Logger import Logger
+    from jakadac.modules.SymTable import SymbolTable
+    from jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer
 
 class JohnA6(BaseDriver):
     """
@@ -78,6 +82,37 @@ class JohnA6(BaseDriver):
                 self.logger.info("Extended syntax analysis succeeded.")
             else:
                 print(f"Syntax analysis failed with {len(self.syntax_errors)} errors")
+
+            # Ask whether to proceed to semantic analysis
+            choice = input("Proceed to semantic analysis? [Y/n]: ")
+            if not choice or choice.lower() == "y":
+                # Phase 3: Semantic Analysis
+                print("\nPhase 3: Semantic Analysis")
+                print("-" * 60)
+                # Set up symbol table and analyzer
+                symtab = SymbolTable()
+                # Ensure parse tree is available
+                assert hasattr(self.parser, 'parse_tree_root') and self.parser.parse_tree_root is not None, "Parse tree not built"
+                analyzer = NewSemanticAnalyzer(
+                    symtab,
+                    self.parser.parse_tree_root,  # type: ignore[arg-type]
+                    self.lexical_analyzer.defs
+                )
+                # Enable debug-level console logging for semantic analysis
+                self.logger.set_level(logging.DEBUG, handler_type="console")
+                sem_ok = analyzer.analyze()
+                self.semantic_errors = analyzer.errors
+                if sem_ok:
+                    print("Semantic analysis completed successfully")
+                    self.logger.info("Semantic analysis succeeded.")
+                else:
+                    print(f"Semantic analysis failed with {len(self.semantic_errors)} errors")
+                    if self.debug:
+                        for err in self.semantic_errors:
+                            print(err)
+                self.ran_semantic = True
+            else:
+                print("Skipping semantic analysis.")
 
             # Final summary
             self.print_compilation_summary()
