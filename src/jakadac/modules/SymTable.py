@@ -31,6 +31,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Union
 
 try:
+    # Import the shared logger instance
     from .Logger import logger
 except ImportError:
     # Define a dummy logger for standalone testing if needed
@@ -38,6 +39,7 @@ except ImportError:
     logger = logging.getLogger(__name__)
     if not logger.hasHandlers():
         logging.basicConfig(level=logging.DEBUG)
+    logger.warning("Could not import shared logger for SymbolTable. Using default.")
 
 
 try:
