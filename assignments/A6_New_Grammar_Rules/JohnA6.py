@@ -49,17 +49,17 @@ import traceback
 
 
 try:
-    import jakadac
-    from jakadac.modules.Driver import BaseDriver
-    from jakadac.modules.Logger import Logger
-    from jakadac.modules.AdaSymbolTable import *
-    from jakadac.modules.SemanticAnalyzer import *
-    from jakadac.modules.RDParser import *
-    from jakadac.modules.RDParserExtended import *
-    from jakadac.modules.FileHandler import *
-    from jakadac.modules.Token import *
-    from jakadac.modules.Definitions import *
-    from jakadac.modules.LexicalAnalyzer import *
+    import jakadac    # type: ignore
+    from jakadac.modules.Driver import BaseDriver    # type: ignore
+    from jakadac.modules.Logger import Logger    # type: ignore
+    from jakadac.modules.AdaSymbolTable import *    # type: ignore
+    from jakadac.modules.SemanticAnalyzer import *    # type: ignore
+    from jakadac.modules.RDParser import *    # type: ignore
+    from jakadac.modules.RDParserExtended import *    # type: ignore
+    from jakadac.modules.FileHandler import *    # type: ignore
+    from jakadac.modules.Token import *    # type: ignore
+    from jakadac.modules.Definitions import *    # type: ignore
+    from jakadac.modules.LexicalAnalyzer import *    # type: ignore
 except (ImportError, FileNotFoundError):
     # Add 'src' directory to path for local imports
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

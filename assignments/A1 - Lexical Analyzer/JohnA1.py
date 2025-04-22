@@ -28,9 +28,9 @@ from typing import Optional
 
 # Attempt to import from installed package; fallback for local development
 try:
-    import jakadac
-    from jakadac.modules.Driver import BaseDriver
-    from jakadac.modules.Logger import Logger
+    import jakadac    # type: ignore
+    from jakadac.modules.Driver import BaseDriver    # type: ignore
+    from jakadac.modules.Logger import Logger    # type: ignore
 except (ImportError, FileNotFoundError): # Handle cases where jakadac is not installed or files are missing
     # Add 'src' directory to path for local imports
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

@@ -23,10 +23,10 @@ from pathlib import Path
 
 
 try:
-    import jakadac
-    from jakadac.modules.Driver import BaseDriver
-    from jakadac.modules.Logger import Logger
-    from jakadac.modules.AdaSymbolTable import *
+    import jakadac    # type: ignore
+    from jakadac.modules.Driver import BaseDriver    # type: ignore
+    from jakadac.modules.Logger import Logger    # type: ignore
+    from jakadac.modules.AdaSymbolTable import *    # type: ignore
 except (ImportError, FileNotFoundError):
     # Add 'src' directory to path for local imports
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
