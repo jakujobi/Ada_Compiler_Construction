@@ -26,10 +26,10 @@ from typing import Optional, List
 
 
 try:
-    import jakadac
-    from jakadac.modules.Driver import BaseDriver
-    from jakadac.modules.Logger import Logger
-    from jakadac.modules.RDParser import RDParser
+    import jakadac  # type: ignore
+    from jakadac.modules.Driver import BaseDriver  # type: ignore
+    from jakadac.modules.Logger import Logger  # type: ignore
+    from jakadac.modules.RDParser import RDParser  # type: ignore
 except (ImportError, FileNotFoundError):
     # Add 'src' directory to path for local imports
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -55,7 +55,7 @@ class JohnA3(BaseDriver):
             logger: Optional logger instance to use
         """
         super().__init__(input_file_name, output_file_name, debug, logger)
-        self.parser = None
+        self.parser: Optional[RDParser] = None
         self.run()
 
     def run(self) -> None:
@@ -65,9 +65,9 @@ class JohnA3(BaseDriver):
         It:
             1. Reads the source file
             2. Prints the source code
-            3. Performs lexical analysis
-            4. Performs syntax analysis
-            5. Prints compilation summary
+            3. Performs lexical analysis (modular)
+            4. Performs syntax analysis (modular)
+        5. Prints compilation summary
         """
         self.logger.info("Starting compilation process.")
         
@@ -76,8 +76,28 @@ class JohnA3(BaseDriver):
             self.print_source_code()
             
             if self.source_code:
-                self.stage1_lexical_analysis()
-                self.stage2_syntax_analysis()
+                # Phase 1: Lexical Analysis
+                print("\nPhase 1: Lexical Analysis")
+                print("-" * 50)
+                self.run_lexical()
+
+                # Phase 2: Syntax Analysis
+                print("\nPhase 2: Syntax Analysis")
+                print("-" * 50)
+                parsing_successful = self.run_syntax(
+                    stop_on_error=False,
+                    panic_mode_recover=False,
+                    build_parse_tree=True
+                )
+                assert self.parser is not None
+                self.syntax_errors = self.parser.errors  # type: ignore
+                if parsing_successful:
+                    print("Parsing completed successfully")
+                    self.logger.info("Parsing completed successfully.")
+                else:
+                    print(f"Parsing failed with {len(self.syntax_errors)} errors")
+                
+                # Print compilation summary
                 self.print_compilation_summary()
             else:
                 self.logger.error("No source code to process.")

@@ -43,6 +43,10 @@ Usage:
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Set, Union
 
+# Assuming Token and logger are defined in these modules
+from .Token import Token  # Adjust import path if needed
+from .Logger import logger  # Adjust import path if needed
+
 
 class VarType(Enum):
     """
@@ -123,7 +127,7 @@ class TableEntry:
     
     Attributes:
         lexeme (str): The identifier for this entry.
-        token_type (Any): The token type from the lexical analyzer.
+        token_type (Token): The token type from the lexical analyzer.
         depth (int): The lexical scope depth.
         next (Optional[TableEntry]): Pointer to the next entry in the chain for collision resolution.
         entry_type (Optional[EntryType]): The type of this entry (VARIABLE, CONSTANT, PROCEDURE).
@@ -143,13 +147,13 @@ class TableEntry:
         return_type (Optional[VarType]): The return type for procedures.
         param_list (Optional[List[Parameter]]): The list of parameters for procedures.
     """
-    def __init__(self, lexeme: str, token_type: Any, depth: int):
+    def __init__(self, lexeme: str, token_type: Token, depth: int):
         """
         Initialize a table entry with the basic information.
         
         Args:
             lexeme: The identifier for this entry.
-            token_type: The token type from the lexical analyzer.
+            token_type: The token type from the lexical analyzer (should be a Token object).
             depth: The lexical scope depth.
         """
         # Basic information
@@ -185,6 +189,7 @@ class TableEntry:
             offset: The memory offset of the variable.
             size: The memory size of the variable in bytes.
         """
+        logger.debug(f"Setting variable info for '{self.lexeme}': type={var_type.name}, offset={offset}, size={size}")
         self.entry_type = EntryType.VARIABLE
         self.var_type = var_type
         self.offset = offset
@@ -198,6 +203,7 @@ class TableEntry:
             const_type: The data type of the constant.
             value: The value of the constant.
         """
+        logger.debug(f"Setting constant info for '{self.lexeme}': type={const_type.name}, value={value}")
         self.entry_type = EntryType.CONSTANT
         self.const_type = const_type
         self.const_value = value
@@ -216,6 +222,7 @@ class TableEntry:
             return_type: The return type of the procedure.
             param_list: The list of parameter information.
         """
+        logger.debug(f"Setting procedure info for '{self.lexeme}': return={return_type.name}, params={len(param_list)}")
         self.entry_type = EntryType.PROCEDURE
         self.local_size = local_size
         self.param_count = param_count
@@ -232,12 +239,15 @@ class TableEntry:
         base = f"Entry(lexeme='{self.lexeme}', depth={self.depth}"
         
         if self.entry_type == EntryType.VARIABLE:
-            return f"{base}, type=VARIABLE, var_type={self.var_type.name})"
+            var_type_name = self.var_type.name if self.var_type else "UNDEFINED"
+            return f"{base}, type=VARIABLE, var_type={var_type_name})"
         elif self.entry_type == EntryType.CONSTANT:
-            return f"{base}, type=CONSTANT, const_type={self.const_type.name}, value={self.const_value})"
+            const_type_name = self.const_type.name if self.const_type else "UNDEFINED"
+            return f"{base}, type=CONSTANT, const_type={const_type_name}, value={self.const_value})"
         elif self.entry_type == EntryType.PROCEDURE:
             params = ", ".join(str(p) for p in self.param_list) if self.param_list else ""
-            return f"{base}, type=PROCEDURE, return_type={self.return_type.name}, params=[{params}])"
+            return_type_name = self.return_type.name if self.return_type else "UNDEFINED"
+            return f"{base}, type=PROCEDURE, return_type={return_type_name}, params=[{params}])"
         else:
             return f"{base}, type=UNDEFINED)"
 
@@ -268,10 +278,12 @@ class AdaSymbolTable:
             ValueError: If table_size is not positive.
         """
         if table_size <= 0:
+            logger.error(f"Invalid table size specified: {table_size}")
             raise ValueError("Table size must be positive")
             
         self.table_size = table_size
         self.table = [None] * table_size
+        logger.info(f"Symbol table initialized with size {table_size}")
     
     def _hash(self, lexeme: str) -> int:
         """
@@ -290,6 +302,7 @@ class AdaSymbolTable:
             ValueError: If lexeme is empty.
         """
         if not lexeme:
+            logger.warning("Attempted to hash an empty lexeme")
             raise ValueError("Cannot hash an empty lexeme")
             
         h = 0
@@ -300,9 +313,11 @@ class AdaSymbolTable:
             if g != 0:
                 h = h ^ (g >> 24)
                 h = h ^ g
-        return h % self.table_size
+        hash_val = h % self.table_size
+        # logger.debug(f"Hashed '{lexeme}' to {hash_val}") # Can be verbose
+        return hash_val
     
-    def insert(self, lexeme: str, token_type: Any, depth: int) -> TableEntry:
+    def insert(self, lexeme: str, token_type: Token, depth: int) -> TableEntry:
         """
         Insert a new entry into the symbol table.
         
@@ -312,7 +327,7 @@ class AdaSymbolTable:
         
         Args:
             lexeme: The identifier to insert.
-            token_type: The token type from the lexical analyzer.
+            token_type: The token type from the lexical analyzer (should be a Token object).
             depth: The lexical scope depth.
         
         Returns:
@@ -322,13 +337,16 @@ class AdaSymbolTable:
             ValueError: If lexeme is empty or depth is negative.
         """
         if not lexeme:
+            logger.warning("Attempted to insert an empty lexeme")
             raise ValueError("Cannot insert an empty lexeme")
 
         if depth < 0:
+            logger.warning(f"Attempted to insert '{lexeme}' with negative depth {depth}")
             raise ValueError("Depth cannot be negative")
 
         # Create a new entry
         entry = TableEntry(lexeme, token_type, depth)
+        logger.info(f"Inserting '{lexeme}' at depth {depth}")
         
         # Insert at the front of the chain
         hash_val = self._hash(lexeme)
@@ -357,19 +375,25 @@ class AdaSymbolTable:
             ValueError: If lexeme is empty or depth is negative.
         """
         if not lexeme:
+            logger.warning("Attempted to lookup an empty lexeme")
             raise ValueError("Cannot lookup an empty lexeme")
             
         if depth is not None and depth < 0:
+            logger.warning(f"Attempted lookup for '{lexeme}' with negative depth {depth}")
             raise ValueError("Depth cannot be negative")
             
         hash_val = self._hash(lexeme)
         entry = self.table[hash_val]
+        logger.debug(f"Looking up '{lexeme}' (hash {hash_val}), depth filter: {depth}")
         
         while entry is not None:
+            logger.debug(f"  Checking entry: '{entry.lexeme}' at depth {entry.depth}")
             if entry.lexeme == lexeme and (depth is None or entry.depth == depth):
+                logger.info(f"Lookup successful for '{lexeme}' at depth {entry.depth}")
                 return entry
             entry = entry.next
         
+        logger.info(f"Lookup failed for '{lexeme}' with depth filter {depth}")
         return None
     
     def deleteDepth(self, depth: int) -> None:
@@ -386,14 +410,20 @@ class AdaSymbolTable:
             ValueError: If depth is negative.
         """
         if depth < 0:
+            logger.warning(f"Attempted to delete negative depth {depth}")
             raise ValueError("Depth cannot be negative")
             
+        logger.info(f"Deleting entries at depth {depth}")
+        deleted_count = 0
         for i in range(self.table_size):
             prev = None
             curr = self.table[i]
             
             while curr is not None:
+                next_entry = curr.next # Store next pointer before potential deletion
                 if curr.depth == depth:
+                    logger.debug(f"  Deleting '{curr.lexeme}' from chain {i}")
+                    deleted_count += 1
                     # Remove this entry
                     if prev is None:
                         # This is the first entry in the chain
@@ -402,12 +432,13 @@ class AdaSymbolTable:
                         # This is not the first entry
                         prev.next = curr.next
                     
-                    # Move to the next entry, but don't update prev
-                    curr = curr.next
+                    # curr is now effectively removed, move to the stored next
+                    curr = next_entry 
                 else:
                     # Keep this entry, move both pointers
                     prev = curr
-                    curr = curr.next
+                    curr = next_entry
+        logger.info(f"Deleted {deleted_count} entries at depth {depth}")
     
     def writeTable(self, depth: int) -> Dict[str, TableEntry]:
         """
@@ -426,30 +457,50 @@ class AdaSymbolTable:
             ValueError: If depth is negative.
         """
         if depth < 0:
+            logger.warning(f"Attempted to write table for negative depth {depth}")
             raise ValueError("Depth cannot be negative")
             
         result = {}
+        logger.debug(f"Writing table entries for depth {depth}")
         
         for i in range(self.table_size):
             entry = self.table[i]
             
             while entry is not None:
                 if entry.depth == depth:
+                    logger.debug(f"  Found entry '{entry.lexeme}' in chain {i} at depth {depth}")
                     result[entry.lexeme] = entry
                 entry = entry.next
         
+        logger.info(f"Found {len(result)} entries at depth {depth}")
         return result
 
 # Example usage:
 if __name__ == "__main__":
+    # Configure logger for example
+    import logging
+    logging.basicConfig(level=logging.DEBUG) # Show debug messages for example
+    logger.setLevel(logging.DEBUG)
+
     # Create a symbol table
     st = AdaSymbolTable()
     
+    # Create dummy Token objects for example
+    class DummyToken:
+        def __init__(self, type, value):
+            self.type = type
+            self.value = value
+        def __repr__(self):
+            return f"Token({self.type}, '{self.value}')"
+    
+    id_token = DummyToken("IDENTIFIER", "x")
+    pi_token = DummyToken("IDENTIFIER", "PI")
+
     # Insert entries
-    var1 = st.insert("x", "ID", 1)
+    var1 = st.insert("x", id_token, 1)
     var1.set_variable_info(VarType.INT, 0, 4)
     
-    const1 = st.insert("PI", "ID", 1)
+    const1 = st.insert("PI", pi_token, 1)
     const1.set_constant_info(VarType.FLOAT, 3.14159)
     
     # Demonstrate lookup
@@ -461,4 +512,5 @@ if __name__ == "__main__":
     
     # Delete entries
     st.deleteDepth(1)
+    print(f"After deletion - looking up 'x': {st.lookup('x')}")
     print(f"After deletion - entries at depth 1: {st.writeTable(1)}")

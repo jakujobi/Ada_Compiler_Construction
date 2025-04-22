@@ -24,20 +24,80 @@ import os
 import sys
 from typing import List, Dict, Optional, Any, Tuple
 
-try:
-    from prettytable import PrettyTable
-except Exception as e:
-    raise ImportError(f"Failed to import prettytable: {e}")
 
-# # Add the parent directory to the path so we can import modules
-# repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-# sys.path.append(repo_home_path)
+try:
+    from prettytable import PrettyTable            
+except ImportError:                                
+    class PrettyTable:
+        """
+        Minimal drop‑in replacement for the tiny feature set used by
+        SemanticAnalyzer: field_names, add_row, and printable table output.
+        """
+        def __init__(self):
+            self._field_names: list[str] = []
+            self._rows: list[list[str]] = []
+
+        # allow `table.field_names = [...]`
+        @property
+        def field_names(self) -> list[str]:
+            return self._field_names
+
+        @field_names.setter
+        def field_names(self, names):
+            self._field_names = [str(n) for n in names]
+
+        # allow `table.add_row([...])`
+        def add_row(self, row):
+            self._rows.append([str(c) for c in row])
+
+        # internal helper: calculate column widths
+        def _col_widths(self) -> list[int]:
+            cols = len(self._field_names or self._rows[0])
+            widths = [0] * cols
+            for i, name in enumerate(self._field_names):
+                widths[i] = max(widths[i], len(name))
+            for row in self._rows:
+                for i, cell in enumerate(row):
+                    widths[i] = max(widths[i], len(cell))
+            return widths
+
+        # pretty string representation
+        def __str__(self) -> str:
+            if not (self._field_names or self._rows):
+                return ""
+
+            widths = self._col_widths()
+
+            def make_line(parts, sep="|"):
+                return sep + sep.join(
+                    f" {parts[i].ljust(widths[i])} " for i in range(len(widths))
+                ) + sep
+
+            border = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+            lines = [border]
+
+            if self._field_names:
+                lines.append(make_line(self._field_names))
+                lines.append(border)
+
+            for row in self._rows:
+                # pad rows shorter than header length
+                row += [""] * (len(widths) - len(row))
+                lines.append(make_line(row))
+
+            lines.append(border)
+            return "\n".join(lines)
+
+        __repr__ = __str__            # so `print(table)` and REPL echo match
 
 from .Token import Token
 from .Definitions import Definitions
 from .RDParser import ParseTreeNode
-from .AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
-from .Logger import Logger
+# from .AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
+from .Logger import logger
+from .AdaCompat import AdaSymbolTableAdapter as AdaSymbolTable
+from .SymTable    import VarType, EntryType, ParameterMode, Symbol as TableEntry
+
 
 
 class SemanticAnalyzer:
@@ -49,7 +109,7 @@ class SemanticAnalyzer:
     tracking of variable offsets.
     """
     
-    def __init__(self, symbol_table: AdaSymbolTable, stop_on_error: bool = False, logger: Logger = None):
+    def __init__(self, symbol_table: AdaSymbolTable, stop_on_error: bool = False, logger: logger = None):
         """
         Initialize the semantic analyzer.
         
@@ -60,7 +120,7 @@ class SemanticAnalyzer:
         """
         self.symbol_table = symbol_table
         self.stop_on_error = stop_on_error
-        self.logger = logger if logger else Logger()
+        self.logger = logger if logger else logger()
         self.errors = []
         self.current_depth = 0
         self.current_offset = 0
@@ -525,7 +585,7 @@ class SemanticAnalyzer:
             self.logger.debug(f"Variable type determined: {var_type}")
             return (False, var_type, None)
     
-    def analyze_args(self, node: ParseTreeNode) -> Optional[Tuple[int, List[Parameter]]]:
+    def analyze_args(self, node: ParseTreeNode) -> Optional[Tuple[int, List[ParameterMode]]]:
         """
         Analyze an Args node in the parse tree.
         Returns (0, []) if the node does not contain valid arguments.
@@ -556,7 +616,7 @@ class SemanticAnalyzer:
         self.logger.debug("Found ArgList node, proceeding to parameter processing")
         return self.analyze_arg_list(arg_list_node)
     
-    def analyze_arg_list(self, node: ParseTreeNode) -> Tuple[int, List[Parameter]]:
+    def analyze_arg_list(self, node: ParseTreeNode) -> Tuple[int, List[ParameterMode]]:
         """
         Analyze an ArgList node in the parse tree.
         
