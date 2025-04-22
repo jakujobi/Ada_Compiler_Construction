@@ -51,20 +51,19 @@ class NewSemanticAnalyzer:
 
     def analyze(self) -> bool:
         """
-        Perform semantic analysis: build scopes, insert symbols, dump tables.
+        Perform semantic analysis: insert symbols and dump tables.
         Returns True if no semantic errors.
         """
-        # Begin global scope
-        self.symtab.enter_scope()
-        self.offsets[self.symtab.current_depth] = 0
-        self.param_offsets[self.symtab.current_depth] = 0
+        # Initialize offsets at global scope (depth0)
+        depth0 = self.symtab.current_depth
+        self.offsets[depth0] = 0
+        self.param_offsets[depth0] = 0
 
-        # Process the main program/procedure node
+        # Process the main program/procedure node (inserts program, enters body scope)
         self._visit_program(self.root)
 
-        # Dump global scope
+        # Dump remaining global symbols at depth0
         self._dump_scope(self.symtab.current_depth)
-        self.symtab.exit_scope()
         return len(self.errors) == 0
 
     def _visit_program(self, node: ParseTreeNode) -> None:
@@ -171,28 +170,33 @@ class NewSemanticAnalyzer:
 
     def _visit_declarative_part(self, node: Optional[ParseTreeNode]) -> None:
         """
-        Recursively handle each declarative-part: constants vs variables.
+        Traverse subtree to find all DeclarativePart nodes and process their declarations.
         """
         if node is None:
             return
-        def walk(dp: Optional[ParseTreeNode]) -> None:
-            if dp is None or dp.name != "DeclarativePart":
-                return
+        # DFS find all DeclarativePart nodes
+        dp_nodes = []
+        def dfs(n: ParseTreeNode):
+            if n.name == "DeclarativePart":
+                dp_nodes.append(n)
+            for c in n.children:
+                dfs(c)
+        dfs(node)
+        # Process each declarative-part occurrence
+        for dp in dp_nodes:
             # Skip epsilon
             if dp.children and dp.children[0].name == "ε":
-                return
+                continue
             id_list = dp.find_child_by_name("IdentifierList")
             type_mark = dp.find_child_by_name("TypeMark")
-            if id_list and type_mark:
-                first = type_mark.children[0]
-                if first.token and first.token.token_type == self.defs.TokenType.CONSTANT:
-                    self._insert_constants(id_list, type_mark)
-                else:
-                    self._insert_variables(id_list, type_mark)
-            # Recurse into next DP
-            next_dp = dp.find_child_by_name("DeclarativePart")
-            if next_dp is not None:
-                walk(next_dp)
+            if not id_list or not type_mark:
+                continue
+            # Constant or variable
+            first = type_mark.children[0] if type_mark.children else None
+            if first and first.token and first.token.token_type == self.defs.TokenType.CONSTANT:
+                self._insert_constants(id_list, type_mark)
+            else:
+                self._insert_variables(id_list, type_mark)
 
     def _insert_constants(self, id_list: ParseTreeNode, type_mark: ParseTreeNode) -> None:
         """
@@ -231,11 +235,14 @@ class NewSemanticAnalyzer:
         depth = self.symtab.current_depth
         var_type = self._map_typemark_to_vartype(type_mark)
         size = {VarType.INT:2, VarType.CHAR:1, VarType.FLOAT:4}.get(var_type, 0)
+        ids = [leaf.token.lexeme for leaf in id_list.find_children_by_name("ID") or [] if leaf.token]
+        logger.debug(f"Inserting variables {ids} at depth {self.symtab.current_depth}")
         for id_leaf in id_list.find_children_by_name("ID") or []:
             if id_leaf.token is None:
                 continue
             name = id_leaf.token.lexeme
             offset = self.offsets[depth]
+            logger.info(f"Inserting variable: {name}, type={var_type.name}, offset={offset}, size={size}")
             # token type mismatch; suppress
             vsym = Symbol(name, id_leaf.token, EntryType.VARIABLE, depth)  # type: ignore[arg-type]
             vsym.set_variable_info(var_type, offset, size)
@@ -267,15 +274,18 @@ class NewSemanticAnalyzer:
         """
         Dump all symbols at the given scope depth.
         """
-        print(f"\nSymbol Table at depth {depth}:")
         for sym in self.symtab.get_current_scope_symbols().values():  # type: ignore
-            print(f"  {sym.name:10} : {sym.entry_type.name:10}", end="")  # type: ignore
-            if sym.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
-                print(f"  (type={sym.var_type.name}, offset={sym.offset}, size={sym.size})")  # type: ignore
+            entry = f"{sym.name:10} : {sym.entry_type.name:10}"
+            # Procedure entries: show params and local size
+            if sym.entry_type == EntryType.PROCEDURE:
+                params = len(sym.param_list) if sym.param_list is not None else 0
+                ls = sym.local_size if sym.local_size is not None else 0
+                entry += f"  (params={params}, local_size={ls})"
+            elif sym.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
+                entry += f"  (type={sym.var_type.name}, offset={sym.offset}, size={sym.size})"
             elif sym.entry_type == EntryType.CONSTANT:
-                print(f"  (type={sym.var_type.name}, value={sym.const_value})")  # type: ignore
-            else:
-                print()
+                entry += f"  (type={sym.var_type.name}, value={sym.const_value})"
+            print("  " + entry)
 
     def _error(self, message: str) -> None:
         """
