@@ -21,7 +21,6 @@ from .Logger import Logger
 from .LexicalAnalyzer import LexicalAnalyzer
 from .FileHandler import FileHandler
 from .RDParser import RDParser
-from .SemanticAnalyzer import SemanticAnalyzer
 
 
 class BaseDriver:
@@ -63,6 +62,11 @@ class BaseDriver:
         # Initialize data storage
         self.source_code: Optional[str] = None
         self.tokens: List[Token] = []
+        
+        # Phase run flags for modular summary
+        self.ran_lexical = False
+        self.ran_syntax = False
+        self.ran_semantic = False
         
         # Initialize error tracking
         self.lexical_errors: List[Dict[str, Any]] = []
@@ -112,6 +116,8 @@ class BaseDriver:
         self.logger.debug("Processing tokens from source code.")
         try:
             self.tokens = self.lexical_analyzer.analyze(self.source_code)
+            # Mark that lexical phase was run
+            self.ran_lexical = True
             self.logger.debug(f"Tokenization complete. {len(self.tokens)} tokens produced.")
         except ValueError as e:
             self.logger.error(f"Invalid token found: {e}")
@@ -193,20 +199,23 @@ class BaseDriver:
 
     def print_compilation_summary(self) -> None:
         """Print a summary of the compilation process and any errors."""
-        total_errors = len(self.lexical_errors) + len(self.syntax_errors) + len(self.semantic_errors)
-        
+        # Print summary for each phase run
         print("\n" + "=" * 50)
         print("Compilation Summary")
         print("=" * 50)
-        
-        print(f"Lexical Errors: {len(self.lexical_errors)}")
-        print(f"Syntax Errors: {len(self.syntax_errors)}")
-        print(f"Semantic Errors: {len(self.semantic_errors)}")
+        total_errors = 0
+        if self.ran_lexical:
+            print(f"Lexical Errors: {len(self.lexical_errors)}")
+            total_errors += len(self.lexical_errors)
+        if self.ran_syntax:
+            print(f"Syntax Errors: {len(self.syntax_errors)}")
+            total_errors += len(self.syntax_errors)
+        if self.ran_semantic:
+            print(f"Semantic Errors: {len(self.semantic_errors)}")
+            total_errors += len(self.semantic_errors)
         print(f"Total Errors: {total_errors}")
         
-        if self.debug and total_errors > 0:
-            self._print_error_details()
-        
+        # Overall result message
         if total_errors == 0:
             print("\nCompilation completed successfully!")
             self.logger.info("Compilation completed successfully!")
@@ -238,4 +247,45 @@ class BaseDriver:
             for i, error in enumerate(self.semantic_errors[:5], 1):
                 print(f"{i}. {error.get('message', 'Unknown error')}")
             if len(self.semantic_errors) > 5:
-                print(f"...and {len(self.semantic_errors) - 5} more semantic errors") 
+                print(f"...and {len(self.semantic_errors) - 5} more semantic errors")
+
+    def run_lexical(self) -> None:
+        """
+        Run the lexical analysis phase (read source, tokenize, format output).
+        """
+        self.get_source_code_from_file()
+        self.process_tokens()
+        self.format_and_output_tokens()
+
+    def run_syntax(self, stop_on_error: bool = False, panic_mode_recover: bool = False, build_parse_tree: bool = False) -> bool:
+        """
+        Run the syntax analysis phase (recursive descent parser).
+        Returns True if parsing succeeded, False otherwise.
+        """
+        if not self.tokens:
+            self.logger.error("No tokens available for syntax analysis.")
+            return False
+        self.ran_syntax = True
+        self.logger.info("Starting syntax analysis.")
+        # Perform parsing
+        self.parser = RDParser(
+            self.tokens,
+            self.lexical_analyzer.defs,
+            stop_on_error=stop_on_error,
+            panic_mode_recover=panic_mode_recover,
+            build_parse_tree=build_parse_tree
+        )
+        success = self.parser.parse()
+        self.syntax_errors = self.parser.errors
+        # Optionally print parse tree
+        if build_parse_tree and hasattr(self.parser, 'parse_tree_root') and self.parser.parse_tree_root:
+            self.parser.print_parse_tree()
+        return success
+
+    def run_semantic(self) -> None:
+        """
+        Run the semantic analysis phase.
+        """
+        # Placeholder for future semantic integration
+        self.ran_semantic = True
+        self.logger.info("Semantic analysis phase is not yet implemented.") 
