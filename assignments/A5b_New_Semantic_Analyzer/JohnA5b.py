@@ -21,23 +21,23 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-# Try normal imports, then fallback for assignments folder
+# Try normal imports, then fallback to source directory for modules
 try:
-    import jakadac  # type: ignore
     from jakadac.modules.Driver import BaseDriver  # type: ignore
     from jakadac.modules.Logger import Logger  # type: ignore
     from jakadac.modules.RDParser import RDParser  # type: ignore
     from jakadac.modules.SymTable import SymbolTable  # type: ignore
     from jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer  # type: ignore
-except (ImportError, FileNotFoundError):
-    # Add project src to path
+except ImportError:
+    # Add 'src' folder to path so 'jakadac' package is discoverable
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    sys.path.append(repo_root)
-    from src.jakadac.modules.Driver import BaseDriver  # type: ignore
-    from src.jakadac.modules.Logger import Logger  # type: ignore
-    from src.jakadac.modules.RDParser import RDParser  # type: ignore
-    from src.jakadac.modules.SymTable import SymbolTable  # type: ignore
-    from src.jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer  # type: ignore
+    src_root = os.path.join(repo_root, "src")
+    sys.path.append(src_root)
+    from jakadac.modules.Driver import BaseDriver  # type: ignore
+    from jakadac.modules.Logger import Logger  # type: ignore
+    from jakadac.modules.RDParser import RDParser  # type: ignore
+    from jakadac.modules.SymTable import SymbolTable  # type: ignore
+    from jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer  # type: ignore
 
 class JohnA5b(BaseDriver):
     """
@@ -93,9 +93,11 @@ class JohnA5b(BaseDriver):
             print("\nPhase 3: Semantic Analysis")
             print("-" * 60)
             symtab = SymbolTable()
+            # Ensure parse tree root is available
+            assert hasattr(self.parser, 'parse_tree_root') and self.parser.parse_tree_root is not None, "Parse tree not built"  # type: ignore
             analyzer = NewSemanticAnalyzer(
                 symtab,
-                self.parser.parse_tree_root,
+                self.parser.parse_tree_root,  # type: ignore[arg-type]
                 self.lexical_analyzer.defs
             )
             sem_ok = analyzer.analyze()
@@ -108,6 +110,8 @@ class JohnA5b(BaseDriver):
                 if self.debug:
                     for err in self.semantic_errors:
                         print(err)
+            # Mark that semantic phase was run
+            self.ran_semantic = True
 
             # Final summary
             self.print_compilation_summary()

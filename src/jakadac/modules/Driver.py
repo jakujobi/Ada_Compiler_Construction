@@ -199,29 +199,31 @@ class BaseDriver:
 
     def print_compilation_summary(self) -> None:
         """Print a summary of the compilation process and any errors."""
-        # Print summary for each phase run
-        print("\n" + "=" * 50)
-        print("Compilation Summary")
-        print("=" * 50)
+        # Print a simple summary of each phase
+        print("\nCompilation Summary")
+        print("---------------------")
         total_errors = 0
-        if self.ran_lexical:
-            print(f"Lexical Errors: {len(self.lexical_errors)}")
-            total_errors += len(self.lexical_errors)
-        if self.ran_syntax:
-            print(f"Syntax Errors: {len(self.syntax_errors)}")
-            total_errors += len(self.syntax_errors)
-        if self.ran_semantic:
-            print(f"Semantic Errors: {len(self.semantic_errors)}")
-            total_errors += len(self.semantic_errors)
+        phases = [
+            ("Lexical", self.ran_lexical, len(self.lexical_errors)),
+            ("Syntax", self.ran_syntax, len(self.syntax_errors)),
+            ("Semantic", self.ran_semantic, len(self.semantic_errors)),
+        ]
+        for phase, ran, errs in phases:
+            status = "Done" if ran else "Skipped"
+            print(f"{phase:<10}: {status:<7} | Errors: {errs}")
+            if ran:
+                total_errors += errs
+        print("---------------------")
         print(f"Total Errors: {total_errors}")
-        
-        # Overall result message
         if total_errors == 0:
-            print("\nCompilation completed successfully!")
+            print("Compilation completed successfully!")
             self.logger.info("Compilation completed successfully!")
         else:
-            print("\nCompilation failed due to errors.")
+            print("Compilation failed due to errors.")
             self.logger.error(f"Compilation failed with {total_errors} total errors.")
+        # Show detailed errors in debug mode
+        if self.debug:
+            self._print_error_details()
 
     def _print_error_details(self) -> None:
         """Print detailed error information when in debug mode."""
@@ -262,8 +264,12 @@ class BaseDriver:
         Run the syntax analysis phase (recursive descent parser).
         Returns True if parsing succeeded, False otherwise.
         """
+        # Ensure lexical analysis has been run
+        if not self.ran_lexical:
+            self.logger.info("Tokens not found; running lexical analysis before syntax.")
+            self.run_lexical()
         if not self.tokens:
-            self.logger.error("No tokens available for syntax analysis.")
+            self.logger.error("No tokens available for syntax analysis after lexical phase.")
             return False
         self.ran_syntax = True
         self.logger.info("Starting syntax analysis.")
@@ -286,6 +292,11 @@ class BaseDriver:
         """
         Run the semantic analysis phase.
         """
-        # Placeholder for future semantic integration
+        # Ensure syntax analysis has been run
+        if not self.ran_syntax:
+            self.logger.info("Syntax not yet run; running syntax analysis before semantic.")
+            # build parse tree by default for semantic
+            self.run_syntax(build_parse_tree=True)
+        # Mark that semantic phase was run (to be extended by assignments)
         self.ran_semantic = True
         self.logger.info("Semantic analysis phase is not yet implemented.") 
