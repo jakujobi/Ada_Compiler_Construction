@@ -64,6 +64,13 @@ class RDParserExtended(RDParser):
         self.symbol_table: SymbolTable = symbol_table if symbol_table is not None else SymbolTable()
         self.semantic_errors = []
         
+    def _add_child(self, parent, child):
+        """
+        Safely add a child to the parse tree when building it.
+        """
+        if self.build_parse_tree and parent is not None and child is not None:
+            parent.add_child(child)
+        
     def parseProg(self):
         """
         Prog -> procedure idt Args is DeclarativePart Procedures begin SeqOfStatements end idt;
@@ -81,32 +88,36 @@ class RDParserExtended(RDParser):
         self.match_leaf(self.defs.TokenType.PROCEDURE, node)
         
         # Save the procedure identifier (first occurrence)
-        start_id_token = self.current_token
-        procedure_name = start_id_token.lexeme if self.current_token else "unknown"
+        if self.current_token is not None:
+            start_id_token = self.current_token
+            procedure_name = self.current_token.lexeme
+        else:
+            start_id_token = None
+            procedure_name = "unknown"
         
         # Match the identifier and continue parsing
         self.match_leaf(self.defs.TokenType.ID, node)
         
         # Parse the rest of the procedure declaration
         child = self.parseArgs()
-        if child and self.build_parse_tree: 
-            node.add_child(child)
+        if self.build_parse_tree and node is not None and child:
+            self._add_child(node, child)
         
         self.match_leaf(self.defs.TokenType.IS, node)
         
         child = self.parseDeclarativePart()
-        if child and self.build_parse_tree: 
-            node.add_child(child)
+        if self.build_parse_tree and node is not None and child:
+            self._add_child(node, child)
         
         child = self.parseProcedures()
-        if child and self.build_parse_tree: 
-            node.add_child(child)
+        if self.build_parse_tree and node is not None and child:
+            self._add_child(node, child)
         
         self.match_leaf(self.defs.TokenType.BEGIN, node)
         
         child = self.parseSeqOfStatements()
-        if child and self.build_parse_tree: 
-            node.add_child(child)
+        if self.build_parse_tree and node is not None and child:
+            self._add_child(node, child)
         
         self.match_leaf(self.defs.TokenType.END, node)
         
@@ -142,11 +153,11 @@ class RDParserExtended(RDParser):
         self.logger.debug("Parsing SeqOfStatements")
         
         # Check if we have at least one statement
-        if self.current_token.token_type != self.defs.TokenType.END:
+        if self.current_token and self.current_token.token_type != self.defs.TokenType.END:
             # Parse the first statement
             child = self.parseStatement()
             if self.build_parse_tree and child:
-                node.add_child(child)
+                self._add_child(node, child)
             
             # Match semicolon
             self.match_leaf(self.defs.TokenType.SEMICOLON, node)
@@ -154,11 +165,11 @@ class RDParserExtended(RDParser):
             # Parse the rest of statements (StatTail)
             child = self.parseStatTail()
             if self.build_parse_tree and child:
-                node.add_child(child)
+                self._add_child(node, child)
         else:
             # Empty sequence of statements (ε)
-            if self.build_parse_tree:
-                node.add_child(ParseTreeNode("ε"))
+            if self.build_parse_tree and node is not None:
+                self._add_child(node, ParseTreeNode("ε"))
         
         return node
     
@@ -174,11 +185,11 @@ class RDParserExtended(RDParser):
         self.logger.debug("Parsing StatTail")
         
         # Check if we have another statement
-        if self.current_token.token_type != self.defs.TokenType.END:
+        if self.current_token and self.current_token.token_type != self.defs.TokenType.END:
             # Parse the statement
             child = self.parseStatement()
             if self.build_parse_tree and child:
-                node.add_child(child)
+                self._add_child(node, child)
             
             # Match semicolon
             self.match_leaf(self.defs.TokenType.SEMICOLON, node)
@@ -186,11 +197,11 @@ class RDParserExtended(RDParser):
             # Parse the rest of statements (StatTail)
             child = self.parseStatTail()
             if self.build_parse_tree and child:
-                node.add_child(child)
+                self._add_child(node, child)
         else:
             # End of statements (ε)
-            if self.build_parse_tree:
-                node.add_child(ParseTreeNode("ε"))
+            if self.build_parse_tree and node is not None:
+                self._add_child(node, ParseTreeNode("ε"))
         
         return node
     
@@ -198,26 +209,25 @@ class RDParserExtended(RDParser):
         """
         Statement -> AssignStat | IOStat
         """
+        # Two modes: tree-building vs non-tree parse
         if self.build_parse_tree:
             node = ParseTreeNode("Statement")
+            self.logger.debug("Parsing Statement (tree)")
+            # Assignment or IO
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+                child = self.parseAssignStat()
+                self._add_child(node, child)
+            else:
+                child = self.parseIOStat()
+                self._add_child(node, child)
+            return node
+        # Non-tree branch: just consume and semantic-check
+        self.logger.debug("Parsing Statement (non-tree)")
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+            self.parseAssignStat()
         else:
-            node = None
-        
-        self.logger.debug("Parsing Statement")
-        
-        # For now, only assignment statements are implemented
-        # Later, IO statements can be added
-        if self.current_token.token_type == self.defs.TokenType.ID:
-            child = self.parseAssignStat()
-            if self.build_parse_tree and child:
-                node.add_child(child)
-        else:
-            # Assume IOStat for now (which is just ε in the grammar)
-            child = self.parseIOStat()
-            if self.build_parse_tree and child:
-                node.add_child(child)
-        
-        return node
+            self.parseIOStat()
+        return None
     
     def parseAssignStat(self):
         """
@@ -225,54 +235,54 @@ class RDParserExtended(RDParser):
         
         Also performs semantic checking for undeclared variables.
         """
+        # Two modes: tree-building vs non-tree parse
         if self.build_parse_tree:
             node = ParseTreeNode("AssignStat")
-        else:
-            node = None
-        
-        self.logger.debug("Parsing AssignStat")
-        
-        # Save the ID token for semantic checking
+            self.logger.debug("Parsing AssignStat (tree)")
+            id_token = self.current_token
+            self.match_leaf(self.defs.TokenType.ID, node)
+            # semantic check
+            if self.symbol_table and id_token and id_token.token_type == self.defs.TokenType.ID:
+                try:
+                    self.symbol_table.lookup(id_token.lexeme)
+                except Exception:
+                    msg = f"Undeclared variable '{id_token.lexeme}' used in assignment"
+                    self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
+            self.match_leaf(self.defs.TokenType.ASSIGN, node)
+            child = self.parseExpr()
+            self._add_child(node, child)
+            return node
+        # Non-tree branch
+        self.logger.debug("Parsing AssignStat (non-tree)")
         id_token = self.current_token
-        
-        # Match the identifier
-        self.match_leaf(self.defs.TokenType.ID, node)
-        
-        # Check if the variable is declared (semantic check)
+        self.match(self.defs.TokenType.ID)
         if self.symbol_table and id_token and id_token.token_type == self.defs.TokenType.ID:
-            try:
-                self.symbol_table.lookup(id_token.lexeme)
+            try: self.symbol_table.lookup(id_token.lexeme)
             except Exception:
-                error_msg = f"Undeclared variable '{id_token.lexeme}' used in assignment"
-                line = getattr(id_token, 'line_number', -1)
-                col  = getattr(id_token, 'column_number', -1)
-                self.report_semantic_error(error_msg, line, col)
-        
-        # Match the assignment operator
-        self.match_leaf(self.defs.TokenType.ASSIGN, node)
-        
-        # Parse the expression
-        child = self.parseExpr()
-        if self.build_parse_tree and child:
-            node.add_child(child)
-        
-        return node
+                msg = f"Undeclared variable '{id_token.lexeme}' used in assignment"
+                self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
+        self.match(self.defs.TokenType.ASSIGN)
+        self.parseExpr()
+        return None
     
     def parseIOStat(self):
         """
         IOStat -> NULL | ε
         """
+        # Tree-building branch
         if self.build_parse_tree:
             node = ParseTreeNode("IOStat")
-        else:
-            node = None
-        self.logger.debug("Parsing IOStat")
+            self.logger.debug("Parsing IOStat (tree)")
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.NULL:
+                self.match_leaf(self.defs.TokenType.NULL, node)
+            else:
+                self._add_child(node, ParseTreeNode("ε"))
+            return node
+        # Non-tree branch
+        self.logger.debug("Parsing IOStat (non-tree)")
         if self.current_token and self.current_token.token_type == self.defs.TokenType.NULL:
-            self.match_leaf(self.defs.TokenType.NULL, node)
-        else:
-            if self.build_parse_tree and node:
-                node.add_child(ParseTreeNode("ε"))
-        return node
+            self.match(self.defs.TokenType.NULL)
+        return None
     
     def parseExpr(self):
         """
@@ -280,16 +290,14 @@ class RDParserExtended(RDParser):
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Expr")
-        else:
-            node = None
-        
-        self.logger.debug("Parsing Expr")
-        
-        child = self.parseRelation()
-        if self.build_parse_tree and child:
-            node.add_child(child)
-        
-        return node
+            self.logger.debug("Parsing Expr (tree)")
+            child = self.parseRelation()
+            self._add_child(node, child)
+            return node
+        # Non-tree
+        self.logger.debug("Parsing Expr (non-tree)")
+        self.parseRelation()
+        return None
     
     def parseRelation(self):
         """
@@ -297,16 +305,14 @@ class RDParserExtended(RDParser):
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Relation")
-        else:
-            node = None
-        
-        self.logger.debug("Parsing Relation")
-        
-        child = self.parseSimpleExpr()
-        if self.build_parse_tree and child:
-            node.add_child(child)
-        
-        return node
+            self.logger.debug("Parsing Relation (tree)")
+            child = self.parseSimpleExpr()
+            self._add_child(node, child)
+            return node
+        # Non-tree
+        self.logger.debug("Parsing Relation (non-tree)")
+        self.parseSimpleExpr()
+        return None
     
     def parseSimpleExpr(self):
         """
@@ -314,20 +320,17 @@ class RDParserExtended(RDParser):
         """
         if self.build_parse_tree:
             node = ParseTreeNode("SimpleExpr")
-        else:
-            node = None
-        
-        self.logger.debug("Parsing SimpleExpr")
-        
-        child = self.parseTerm()
-        if self.build_parse_tree and child:
-            node.add_child(child)
-        
-        child = self.parseMoreTerm()
-        if self.build_parse_tree and child:
-            node.add_child(child)
-        
-        return node
+            self.logger.debug("Parsing SimpleExpr (tree)")
+            t = self.parseTerm()
+            self._add_child(node, t)
+            mt = self.parseMoreTerm()
+            self._add_child(node, mt)
+            return node
+        # Non-tree
+        self.logger.debug("Parsing SimpleExpr (non-tree)")
+        self.parseTerm()
+        self.parseMoreTerm()
+        return None
     
     def parseMoreTerm(self):
         """
@@ -335,31 +338,23 @@ class RDParserExtended(RDParser):
         """
         if self.build_parse_tree:
             node = ParseTreeNode("MoreTerm")
-        else:
-            node = None
-        
-        self.logger.debug("Parsing MoreTerm")
-        
-        # Check if we have an addopt operator
+            self.logger.debug("Parsing MoreTerm (tree)")
+            if self.is_addopt(self.current_token.token_type):
+                self.match_leaf(self.current_token.token_type, node)
+                t = self.parseTerm()
+                self._add_child(node, t)
+                mt = self.parseMoreTerm()
+                self._add_child(node, mt)
+            else:
+                self._add_child(node, ParseTreeNode("ε"))
+            return node
+        # Non-tree
+        self.logger.debug("Parsing MoreTerm (non-tree)")
         if self.is_addopt(self.current_token.token_type):
-            # Match the operator
-            self.match_leaf(self.current_token.token_type, node)
-            
-            # Parse the term
-            child = self.parseTerm()
-            if self.build_parse_tree and child:
-                node.add_child(child)
-            
-            # Parse more terms
-            child = self.parseMoreTerm()
-            if self.build_parse_tree and child:
-                node.add_child(child)
-        else:
-            # No more terms (ε)
-            if self.build_parse_tree:
-                node.add_child(ParseTreeNode("ε"))
-        
-        return node
+            self.match(self.current_token.token_type)
+            self.parseTerm()
+            self.parseMoreTerm()
+        return None
     
     def parseTerm(self):
         """
@@ -367,20 +362,17 @@ class RDParserExtended(RDParser):
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Term")
-        else:
-            node = None
-        
-        self.logger.debug("Parsing Term")
-        
-        child = self.parseFactor()
-        if self.build_parse_tree and child:
-            node.add_child(child)
-        
-        child = self.parseMoreFactor()
-        if self.build_parse_tree and child:
-            node.add_child(child)
-        
-        return node
+            self.logger.debug("Parsing Term (tree)")
+            f = self.parseFactor()
+            self._add_child(node, f)
+            mf = self.parseMoreFactor()
+            self._add_child(node, mf)
+            return node
+        # Non-tree
+        self.logger.debug("Parsing Term (non-tree)")
+        self.parseFactor()
+        self.parseMoreFactor()
+        return None
     
     def parseMoreFactor(self):
         """
@@ -388,31 +380,23 @@ class RDParserExtended(RDParser):
         """
         if self.build_parse_tree:
             node = ParseTreeNode("MoreFactor")
-        else:
-            node = None
-        
-        self.logger.debug("Parsing MoreFactor")
-        
-        # Check if we have a mulopt operator
+            self.logger.debug("Parsing MoreFactor (tree)")
+            if self.is_mulopt(self.current_token.token_type):
+                self.match_leaf(self.current_token.token_type, node)
+                f = self.parseFactor()
+                self._add_child(node, f)
+                mf = self.parseMoreFactor()
+                self._add_child(node, mf)
+            else:
+                self._add_child(node, ParseTreeNode("ε"))
+            return node
+        # Non-tree
+        self.logger.debug("Parsing MoreFactor (non-tree)")
         if self.is_mulopt(self.current_token.token_type):
-            # Match the operator
-            self.match_leaf(self.current_token.token_type, node)
-            
-            # Parse the factor
-            child = self.parseFactor()
-            if self.build_parse_tree and child:
-                node.add_child(child)
-            
-            # Parse more factors
-            child = self.parseMoreFactor()
-            if self.build_parse_tree and child:
-                node.add_child(child)
-        else:
-            # No more factors (ε)
-            if self.build_parse_tree:
-                node.add_child(ParseTreeNode("ε"))
-        
-        return node
+            self.match(self.current_token.token_type)
+            self.parseFactor()
+            self.parseMoreFactor()
+        return None
     
     def parseFactor(self):
         """
@@ -422,11 +406,61 @@ class RDParserExtended(RDParser):
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Factor")
-        else:
-            node = None
-        
-        self.logger.debug("Parsing Factor")
-        
+            self.logger.debug("Parsing Factor (tree)")
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+                # Save the ID token for semantic checking
+                id_token = self.current_token
+                
+                # Match the identifier
+                self.match_leaf(self.defs.TokenType.ID, node)
+                
+                # Check if the variable is declared (semantic check)
+                if self.symbol_table:
+                    try:
+                        self.symbol_table.lookup(id_token.lexeme)
+                    except Exception:
+                        error_msg = f"Undeclared variable '{id_token.lexeme}' used in expression"
+                        line = getattr(id_token, 'line_number', -1)
+                        col  = getattr(id_token, 'column_number', -1)
+                        self.report_semantic_error(error_msg, line, col)
+            
+            elif self.current_token.token_type == self.defs.TokenType.NUM:
+                # Match the number
+                self.match_leaf(self.defs.TokenType.NUM, node)
+            
+            elif self.current_token.token_type == self.defs.TokenType.LPAREN:
+                # Match the left parenthesis
+                self.match_leaf(self.defs.TokenType.LPAREN, node)
+                
+                # Parse the expression
+                child = self.parseExpr()
+                self._add_child(node, child)
+                
+                # Match the right parenthesis
+                self.match_leaf(self.defs.TokenType.RPAREN, node)
+            
+            elif self.current_token.token_type == self.defs.TokenType.NOT:
+                # Match the NOT operator
+                self.match_leaf(self.defs.TokenType.NOT, node)
+                
+                # Parse the factor
+                child = self.parseFactor()
+                self._add_child(node, child)
+            
+            elif self.is_signopt(self.current_token.token_type):
+                # Match the sign operator
+                self.match_leaf(self.current_token.token_type, node)
+                
+                # Parse the factor
+                child = self.parseFactor()
+                self._add_child(node, child)
+            
+            else:
+                self.report_error(f"Expected an identifier, number, parenthesized expression, NOT, or sign operator")
+            
+            return node
+        # Non-tree
+        self.logger.debug("Parsing Factor (non-tree)")
         if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
             # Save the ID token for semantic checking
             id_token = self.current_token
@@ -454,8 +488,7 @@ class RDParserExtended(RDParser):
             
             # Parse the expression
             child = self.parseExpr()
-            if self.build_parse_tree and child:
-                node.add_child(child)
+            self._add_child(node, child)
             
             # Match the right parenthesis
             self.match_leaf(self.defs.TokenType.RPAREN, node)
@@ -466,8 +499,7 @@ class RDParserExtended(RDParser):
             
             # Parse the factor
             child = self.parseFactor()
-            if self.build_parse_tree and child:
-                node.add_child(child)
+            self._add_child(node, child)
         
         elif self.is_signopt(self.current_token.token_type):
             # Match the sign operator
@@ -475,8 +507,7 @@ class RDParserExtended(RDParser):
             
             # Parse the factor
             child = self.parseFactor()
-            if self.build_parse_tree and child:
-                node.add_child(child)
+            self._add_child(node, child)
         
         else:
             self.report_error(f"Expected an identifier, number, parenthesized expression, NOT, or sign operator")
