@@ -232,12 +232,15 @@ class TableEntry:
         base = f"Entry(lexeme='{self.lexeme}', depth={self.depth}"
         
         if self.entry_type == EntryType.VARIABLE:
-            return f"{base}, type=VARIABLE, var_type={self.var_type.name})"
+            var_type_name = self.var_type.name if self.var_type else "UNDEFINED"
+            return f"{base}, type=VARIABLE, var_type={var_type_name})"
         elif self.entry_type == EntryType.CONSTANT:
-            return f"{base}, type=CONSTANT, const_type={self.const_type.name}, value={self.const_value})"
+            const_type_name = self.const_type.name if self.const_type else "UNDEFINED"
+            return f"{base}, type=CONSTANT, const_type={const_type_name}, value={self.const_value})"
         elif self.entry_type == EntryType.PROCEDURE:
             params = ", ".join(str(p) for p in self.param_list) if self.param_list else ""
-            return f"{base}, type=PROCEDURE, return_type={self.return_type.name}, params=[{params}])"
+            return_type_name = self.return_type.name if self.return_type else "UNDEFINED"
+            return f"{base}, type=PROCEDURE, return_type={return_type_name}, params=[{params}])"
         else:
             return f"{base}, type=UNDEFINED)"
 
