@@ -1,72 +1,62 @@
 # Ada Compiler Construction
 
-This project implements a compiler for a subset of the Ada programming language, developed as part of CSC 446 - Compiler Construction.
-
-## Overview
-
-The compiler consists of several phases, implemented across multiple assignments:
-
-1. **Lexical Analysis (A1)** - Scans the source code and produces tokens
-2. **Recursive Descent Parser (A3)** - Parses tokens to verify syntax and builds a parse tree
-3. **Symbol Table (A4)** - Manages symbol information and scopes
-4. **Semantic Analysis (A5)** - Performs type checking and semantic validation
-5. **Advanced Grammar Parsing (A6)** - Handles enhanced grammar rules and supports multiple procedures
-
-## Recent Improvements
-
-The codebase has undergone several significant improvements:
-
-- **Type Safety**: Added proper type annotations and Optional types
-- **Null Safety**: Implemented comprehensive null checks to prevent runtime errors
-- **Documentation**: Enhanced documentation with detailed docstrings
-- **Test Runner**: Created a robust test runner to simplify testing process
-
-For detailed information about the code improvements, see [IMPROVEMENTS.md](./IMPROVEMENTS.md).
+This repository contains the code and assignments for CSC 446 Compiler Construction at SDSU.
 
 ## Project Structure
 
-- **src**: The `jakadac` package containing all compiler modules (lexer, parser, semantic analyzer, etc.)
-- **assignments**: Driver scripts and test files for each assignment phase
-- **tests**: Unit tests and the test runner tool
-- **docs**: Additional documentation (IMPROVEMENTS.md)
-- **requirements.txt**: Runtime dependencies
-- **pyproject.toml**: Build and project metadata
+├─ assignments/           # Individual assignment folders
+│  ├─ A1 - Lexical Analyzer
+│  ├─ A2 - Parser
+│  ├─ A3_Recursive_Parser
+│  ├─ A4_New_Symbol_Table
+│  ├─ A5_Semantic_Analyzer
+│  ├─ A5b_New_Semantic_Analyzer
+│  ├─ A6_New_Grammar_Rules
+│  └─ A7_3_Address_Code
 
-## Installation
+├─ src/jakadac/modules/   # Compiler modules
+│  ├─ Token.py
+│  ├─ Definitions.py
+│  ├─ Logger.py
+│  ├─ FileHandler.py
+│  ├─ LexicalAnalyzer.py
+│  ├─ RDParser.py
+│  ├─ SymTable.py
+│  ├─ NewSemanticAnalyzer.py
+│  └─ Driver.py
 
-Go to the root of the repository
-
-```bash
-cd Ada_Compiler_Construction
-```
-
-To install the package in editable (development) mode:
-
-```bash
-pip install -e .
-```
+└─ README.md              # This file
 
 ## Getting Started
 
-After installation, you can run individual drivers or use the test runner from the project root.
+1. Clone the repository:
+   ```sh
+   git clone https://github.com/jakujobi/Ada_Compiler_Construction.git
+   cd Ada_Compiler_Construction
+   ```
 
-```bash
-# Run a specific driver on a test file
-python assignments/A1\ -\ Lexical\ Analyzer/JohnA1.py tests/test_files/tf_add.ada
+2. Install dependencies (if any):
+   ```sh
+   # For now only Python 3 is required
+   ```
 
-# Run the test runner tool
-python tests/test_runner/test_runner.py
-```
+3. Run an assignment driver. For example, to test the symbol table (A4):
+   ```sh
+   cd assignments/A4_New_Symbol_Table
+   python JohnA4b.py
+   ```
 
-## Testing
+4. For semantic analyzer (A5b):
+   ```sh
+   cd assignments/A5b_New_Semantic_Analyzer
+   python JohnA5b.py path/to/source.ada
+   ```
 
-You can also use the test runner in batch mode:
+5. Use the BaseDriver pipeline in `src/jakadac/modules/Driver.py` for custom tests.
 
-```bash
-python tests/test_runner/test_runner.py --driver JohnA6 --all-tests
-```
+## Module Documentation
+See `src/jakadac/modules/README.md` for details on each compiler component.
 
-## Author
+---
 
-John Akujobi
-GitHub: [jakujobi](https://github.com/jakujobi/Ada_Compiler_Construction)
+© 2025 John Akujobi / AI Assistant
