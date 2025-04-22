@@ -346,8 +346,11 @@ class NewSemanticAnalyzer:
         """
         Check each statement for undeclared identifier uses.
         """
-        # Recursively find and process each Statement node
         def dfs(n: ParseTreeNode):
+            # First handle assignment statements explicitly
+            if n.name == "AssignStat":
+                self._visit_assign_stat(n)
+            # Then handle any statement-level undeclared IDs
             if n.name == "Statement":
                 self._visit_statement(n)
             for c in n.children:
@@ -370,3 +373,15 @@ class NewSemanticAnalyzer:
             for c in n.children:
                 check_id(c)
         check_id(node)
+
+    def _visit_assign_stat(self, node: ParseTreeNode) -> None:
+        """Check that the variable on the left side of an assignment is declared."""
+        # The first ID child in an AssignStat node is the LHS
+        id_node = node.find_child_by_name("ID")
+        if id_node and id_node.token:
+            lex = id_node.token.lexeme
+            try:
+                self.symtab.lookup(lex)
+            except SymbolNotFoundError:
+                line = getattr(id_node.token, 'line_number', -1)
+                self._error(f"Undeclared identifier '{lex}' used in assignment at line {line}")
