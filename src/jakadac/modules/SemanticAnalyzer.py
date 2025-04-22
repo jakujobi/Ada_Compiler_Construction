@@ -93,8 +93,11 @@ except ImportError:
 from .Token import Token
 from .Definitions import Definitions
 from .RDParser import ParseTreeNode
-from .AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
+# from .AdaSymbolTable import AdaSymbolTable, VarType, EntryType, ParameterMode, Parameter, TableEntry
 from .Logger import logger
+from .AdaCompat import AdaSymbolTableAdapter as AdaSymbolTable
+from .SymTable    import VarType, EntryType, ParameterMode, Symbol as TableEntry
+
 
 
 class SemanticAnalyzer:
@@ -106,7 +109,7 @@ class SemanticAnalyzer:
     tracking of variable offsets.
     """
     
-    def __init__(self, symbol_table: AdaSymbolTable, stop_on_error: bool = False, logger: Logger = None):
+    def __init__(self, symbol_table: AdaSymbolTable, stop_on_error: bool = False, logger: logger = None):
         """
         Initialize the semantic analyzer.
         
@@ -117,7 +120,7 @@ class SemanticAnalyzer:
         """
         self.symbol_table = symbol_table
         self.stop_on_error = stop_on_error
-        self.logger = logger if logger else Logger()
+        self.logger = logger if logger else logger()
         self.errors = []
         self.current_depth = 0
         self.current_offset = 0
@@ -582,7 +585,7 @@ class SemanticAnalyzer:
             self.logger.debug(f"Variable type determined: {var_type}")
             return (False, var_type, None)
     
-    def analyze_args(self, node: ParseTreeNode) -> Optional[Tuple[int, List[Parameter]]]:
+    def analyze_args(self, node: ParseTreeNode) -> Optional[Tuple[int, List[ParameterMode]]]:
         """
         Analyze an Args node in the parse tree.
         Returns (0, []) if the node does not contain valid arguments.
@@ -613,7 +616,7 @@ class SemanticAnalyzer:
         self.logger.debug("Found ArgList node, proceeding to parameter processing")
         return self.analyze_arg_list(arg_list_node)
     
-    def analyze_arg_list(self, node: ParseTreeNode) -> Tuple[int, List[Parameter]]:
+    def analyze_arg_list(self, node: ParseTreeNode) -> Tuple[int, List[ParameterMode]]:
         """
         Analyze an ArgList node in the parse tree.
         
