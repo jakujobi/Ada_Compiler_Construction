@@ -26,11 +26,12 @@ from typing import Any # Added Any for type hinting
 # If this fails, logging within Token might be disabled or use a basic default.
 # Avoid creating instances here.
 try:
-    from .Logger import logger
+    from .Logger import logger # Now importing the instance
 except ImportError:
     import logging
     logger = logging.getLogger(__name__) # Use standard logging as fallback
     logger.warning("Could not import shared logger for Token class. Using default.")
+
 
 
 class Token:
