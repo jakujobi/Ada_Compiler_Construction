@@ -44,8 +44,8 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Set, Union
 
 # Assuming Token and logger are defined in these modules
-from jakadac.modules.Token import Token  # Adjust import path if needed
-from jakadac.modules.logger import logger  # Adjust import path if needed
+from .Token import Token  # Adjust import path if needed
+from .Logger import logger  # Adjust import path if needed
 
 
 class VarType(Enum):
