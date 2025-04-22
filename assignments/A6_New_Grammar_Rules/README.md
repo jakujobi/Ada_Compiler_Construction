@@ -51,30 +51,28 @@ This assignment extends the Ada compiler with semantic analysis capabilities, fo
 
 ## Project Structure
 
-- `JohnA6.py`: Main compiler driver that orchestrates the three stages
-- `Modules/`: Contains the core compiler components
-  - `LexicalAnalyzer.py`: Tokenizes the source code
-  - `RDParserExtended.py`: Performs syntax analysis and builds the parse tree
-  - `SemanticAnalyzer.py`: Performs semantic analysis on the parse tree
-  - `AdaSymbolTable.py`: Manages the symbol table for tracking identifiers
-  - `Token.py`: Defines token structure
-  - `Definitions.py`: Contains shared definitions and constants
-  - `Logger.py`: Handles logging throughout the compiler
-  - `FileHandler.py`: Manages file I/O operations
+- `JohnA6.py`: Main compiler driver for Assignment A6 (lexical, syntax, and semantic phases)
+- `src/jakadac/modules/`: Core compiler components
+  - `LexicalAnalyzer.py`: Tokenizes the Ada source code
+  - `RDParserExtended.py`: Extended recursive-descent parser supporting new grammar rules
+  - `NewSemanticAnalyzer.py`: Semantic analyzer, performing symbol-table insertion, type checking, and undeclared-identifier checks
+  - `SymTable.py`: Symbol table implementation (nested scopes, insertion, lookup)
+  - `Driver.py`: Base driver class with shared compilation phases
+  - `Logger.py`: Configurable logging facility
+  - `Token.py`: Definition of the `Token` class used by the parser
+  - `Definitions.py`: Token-type enumeration and reserved-word mappings
+  - `FileHandler.py`: Utility for reading and writing files
 
 ## Usage
 
-Run the compiler with an Ada source file:
+Run the compiler on an Ada source file (semantic analysis will follow syntax):
 
 ```bash
-python JohnA6.py <source_file.ada>
-```
+python JohnA6.py <source_file.ada> [output_file]
+``` 
 
-### Command Line Options
-
-- `--output` or `-o`: Specify output file for token list
-- `--debug` or `-d`: Enable debug output
-- `--no-tree`: Disable parse tree printing
+- After parsing you will be prompted: `Proceed to semantic analysis? [Y/n]`.
+- To enable more verbose semantic debugging, adjust the log level in code (e.g. set console level to `DEBUG` in `JohnA6.py`).
 
 ## Example
 
@@ -91,9 +89,9 @@ This will:
 
 ## Test Files
 
-- `t53.ada`: Tests basic procedure declarations and parameter handling
-- `t54.ada`: Tests procedure declarations with INOUT parameters
-- `t55.ada`: Tests constant declarations with type inference
+- `t53.ada`: Basic procedure declarations and parameter handling
+- `t54.ada`: Procedures with `INOUT` parameters
+- `t55.ada`: Constant declarations with type inference
 
 ## Recent Improvements
 
