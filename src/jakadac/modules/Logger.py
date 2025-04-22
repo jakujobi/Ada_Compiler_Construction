@@ -329,7 +329,7 @@ Log File Naming:
 """
 Class: Logger
 -------------
-The Logger class is a singleton wrapper around Python’s built-in logging module.
+The Logger class is a singleton wrapper around Python's built-in logging module.
 It centralizes logging for your application and allows you to control the log 
 output (both on the console and in a file) from a single place.
 
@@ -344,7 +344,7 @@ Key Features:
   - **Flexible Configuration:** You can configure log levels for the console and 
     file, specify a custom log directory, format, date format, and whether to use colors.
   - **Automatic Caller Info:** Uses a CallerFilter to inspect the call stack 
-    and attach the caller’s class name to each log record.
+    and attach the caller's class name to each log record.
   - **Usage Simplicity:** The Logger class is designed to be easy to use. Simply 
     import Logger and call its methods (debug, info, warning, error, critical) to log messages.
 
@@ -360,5 +360,8 @@ Usage:
 This implementation is geared toward making logging robust yet simple to configure,
 with detailed information to help you debug and trace through your application.
 """
+
+# Create and export the singleton instance for other modules to import
+logger = Logger()
 
 # End of Logger module
