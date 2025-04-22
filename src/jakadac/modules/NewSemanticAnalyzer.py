@@ -174,6 +174,8 @@ class NewSemanticAnalyzer:
         """
         if node is None:
             return
+        # Debug: show immediate children of the DeclarativePart subtree
+        logger.info(f"DeclarativePart subtree children: {[c.name for c in node.children]}")
         # DFS find all DeclarativePart nodes
         dp_nodes = []
         def dfs(n: ParseTreeNode):
@@ -184,6 +186,8 @@ class NewSemanticAnalyzer:
         dfs(node)
         # Process each declarative-part occurrence
         for dp in dp_nodes:
+            # Debug: show details of this DeclarativePart node
+            logger.info(f"Found DeclarativePart node with {len(dp.children)} children; first child: {dp.children[0].name if dp.children else 'None'}")
             # Skip epsilon
             if dp.children and dp.children[0].name == "ε":
                 continue
@@ -274,6 +278,8 @@ class NewSemanticAnalyzer:
         """
         Dump all symbols at the given scope depth.
         """
+        # Header for this scope dump
+        print(f"\n=== Symbol Table at depth {depth} ===")
         for sym in self.symtab.get_current_scope_symbols().values():  # type: ignore
             entry = f"{sym.name:10} : {sym.entry_type.name:10}"
             # Procedure entries: show params and local size
