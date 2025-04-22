@@ -10,7 +10,6 @@
 #
 # This code is documented to help beginners understand what each part does.
 
-import os
 import sys
 from typing import List, Optional
 from pathlib import Path
@@ -21,7 +20,17 @@ from pathlib import Path
 
 # from Modules.Logger import Logger
 
-from .Logger import Logger
+from typing import Any # Added Any for type hinting
+
+# Attempt to import the shared logger instance
+# If this fails, logging within Token might be disabled or use a basic default.
+# Avoid creating instances here.
+try:
+    from .Logger import logger
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__) # Use standard logging as fallback
+    logger.warning("Could not import shared logger for Token class. Using default.")
 
 
 class Token:
@@ -39,8 +48,6 @@ class Token:
             real_value: (Optional) The floating-point value if this is a real number token.
             literal_value: (Optional) The inner text for string or character literals.
         """
-        # Create a logger instance to log any issues inside the Token class.
-        self.logger = Logger()
         self.token_type = token_type
         self.lexeme = lexeme
         self.line_number = line_number
@@ -62,7 +69,7 @@ class Token:
                     f"column={self.column_number})")
         except Exception:
             # If an error occurs during representation, log it and re-raise.
-            self.logger.error('Error in Token __repr__: %s', self.__dict__)
+            logger.error('Error in Token __repr__: %s', self.__dict__)
             raise
 
     def __str__(self):
