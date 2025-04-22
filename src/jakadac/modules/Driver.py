@@ -21,6 +21,7 @@ from .Logger import Logger
 from .LexicalAnalyzer import LexicalAnalyzer
 from .FileHandler import FileHandler
 from .RDParser import RDParser
+from .RDParserExtended import RDParserExtended
 
 
 class BaseDriver:
@@ -30,11 +31,12 @@ class BaseDriver:
     """
 
     def __init__(
-        self, 
-        input_file_name: str, 
-        output_file_name: Optional[str] = None, 
-        debug: bool = False, 
-        logger: Optional[Logger] = None
+        self,
+        input_file_name: str,
+        output_file_name: Optional[str] = None,
+        debug: bool = False,
+        logger: Optional[Logger] = None,
+        use_extended_parser: bool = False
     ):
         """
         Initialize the base driver.
@@ -44,6 +46,7 @@ class BaseDriver:
             output_file_name: Optional path to the output file
             debug: Whether to enable debug mode
             logger: Optional logger instance to use
+            use_extended_parser: Whether to use the extended RDParser
         """
         # Use provided logger or create a new one
         self.logger = logger if logger is not None else Logger(log_level_console=logging.INFO)
@@ -72,6 +75,8 @@ class BaseDriver:
         self.lexical_errors: List[Dict[str, Any]] = []
         self.syntax_errors: List[Dict[str, Any]] = []
         self.semantic_errors: List[Dict[str, Any]] = []
+        # Parser selection flag
+        self.use_extended_parser = use_extended_parser
 
     def get_source_code_from_file(self) -> None:
         """
@@ -263,6 +268,7 @@ class BaseDriver:
         """
         Run the syntax analysis phase (recursive descent parser).
         Returns True if parsing succeeded, False otherwise.
+        If `use_extended_parser` was set, uses RDParserExtended instead of RDParser.
         """
         # Ensure lexical analysis has been run
         if not self.ran_lexical:
@@ -273,14 +279,26 @@ class BaseDriver:
             return False
         self.ran_syntax = True
         self.logger.info("Starting syntax analysis.")
-        # Perform parsing
-        self.parser = RDParser(
-            self.tokens,
-            self.lexical_analyzer.defs,
-            stop_on_error=stop_on_error,
-            panic_mode_recover=panic_mode_recover,
-            build_parse_tree=build_parse_tree
-        )
+        # Choose parser implementation
+        if self.use_extended_parser:
+            self.logger.info("Using extended RDParser for syntax analysis.")
+            # RDParserExtended signature: (tokens, defs, symbol_table=None, stop_on_error, panic_mode_recover, build_parse_tree)
+            self.parser = RDParserExtended(
+                self.tokens,
+                self.lexical_analyzer.defs,
+                None,
+                stop_on_error,
+                panic_mode_recover,
+                build_parse_tree
+            )
+        else:
+            self.parser = RDParser(
+                self.tokens,
+                self.lexical_analyzer.defs,
+                stop_on_error=stop_on_error,
+                panic_mode_recover=panic_mode_recover,
+                build_parse_tree=build_parse_tree
+            )
         success = self.parser.parse()
         self.syntax_errors = self.parser.errors
         # Optionally print parse tree
