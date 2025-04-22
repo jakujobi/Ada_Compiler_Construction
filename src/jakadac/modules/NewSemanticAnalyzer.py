@@ -278,20 +278,45 @@ class NewSemanticAnalyzer:
         """
         Dump all symbols at the given scope depth.
         """
-        # Header for this scope dump
-        print(f"\n=== Symbol Table at depth {depth} ===")
-        for sym in self.symtab.get_current_scope_symbols().values():  # type: ignore
-            entry = f"{sym.name:10} : {sym.entry_type.name:10}"
-            # Procedure entries: show params and local size
-            if sym.entry_type == EntryType.PROCEDURE:
-                params = len(sym.param_list) if sym.param_list is not None else 0
-                ls = sym.local_size if sym.local_size is not None else 0
-                entry += f"  (params={params}, local_size={ls})"
-            elif sym.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
-                entry += f"  (type={sym.var_type.name}, offset={sym.offset}, size={sym.size})"
+        symbols = list(self.symtab.get_current_scope_symbols().values())
+        # If empty, show empty scope message
+        if not symbols:
+            print(f"\n=== Symbol Table at depth {depth} (empty) ===")
+            return
+        # Column headers
+        headers = ["Lexeme", "Class", "Type", "Offset", "Size", "Value", "Params", "LocalSize"]
+        rows = []
+        for sym in symbols:
+            lex = sym.name
+            cls = sym.entry_type.name
+            typ = ""
+            offset = ""
+            size = ""
+            value = ""
+            params = ""
+            localsz = ""
+            if sym.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
+                typ = sym.var_type.name
+                offset = str(sym.offset)
+                size = str(sym.size)
             elif sym.entry_type == EntryType.CONSTANT:
-                entry += f"  (type={sym.var_type.name}, value={sym.const_value})"
-            print("  " + entry)
+                typ = sym.var_type.name
+                value = str(sym.const_value)
+            elif sym.entry_type == EntryType.PROCEDURE:
+                params = str(len(sym.param_list) if sym.param_list else 0)
+                localsz = str(sym.local_size if sym.local_size is not None else 0)
+            rows.append([lex, cls, typ, offset, size, value, params, localsz])
+        # Compute column widths
+        col_widths = [max(len(headers[i]), *(len(row[i]) for row in rows)) for i in range(len(headers))]
+        # Print header
+        print(f"\n=== Symbol Table at depth {depth} ===")
+        header_line = " | ".join(headers[i].ljust(col_widths[i]) for i in range(len(headers)))
+        separator = "-+-".join("-" * col_widths[i] for i in range(len(headers)))
+        print(header_line)
+        print(separator)
+        # Print rows
+        for row in rows:
+            print(" | ".join(row[i].ljust(col_widths[i]) for i in range(len(headers))))
 
     def _error(self, message: str) -> None:
         """
