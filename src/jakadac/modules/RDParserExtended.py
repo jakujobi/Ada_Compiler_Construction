@@ -152,12 +152,17 @@ class RDParserExtended(RDParser):
             node = None
 
         self.logger.debug("Parsing SeqOfStatements (iterative)")
-        # Loop until encountering END keyword
+        # Parse statements until END is encountered; break on missing semicolon to avoid infinite loop
         while self.current_token and self.current_token.token_type != self.defs.TokenType.END:
+            # Parse a single statement (should advance tokens)
             stmt_node = self.parseStatement()
-            self._add_child(node, stmt_node)
-            # Expect a semicolon after each statement
-            self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+            if self.build_parse_tree and node is not None and stmt_node:
+                self._add_child(node, stmt_node)
+            # Consume trailing semicolon if present, else break to avoid hang
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.SEMICOLON:
+                self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+            else:
+                break
         return node if self.build_parse_tree else None
     
     def parseStatTail(self):
@@ -326,7 +331,7 @@ class RDParserExtended(RDParser):
         if self.build_parse_tree:
             node = ParseTreeNode("MoreTerm")
             self.logger.debug("Parsing MoreTerm (tree)")
-            if self.is_addopt(self.current_token.token_type):
+            if self.current_token and self.is_addopt(self.current_token.token_type):
                 self.match_leaf(self.current_token.token_type, node)
                 t = self.parseTerm()
                 self._add_child(node, t)
@@ -337,7 +342,7 @@ class RDParserExtended(RDParser):
             return node
         # Non-tree
         self.logger.debug("Parsing MoreTerm (non-tree)")
-        if self.is_addopt(self.current_token.token_type):
+        if self.current_token and self.is_addopt(self.current_token.token_type):
             self.match(self.current_token.token_type)
             self.parseTerm()
             self.parseMoreTerm()
@@ -368,7 +373,7 @@ class RDParserExtended(RDParser):
         if self.build_parse_tree:
             node = ParseTreeNode("MoreFactor")
             self.logger.debug("Parsing MoreFactor (tree)")
-            if self.is_mulopt(self.current_token.token_type):
+            if self.current_token and self.is_mulopt(self.current_token.token_type):
                 self.match_leaf(self.current_token.token_type, node)
                 f = self.parseFactor()
                 self._add_child(node, f)
@@ -379,7 +384,7 @@ class RDParserExtended(RDParser):
             return node
         # Non-tree
         self.logger.debug("Parsing MoreFactor (non-tree)")
-        if self.is_mulopt(self.current_token.token_type):
+        if self.current_token and self.is_mulopt(self.current_token.token_type):
             self.match(self.current_token.token_type)
             self.parseFactor()
             self.parseMoreFactor()
@@ -411,11 +416,11 @@ class RDParserExtended(RDParser):
                         col  = getattr(id_token, 'column_number', -1)
                         self.report_semantic_error(error_msg, line, col)
             
-            elif self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
+            elif self.current_token and self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
                 # Match the numeric literal (integer or real)
                 self.match_leaf(self.current_token.token_type, node)
             
-            elif self.current_token.token_type == self.defs.TokenType.LPAREN:
+            elif self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
                 # Match the left parenthesis
                 self.match_leaf(self.defs.TokenType.LPAREN, node)
                 
@@ -426,7 +431,7 @@ class RDParserExtended(RDParser):
                 # Match the right parenthesis
                 self.match_leaf(self.defs.TokenType.RPAREN, node)
             
-            elif self.current_token.token_type == self.defs.TokenType.NOT:
+            elif self.current_token and self.current_token.token_type == self.defs.TokenType.NOT:
                 # Match the NOT operator
                 self.match_leaf(self.defs.TokenType.NOT, node)
                 
@@ -434,7 +439,7 @@ class RDParserExtended(RDParser):
                 child = self.parseFactor()
                 self._add_child(node, child)
             
-            elif self.is_signopt(self.current_token.token_type):
+            elif self.current_token and self.is_signopt(self.current_token.token_type):
                 # Match the sign operator
                 self.match_leaf(self.current_token.token_type, node)
                 
@@ -465,11 +470,11 @@ class RDParserExtended(RDParser):
                     col  = getattr(id_token, 'column_number', -1)
                     self.report_semantic_error(error_msg, line, col)
         
-        elif self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
+        elif self.current_token and self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
             # Match the numeric literal (integer or real)
             self.match_leaf(self.current_token.token_type, node)
         
-        elif self.current_token.token_type == self.defs.TokenType.LPAREN:
+        elif self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
             # Match the left parenthesis
             self.match_leaf(self.defs.TokenType.LPAREN, node)
             
@@ -480,7 +485,7 @@ class RDParserExtended(RDParser):
             # Match the right parenthesis
             self.match_leaf(self.defs.TokenType.RPAREN, node)
         
-        elif self.current_token.token_type == self.defs.TokenType.NOT:
+        elif self.current_token and self.current_token.token_type == self.defs.TokenType.NOT:
             # Match the NOT operator
             self.match_leaf(self.defs.TokenType.NOT, node)
             
@@ -488,7 +493,7 @@ class RDParserExtended(RDParser):
             child = self.parseFactor()
             self._add_child(node, child)
         
-        elif self.is_signopt(self.current_token.token_type):
+        elif self.current_token and self.is_signopt(self.current_token.token_type):
             # Match the sign operator
             self.match_leaf(self.current_token.token_type, node)
             
