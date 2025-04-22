@@ -39,7 +39,7 @@ from .RDParser import RDParser, ParseTreeNode
 from .Token import Token
 from .Definitions import Definitions
 from .Logger import Logger
-from .AdaSymbolTable import AdaSymbolTable
+from .SymTable import SymbolTable, Symbol, EntryType
 
 
 class RDParserExtended(RDParser):
@@ -60,7 +60,8 @@ class RDParserExtended(RDParser):
             build_parse_tree (bool): Whether to build a parse tree.
         """
         super().__init__(tokens, defs, stop_on_error, panic_mode_recover, build_parse_tree)
-        self.symbol_table = symbol_table
+        # Use provided symbol_table or default to a new one
+        self.symbol_table: SymbolTable = symbol_table if symbol_table is not None else SymbolTable()
         self.semantic_errors = []
         
     def parseProg(self):
@@ -117,10 +118,13 @@ class RDParserExtended(RDParser):
         
         # Check if the procedure identifiers match
         if end_id_token and start_id_token and end_id_token.lexeme != start_id_token.lexeme:
-            error_msg = f"Procedure name mismatch: procedure '{start_id_token.lexeme}' ends with '{end_id_token.lexeme}'"
+            error_msg = (
+                f"Procedure name mismatch: procedure '{start_id_token.lexeme}' ends with '{end_id_token.lexeme}'"
+            )
             self.report_error(error_msg)
-            self.report_semantic_error(error_msg, end_id_token.line if hasattr(end_id_token, 'line') else 0, 
-                                    end_id_token.column if hasattr(end_id_token, 'column') else 0)
+            line = getattr(end_id_token, 'line_number', -1)
+            col  = getattr(end_id_token, 'column_number', -1)
+            self.report_semantic_error(error_msg, line, col)
         
         self.match_leaf(self.defs.TokenType.SEMICOLON, node)
         
@@ -235,12 +239,14 @@ class RDParserExtended(RDParser):
         self.match_leaf(self.defs.TokenType.ID, node)
         
         # Check if the variable is declared (semantic check)
-        if self.symbol_table and id_token.token_type == self.defs.TokenType.ID:
-            entry = self.symbol_table.lookup(id_token.lexeme)
-            if not entry:
+        if self.symbol_table and id_token and id_token.token_type == self.defs.TokenType.ID:
+            try:
+                self.symbol_table.lookup(id_token.lexeme)
+            except Exception:
                 error_msg = f"Undeclared variable '{id_token.lexeme}' used in assignment"
-                self.report_semantic_error(error_msg, id_token.line if hasattr(id_token, 'line') else 0, 
-                                          id_token.column if hasattr(id_token, 'column') else 0)
+                line = getattr(id_token, 'line_number', -1)
+                col  = getattr(id_token, 'column_number', -1)
+                self.report_semantic_error(error_msg, line, col)
         
         # Match the assignment operator
         self.match_leaf(self.defs.TokenType.ASSIGN, node)
@@ -421,7 +427,7 @@ class RDParserExtended(RDParser):
         
         self.logger.debug("Parsing Factor")
         
-        if self.current_token.token_type == self.defs.TokenType.ID:
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
             # Save the ID token for semantic checking
             id_token = self.current_token
             
@@ -429,12 +435,14 @@ class RDParserExtended(RDParser):
             self.match_leaf(self.defs.TokenType.ID, node)
             
             # Check if the variable is declared (semantic check)
-            if self.symbol_table and id_token.token_type == self.defs.TokenType.ID:
-                entry = self.symbol_table.lookup(id_token.lexeme)
-                if not entry:
+            if self.symbol_table:
+                try:
+                    self.symbol_table.lookup(id_token.lexeme)
+                except Exception:
                     error_msg = f"Undeclared variable '{id_token.lexeme}' used in expression"
-                    self.report_semantic_error(error_msg, id_token.line if hasattr(id_token, 'line') else 0, 
-                                              id_token.column if hasattr(id_token, 'column') else 0)
+                    line = getattr(id_token, 'line_number', -1)
+                    col  = getattr(id_token, 'column_number', -1)
+                    self.report_semantic_error(error_msg, line, col)
         
         elif self.current_token.token_type == self.defs.TokenType.NUM:
             # Match the number
@@ -543,3 +551,64 @@ class RDParserExtended(RDParser):
         if self.build_parse_tree:
             self.parse_tree_root = root
         return len(self.errors) == 0
+
+    def parseDeclarativePart(self):
+        """
+        DeclarativePart -> IdentifierList : TypeMark ; DeclarativePart | ε
+        Also insert each declared identifier into the symbol table.
+        """
+        self.logger.debug("Parsing DeclarativePart (Extended)")
+        # Build tree branch
+        if self.build_parse_tree:
+            node = ParseTreeNode("DeclarativePart")
+            # If there's a declaration
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+                # Identifiers
+                id_list_node = self.parseIdentifierList()
+                assert id_list_node is not None
+                # Insert declarations
+                for id_leaf in id_list_node.find_children_by_name("ID"):
+                    if id_leaf.token:
+                        sym = Symbol(
+                            id_leaf.token.lexeme,
+                            id_leaf.token,
+                            EntryType.VARIABLE,
+                            self.symbol_table.current_depth
+                        )
+                        self.symbol_table.insert(sym)
+                # Type and semicolon
+                self.match_leaf(self.defs.TokenType.COLON, node)
+                type_mark_node = self.parseTypeMark()
+                assert type_mark_node is not None
+                self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+                # Recursively parse further declarations
+                next_node = self.parseDeclarativePart()
+                # Attach children
+                node.add_child(id_list_node)
+                node.add_child(type_mark_node)
+                if next_node:
+                    node.add_child(next_node)
+            else:
+                # Epsilon
+                node.add_child(ParseTreeNode("ε"))
+            return node
+        # Non-tree branch: just parse and insert
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+            id_list_node = self.parseIdentifierList()
+            assert id_list_node is not None
+            # Insert declarations
+            for id_leaf in id_list_node.find_children_by_name("ID"):
+                if id_leaf.token:
+                    sym = Symbol(
+                        id_leaf.token.lexeme,
+                        id_leaf.token,
+                        EntryType.VARIABLE,
+                        self.symbol_table.current_depth
+                    )
+                    self.symbol_table.insert(sym)
+            self.match(self.defs.TokenType.COLON)
+            self.parseTypeMark()
+            self.match(self.defs.TokenType.SEMICOLON)
+            # Further declarations
+            self.parseDeclarativePart()
+        return None
