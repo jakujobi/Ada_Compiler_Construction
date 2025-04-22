@@ -143,35 +143,22 @@ class RDParserExtended(RDParser):
     
     def parseSeqOfStatements(self):
         """
-        SeqOfStatments -> Statement ; StatTail | ε
+        SeqOfStatements -> { Statement ; }*
+        Iteratively parse zero or more statements terminated by semicolons until END.
         """
         if self.build_parse_tree:
             node = ParseTreeNode("SeqOfStatements")
         else:
             node = None
-        
-        self.logger.debug("Parsing SeqOfStatements")
-        
-        # Check if we have at least one statement
-        if self.current_token and self.current_token.token_type != self.defs.TokenType.END:
-            # Parse the first statement
-            child = self.parseStatement()
-            if self.build_parse_tree and child:
-                self._add_child(node, child)
-            
-            # Match semicolon
+
+        self.logger.debug("Parsing SeqOfStatements (iterative)")
+        # Loop until encountering END keyword
+        while self.current_token and self.current_token.token_type != self.defs.TokenType.END:
+            stmt_node = self.parseStatement()
+            self._add_child(node, stmt_node)
+            # Expect a semicolon after each statement
             self.match_leaf(self.defs.TokenType.SEMICOLON, node)
-            
-            # Parse the rest of statements (StatTail)
-            child = self.parseStatTail()
-            if self.build_parse_tree and child:
-                self._add_child(node, child)
-        else:
-            # Empty sequence of statements (ε)
-            if self.build_parse_tree and node is not None:
-                self._add_child(node, ParseTreeNode("ε"))
-        
-        return node
+        return node if self.build_parse_tree else None
     
     def parseStatTail(self):
         """
@@ -424,9 +411,9 @@ class RDParserExtended(RDParser):
                         col  = getattr(id_token, 'column_number', -1)
                         self.report_semantic_error(error_msg, line, col)
             
-            elif self.current_token.token_type == self.defs.TokenType.NUM:
-                # Match the number
-                self.match_leaf(self.defs.TokenType.NUM, node)
+            elif self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
+                # Match the numeric literal (integer or real)
+                self.match_leaf(self.current_token.token_type, node)
             
             elif self.current_token.token_type == self.defs.TokenType.LPAREN:
                 # Match the left parenthesis
@@ -478,9 +465,9 @@ class RDParserExtended(RDParser):
                     col  = getattr(id_token, 'column_number', -1)
                     self.report_semantic_error(error_msg, line, col)
         
-        elif self.current_token.token_type == self.defs.TokenType.NUM:
-            # Match the number
-            self.match_leaf(self.defs.TokenType.NUM, node)
+        elif self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
+            # Match the numeric literal (integer or real)
+            self.match_leaf(self.current_token.token_type, node)
         
         elif self.current_token.token_type == self.defs.TokenType.LPAREN:
             # Match the left parenthesis
