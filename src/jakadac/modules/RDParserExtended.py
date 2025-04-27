@@ -332,18 +332,26 @@ class RDParserExtended(RDParser):
             node = ParseTreeNode("MoreTerm")
             self.logger.debug("Parsing MoreTerm (tree)")
             if self.current_token and self.is_addopt(self.current_token.token_type):
-                self.match_leaf(self.current_token.token_type, node)
+                # Create leaf for the specific addopt token and add it
+                op_node = ParseTreeNode(self.current_token.lexeme, self.current_token)
+                self._add_child(node, op_node)
+                # Advance past the operator token
+                self.advance()
+                # Parse the following Term
                 t = self.parseTerm()
                 self._add_child(node, t)
+                # Parse the rest (MoreTerm)
                 mt = self.parseMoreTerm()
                 self._add_child(node, mt)
             else:
+                # Epsilon
                 self._add_child(node, ParseTreeNode("ε"))
             return node
         # Non-tree
         self.logger.debug("Parsing MoreTerm (non-tree)")
         if self.current_token and self.is_addopt(self.current_token.token_type):
-            self.match(self.current_token.token_type)
+            # Advance past the operator
+            self.advance()
             self.parseTerm()
             self.parseMoreTerm()
         return None
@@ -374,18 +382,26 @@ class RDParserExtended(RDParser):
             node = ParseTreeNode("MoreFactor")
             self.logger.debug("Parsing MoreFactor (tree)")
             if self.current_token and self.is_mulopt(self.current_token.token_type):
-                self.match_leaf(self.current_token.token_type, node)
+                # Create leaf for the specific mulopt token and add it
+                op_node = ParseTreeNode(self.current_token.lexeme, self.current_token)
+                self._add_child(node, op_node)
+                # Advance past the operator token
+                self.advance()
+                # Parse the following Factor
                 f = self.parseFactor()
                 self._add_child(node, f)
+                # Parse the rest (MoreFactor)
                 mf = self.parseMoreFactor()
                 self._add_child(node, mf)
             else:
+                # Epsilon
                 self._add_child(node, ParseTreeNode("ε"))
             return node
         # Non-tree
         self.logger.debug("Parsing MoreFactor (non-tree)")
         if self.current_token and self.is_mulopt(self.current_token.token_type):
-            self.match(self.current_token.token_type)
+            # Advance past the operator
+            self.advance()
             self.parseFactor()
             self.parseMoreFactor()
         return None
@@ -456,10 +472,8 @@ class RDParserExtended(RDParser):
         if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
             # Save the ID token for semantic checking
             id_token = self.current_token
-            
-            # Match the identifier
-            self.match_leaf(self.defs.TokenType.ID, node)
-            
+            # Match the identifier (no node needed for non-tree branch)
+            self.match(self.defs.TokenType.ID)
             # Check if the variable is declared (semantic check)
             if self.symbol_table:
                 try:
@@ -472,39 +486,32 @@ class RDParserExtended(RDParser):
         
         elif self.current_token and self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
             # Match the numeric literal (integer or real)
-            self.match_leaf(self.current_token.token_type, node)
+            self.match(self.current_token.token_type)
         
         elif self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
             # Match the left parenthesis
-            self.match_leaf(self.defs.TokenType.LPAREN, node)
-            
+            self.match(self.defs.TokenType.LPAREN)
             # Parse the expression
-            child = self.parseExpr()
-            self._add_child(node, child)
-            
+            self.parseExpr()
             # Match the right parenthesis
-            self.match_leaf(self.defs.TokenType.RPAREN, node)
+            self.match(self.defs.TokenType.RPAREN)
         
         elif self.current_token and self.current_token.token_type == self.defs.TokenType.NOT:
             # Match the NOT operator
-            self.match_leaf(self.defs.TokenType.NOT, node)
-            
+            self.match(self.defs.TokenType.NOT)
             # Parse the factor
-            child = self.parseFactor()
-            self._add_child(node, child)
+            self.parseFactor()
         
         elif self.current_token and self.is_signopt(self.current_token.token_type):
             # Match the sign operator
-            self.match_leaf(self.current_token.token_type, node)
-            
+            self.match(self.current_token.token_type)
             # Parse the factor
-            child = self.parseFactor()
-            self._add_child(node, child)
+            self.parseFactor()
         
         else:
             self.report_error(f"Expected an identifier, number, parenthesized expression, NOT, or sign operator")
         
-        return node
+        return None # Return None for non-tree branch
     
     def is_addopt(self, token_type):
         """
@@ -520,9 +527,11 @@ class RDParserExtended(RDParser):
         """
         Check if a token type is a mulopt operator (* | / | mod | rem | and)
         """
-        # Lexical MULOP covers *, /, mod, rem; reserved AND covers 'and'
+        # Lexical MULOP covers *, /; specific types for mod, rem; reserved AND for 'and'
         return token_type in {
             self.defs.TokenType.MULOP,
+            self.defs.TokenType.MOD,
+            self.defs.TokenType.REM,
             self.defs.TokenType.AND
         }
     
@@ -557,12 +566,13 @@ class RDParserExtended(RDParser):
         if self.build_parse_tree:
             root = ParseTreeNode("ProgramList")
         else:
-            root = None
+            root = None # Initialize root to None for non-tree branch
         self.logger.debug("Starting extended parse for multiple procedures.")
         # Parse all top-level procedures
         while self.current_token and self.current_token.token_type == self.defs.TokenType.PROCEDURE:
             child = self.parseProg()
-            if self.build_parse_tree and child:
+            # Only add child if root exists (i.e., building parse tree)
+            if root is not None and child:
                 root.add_child(child)
         # After procedures, expect EOF
         if self.current_token and self.current_token.token_type != self.defs.TokenType.EOF:

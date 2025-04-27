@@ -30,74 +30,66 @@ Classes:
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Union
 
-try:
-    # Import the shared logger instance
-    from .Logger import logger
-except ImportError:
-    # Define a dummy logger for standalone testing if needed
-    import logging
-    logger = logging.getLogger(__name__)
-    if not logger.hasHandlers():
-        logging.basicConfig(level=logging.DEBUG)
-    logger.warning("Could not import shared logger for SymbolTable. Using default.")
+# Always import the shared logger instance
+from .Logger import logger
 
+# Always import the shared Token class
+from .Token import Token
 
-try:
-    # Import Token (shared); ignore type mismatches
-    from .Token import Token  # type: ignore
-except ImportError:
-    # Define a dummy Token for standalone testing if needed
-    class Token:
-        def __init__(self, token_type, lexeme, line_number, column_number,
-                    value=None, real_value=None, literal_value=None):
-            """
-            Initialize a Token instance.
-
-            Parameters:
-                token_type: The type of the token (usually from the TokenType enumeration).
-                lexeme (str): The actual text matched from the source code.
-                line_number (int): The line number in the source code where this token appears.
-                column_number (int): The column number in the source code where this token starts.
-                value: (Optional) The numeric value if this is an integer token.
-                real_value: (Optional) The floating-point value if this is a real number token.
-                literal_value: (Optional) The inner text for string or character literals.
-            """
-            self.token_type = token_type
-            self.lexeme = lexeme
-            self.line_number = line_number
-            self.column_number = column_number
-            self.value = value
-            self.real_value = real_value
-            self.literal_value = literal_value
-
-        def __repr__(self):
-            """
-            Return an official string representation of the Token.
-            
-            This is useful for debugging. It shows the token type, lexeme, value,
-            and the location (line and column) where it was found.
-            """
-            try:
-                return (f"Token(type={self.token_type}, lexeme='{self.lexeme}', "
-                        f"value={self.value}, line={self.line_number}, "
-                        f"column={self.column_number})")
-            except Exception:
-                # If an error occurs during representation, log it and re-raise.
-                logger.error('Error in Token __repr__: %s', self.__dict__)
-                raise
-
-        def __str__(self):
-            """
-            Return a user-friendly string representation of the Token.
-            
-            For example: <ID, 'myVariable'>
-            """
-            # Note: There's a small typo in the attribute name ("self. Lexeme" with a space).
-            # It should be "self.lexeme".
-            return f"<{self.token_type}, {self.lexeme}>"
-
-
-
+# Remove the fallback definition of Token class
+# try:
+#     # Import Token (shared); ignore type mismatches
+#     from .Token import Token  # type: ignore
+# except ImportError:
+#     # Define a dummy Token for standalone testing if needed
+#     class Token:
+#         def __init__(self, token_type, lexeme, line_number, column_number,
+#                     value=None, real_value=None, literal_value=None):
+#             """
+#             Initialize a Token instance.
+#
+#             Parameters:
+#                 token_type: The type of the token (usually from the TokenType enumeration).
+#                 lexeme (str): The actual text matched from the source code.
+#                 line_number (int): The line number in the source code where this token appears.
+#                 column_number (int): The column number in the source code where this token starts.
+#                 value: (Optional) The numeric value if this is an integer token.
+#                 real_value: (Optional) The floating-point value if this is a real number token.
+#                 literal_value: (Optional) The inner text for string or character literals.
+#             """
+#             self.token_type = token_type
+#             self.lexeme = lexeme
+#             self.line_number = line_number
+#             self.column_number = column_number
+#             self.value = value
+#             self.real_value = real_value
+#             self.literal_value = literal_value
+#
+#         def __repr__(self):
+#             """
+#             Return an official string representation of the Token.
+#
+#             This is useful for debugging. It shows the token type, lexeme, value,
+#             and the location (line and column) where it was found.
+#             """
+#             try:
+#                 return (f"Token(type={self.token_type}, lexeme='{self.lexeme}', "
+#                         f"value={self.value}, line={self.line_number}, "
+#                         f"column={self.column_number})")
+#             except Exception:
+#                 # If an error occurs during representation, log it and re-raise.
+#                 logger.error('Error in Token __repr__: %s', self.__dict__)
+#                 raise
+#
+#         def __str__(self):
+#             """
+#             Return a user-friendly string representation of the Token.
+#
+#             For example: <ID, 'myVariable'>
+#             """
+#             # Note: There's a small typo in the attribute name ("self. Lexeme" with a space).
+#             # It should be "self.lexeme".
+#             return f"<{self.token_type}, {self.lexeme}>"
 
 # --- Enumerations ---
 class VarType(Enum):
@@ -388,12 +380,13 @@ if __name__ == "__main__":
 
     # Global scope (depth 0)
     try:
-        global_var_token = Token("IDENTIFIER", "g_count")
+        # Provide dummy line/column numbers for example Tokens
+        global_var_token = Token("IDENTIFIER", "g_count", line_number=0, column_number=0)
         global_var = Symbol("g_count", global_var_token, EntryType.VARIABLE, symtab.current_depth)
         global_var.set_variable_info(VarType.INT, 0, 4)
         symtab.insert(global_var)
 
-        proc_token = Token("IDENTIFIER", "my_proc")
+        proc_token = Token("IDENTIFIER", "my_proc", line_number=0, column_number=0)
         my_proc = Symbol("my_proc", proc_token, EntryType.PROCEDURE, symtab.current_depth)
         my_proc.set_procedure_info([], {}, 0) # No params, 0 local size for example
         symtab.insert(my_proc)
@@ -411,18 +404,18 @@ if __name__ == "__main__":
     # Enter scope 1
     symtab.enter_scope()
     try:
-        local_var_token = Token("IDENTIFIER", "l_val")
+        local_var_token = Token("IDENTIFIER", "l_val", line_number=0, column_number=0)
         local_var = Symbol("l_val", local_var_token, EntryType.VARIABLE, symtab.current_depth)
         local_var.set_variable_info(VarType.FLOAT, 4, 8) # Example offset/size
         symtab.insert(local_var)
 
         # Try to redeclare global var (should fail)
-        # g_count_token_dup = Token("IDENTIFIER", "g_count")
+        # g_count_token_dup = Token("IDENTIFIER", "g_count", line_number=0, column_number=0)
         # g_count_dup = Symbol("g_count", g_count_token_dup, EntryType.CONSTANT, symtab.current_depth)
         # symtab.insert(g_count_dup) # This would raise DuplicateSymbolError if uncommented
 
         # Shadow global var (allowed)
-        shadow_proc_token = Token("IDENTIFIER", "my_proc")
+        shadow_proc_token = Token("IDENTIFIER", "my_proc", line_number=0, column_number=0)
         shadow_proc = Symbol("my_proc", shadow_proc_token, EntryType.VARIABLE, symtab.current_depth)
         shadow_proc.set_variable_info(VarType.BOOLEAN, 12, 1)
         symtab.insert(shadow_proc)
