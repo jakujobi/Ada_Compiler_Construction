@@ -239,44 +239,47 @@ The ErrorHandler module provides error handling functionality for the compiler.
 - `get_errors() -> List[Dict]`: Returns all errors
 - `print_errors()`: Prints all errors
 
-### FileHandler Module
-
-**File**: `Modules/FileHandler.py`
-
-The FileHandler module provides file I/O operations for the compiler.
-
-#### Class: FileHandler
-
-**Description**: Handles file operations for the compiler.
-
-**Methods**:
-
-- `read_file(file_path: str) -> str`: Reads a file and returns its contents
-- `write_file(file_path: str, content: str) -> bool`: Writes content to a file
-- `ensure_directory(directory_path: str) -> bool`: Ensures a directory exists
-
 ### Logger Module
 
 **File**: `Modules/Logger.py`
 
-The Logger module provides logging functionality for the compiler.
+Provides a centralized logging facility with configurable levels, timestamps, and output targets (console/file).
 
-#### Class: Logger
+### FileHandler Module
 
-**Description**: Handles logging for the compiler.
+**File**: `Modules/FileHandler.py`
 
-**Attributes**:
+Handles file I/O, command-line path parsing, and ensures directory existence for source inputs and outputs.
 
-- `logger`: Python logger instance
+### RDParserExtended Module
 
-**Methods**:
+**File**: `Modules/RDParserExtended.py`
 
-- `__init__(name: str, log_file: str = None)`: Constructor
-- `debug(message: str)`: Logs a debug message
-- `info(message: str)`: Logs an info message
-- `warning(message: str)`: Logs a warning message
-- `error(message: str)`: Logs an error message
-- `critical(message: str)`: Logs a critical message
+Extends the base RDParser with full Ada statement and expression support, multiple top-level procedures, panic-mode recovery, and debug hooks for token mismatches.
+
+### NewSemanticAnalyzer Module
+
+**File**: `Modules/NewSemanticAnalyzer.py`
+
+Traverses the parse tree to perform semantic analyses: symbol-table population, nested scoping, type checking, offset computation, and scope dumps via PrettyTable.
+
+### TACGenerator Module
+
+**File**: `Modules/TACGenerator.py`
+
+Implements `TACInstruction`, `TACProgram`, and `ThreeAddressCodeGenerator` to emit three-address code IR with depth-based addressing and immediate constant propagation.
+
+### TypeUtils Module
+
+**File**: `Modules/TypeUtils.py`
+
+Utility functions for mapping token types to variable types (`VarType`), computing type sizes, and other type-related helpers.
+
+### Driver Module
+
+**File**: `Modules/Driver.py`
+
+Defines `BaseDriver` to orchestrate compilation phases (lexical, syntax, semantic, code generation), parse CLI args, and manage logging and outputs.
 
 ## Semantic Analyzer Module
 

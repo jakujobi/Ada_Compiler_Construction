@@ -163,3 +163,50 @@ python IntegrationTest.py
 ```
 
 This will run integration tests showing how the symbol table works with other compiler components.
+
+## Assignment 5a: Semantic Analyzer
+**Directory**: `A5_Semantic_Analyzer/`
+
+**Main File**: `JohnA5.py`
+
+**Description**: Performs semantic analysis on the parse tree, including symbol-table population, type checking, and offset computation.
+
+### Usage
+```bash
+python JohnA5.py path/to/source.ada
+```
+
+## Assignment 5b: New Semantic Analyzer
+**Directory**: `A5b_New_Semantic_Analyzer/`
+
+**Main File**: `JohnA5b.py`
+
+**Description**: Enhanced semantic analyzer with PrettyTable dumps per scope, improved error reporting, and continued analysis on non-critical errors.
+
+### Usage
+```bash
+python JohnA5b.py path/to/source.ada
+```
+
+## Assignment 6: Extended Grammar Parser
+**Directory**: `A6_New_Grammar_Rules/`
+
+**Main File**: `JohnA6.py`
+
+**Description**: Extends `RDParser` with full support for Ada statements and expressions, panic-mode recovery, and multiple procedures.
+
+### Usage
+```bash
+python JohnA6.py path/to/source.ada
+```
+
+## Assignment 7: Three-Address Code Generation
+**Directory**: `A7_3_Address_Code/`
+
+**Main File**: `JohnA7.py`
+
+**Description**: Generates three-address code IR with depth-based addressing rules, parameter offset computation, and constant substitution.
+
+### Usage
+```bash
+python JohnA7.py path/to/source.ada

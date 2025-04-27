@@ -293,121 +293,68 @@ parser = RDParser(tokens)
 parse_tree = parser.parse()
 ```
 
+## Parser Extensions
+
+### RDParserExtended
+
+**Module**: `Modules/RDParserExtended.py`
+
+**Description**: Extension of `RDParser` adding full Ada statements and expressions support, multiple top-level procedures, panic-mode recovery, parse-tree hooks, and debug logging for mismatches.
+
+## Three-Address Code Classes
+
+### TACInstruction
+
+**Module**: `Modules/TACGenerator.py`
+
+**Description**: Represents a single three-address code instruction (operation, operands, result).
+
+**Attributes**:
+- `op`: Operation code (e.g., ADD, SUB, LOAD)
+- `arg1`, `arg2`: Source operands
+- `result`: Destination or temporary
+
+### TACProgram
+
+**Module**: `Modules/TACGenerator.py`
+
+**Description**: Container for a list of `TACInstruction` instances, representing the IR for the program.
+
+**Methods**:
+- `add_instruction(instr: TACInstruction)`: Appends an instruction
+- `to_list() -> List[TACInstruction]`: Returns the instruction list
+
+### ThreeAddressCodeGenerator
+
+**Module**: `Modules/TACGenerator.py`
+
+**Description**: Walks the semantically-annotated parse tree and generates `TACInstruction`s and a `TACProgram` IR using depth-based addressing and constant substitution.
+
 ## Utility Classes
-
-### Definitions
-
-**Module**: `Modules/Definitions.py`
-
-**Description**: Holds all static definitions used by the compiler.
-
-**Constructor**:
-```python
-def __init__(self)
-```
-
-**Attributes**:
-- `TokenType`: Enumeration of all possible token types
-- `reserved_words`: Dictionary mapping reserved words to their token types
-- `token_patterns`: Dictionary mapping token names to regex patterns
-
-**Methods**:
-- `is_reserved(word: str) -> bool`: Checks if a word is a reserved word
-- `get_reserved_token(word: str) -> Optional[Enum]`: Returns the token type for a reserved word
-- `get_token_type(token_type_str: str) -> Optional[Enum]`: Gets token type from string
-
-**Example**:
-```python
-from Modules.Definitions import Definitions
-
-definitions = Definitions()
-if definitions.is_reserved("BEGIN"):
-    print("BEGIN is a reserved word")
-```
-
-### ErrorHandler
-
-**Module**: `Modules/ErrorHandler.py`
-
-**Description**: Handles and reports compiler errors.
-
-**Constructor**:
-```python
-def __init__(self)
-```
-
-**Attributes**:
-- `errors`: List of errors encountered
-
-**Methods**:
-- `add_error(message: str, line: int, column: int) -> None`: Adds an error
-- `has_errors() -> bool`: Checks if there are any errors
-- `get_errors() -> List[Dict]`: Returns all errors
-- `print_errors() -> None`: Prints all errors
-
-**Example**:
-```python
-from Modules.ErrorHandler import ErrorHandler
-
-error_handler = ErrorHandler()
-error_handler.add_error("Undefined variable", 10, 15)
-if error_handler.has_errors():
-    error_handler.print_errors()
-```
-
-### FileHandler
-
-**Module**: `Modules/FileHandler.py`
-
-**Description**: Handles file operations for the compiler.
-
-**Methods**:
-- `read_file(file_path: str) -> str`: Reads a file and returns its contents
-- `write_file(file_path: str, content: str) -> bool`: Writes content to a file
-- `ensure_directory(directory_path: str) -> bool`: Ensures a directory exists
-
-**Example**:
-```python
-from Modules.FileHandler import FileHandler
-
-file_handler = FileHandler()
-content = file_handler.read_file("path/to/source.ada")
-file_handler.write_file("path/to/output.txt", "Compilation successful")
-```
 
 ### Logger
 
 **Module**: `Modules/Logger.py`
 
-**Description**: Handles logging for the compiler.
+**Description**: Centralized logging utility with configurable levels, timestamps, and multiple outputs (console/file).
 
-**Constructor**:
-```python
-def __init__(self, name: str, log_file: str = None)
-```
+### FileHandler
 
-**Parameters**:
-- `name`: Logger name
-- `log_file`: Log file path (optional)
+**Module**: `Modules/FileHandler.py`
 
-**Attributes**:
-- `logger`: Python logger instance
+**Description**: Provides file I/O helpers, including reading/writing source and IR files, and directory management.
 
-**Methods**:
-- `debug(message: str) -> None`: Logs a debug message
-- `info(message: str) -> None`: Logs an info message
-- `warning(message: str) -> None`: Logs a warning message
-- `error(message: str) -> None`: Logs an error message
-- `critical(message: str) -> None`: Logs a critical message
+### TypeUtils
 
-**Example**:
-```python
-from Modules.Logger import Logger
+**Module**: `Modules/TypeUtils.py`
 
-logger = Logger("compiler", "logs/compiler.log")
-logger.info("Starting compilation")
-logger.debug("Processing token: ID")
-```
+**Description**: Utility functions for mapping token types to variable types (`VarType`), computing type sizes, and other type-related helpers.
+
+### BaseDriver
+
+**Module**: `Modules/Driver.py`
+
+**Description**: Abstract driver orchestrating compilation phases (lexical, syntax, semantic, code generation), CLI handling, logging setup, and result output.
 
 ## Enumerations
 
