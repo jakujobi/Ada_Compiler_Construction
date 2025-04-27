@@ -75,7 +75,7 @@ class TestFileHandler(unittest.TestCase):
             ("normal line", "normal line"),
             ("line with comment // ignored", "line with comment"),
             ("   spaces   ", "spaces"),
-            ("// comment only", ""),
+            ("// comment only", None),
             ("\n", None)
         ]
         
