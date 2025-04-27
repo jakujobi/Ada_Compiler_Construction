@@ -2,287 +2,257 @@
 
 This document provides detailed information about all modules in the Ada Compiler Construction project.
 
-## Core Modules
+---
 
-### Definitions Module
+## Definitions Module
 
-**File**: `Modules/Definitions.py`
+**File**: `src/jakadac/modules/Definitions.py`
 
-The Definitions module provides essential definitions used throughout the compiler, including token types and regular expression patterns.
+**Purpose**: Centralized definitions for token types, reserved words, and regex patterns.
 
-#### Class: Definitions
+### Class: Definitions
 
-**Description**: Holds all static definitions used by the compiler.
+- `__init__()` : Builds the `TokenType` enum, `reserved_words` mapping, and `token_patterns` dictionary.
+- `is_reserved(word: str) -> bool` : Returns `True` if the given word (case-insensitive) is an Ada keyword.
+- `get_reserved_token(word: str) -> Optional[Enum]` : Retrieves the `TokenType` for a reserved word.
+- `get_token_type(token_type_str: str) -> Optional[Enum]` : Looks up a `TokenType` by its name.
 
-**Attributes**:
+---
 
-- `TokenType`: Enumeration of all possible token types
-- `reserved_words`: Dictionary mapping reserved words to their token types
-- `token_patterns`: Dictionary mapping token names to regex patterns
+## Token Module
 
-**Methods**:
+**File**: `src/jakadac/modules/Token.py`
 
-- `is_reserved(word: str) -> bool`: Checks if a word is a reserved word
-- `get_reserved_token(word: str) -> Optional[Enum]`: Returns the token type for a reserved word
-- `get_token_type(token_type_str: str) -> Optional[Enum]`: Gets token type from string
+**Purpose**: Represents lexical tokens produced by the lexer.
 
-### Token Module
+### Class: Token
 
-**File**: `Modules/Token.py`
+- `__init__(token_type, lexeme, line_number, column_number, value=None, real_value=None, literal_value=None)` : Initializes a token.
+- `__repr__() -> str` : Debug representation showing type, lexeme, value, and position.
+- `__str__() -> str` : User-friendly representation `<token_type, lexeme>`.
 
-The Token module defines the Token class used to represent lexical tokens in the source code.
+---
 
-#### Class: Token
+## LexicalAnalyzer Module
 
-**Description**: Represents a token identified by the lexical analyzer.
+**File**: `src/jakadac/modules/LexicalAnalyzer.py`
 
-**Attributes**:
+**Purpose**: Scans Ada source text and breaks it into `Token` objects.
 
-- `token_type`: The type of token (from Definitions.TokenType)
-- `lexeme`: The actual text of the token
-- `line`: Line number where the token appears
-- `column`: Column number where the token starts
+### Class: LexicalAnalyzer
 
-**Methods**:
+- `__init__(stop_on_error: bool = False)` : Sets up `Definitions`, `Logger`, and error mode.
+- `analyze(source_code: str) -> List[Token]` : Main entry for tokenization; returns list ending with EOF.
+- `_skip_whitespace(source, pos, line, column) -> (pos, line, column)` : Skips spaces/tabs/newlines.
+- `_skip_comment(source, pos, line, column) -> (pos, line, column)` : Skips Ada comments (`--` to end-of-line).
+- `_match_token(source, pos, line, column) -> (Token|SKIP|None, new_pos, new_line, new_column)` : Applies regex patterns to match tokens.
 
-- `__init__(token_type, lexeme, line, column)`: Constructor
-- `__str__()`: String representation of the token
-- `to_dict()`: Converts token to dictionary format
+---
 
-### LexicalAnalyzer Module
+## Symbol Table Module
 
-**File**: `Modules/LexicalAnalyzer.py`
+**File**: `src/jakadac/modules/SymTable.py`
 
-The LexicalAnalyzer module implements the lexical analysis phase of the compiler.
+**Purpose**: Implements scoped symbol table for semantic analysis.
 
-#### Class: LexicalAnalyzer
+### Enums:
+- `VarType` : Data types (`CHAR`, `INT`, `FLOAT`, `REAL`, `BOOLEAN`).
+- `EntryType` : Entry categories (`VARIABLE`, `CONSTANT`, `PROCEDURE`, `FUNCTION`, `TYPE`, `PARAMETER`).
+- `ParameterMode` : Parameter passing modes (`IN`, `OUT`, `INOUT`).
 
-**Description**: Analyzes source code and breaks it down into tokens.
+### Class: Symbol
+- `__init__(name: str, token: Token, entry_type: EntryType, depth: int)` : Creates symbol.
+- `set_variable_info(var_type: VarType, offset: int, size: int)` : Assigns var/param metadata.
+- `set_constant_info(const_type: VarType, value: Any)` : Assigns constant metadata.
+- `set_procedure_info(param_list, param_modes, local_size)` : Stores procedure info.
+- `set_function_info(return_type, param_list, param_modes, local_size)` : Stores function info.
+- `__str__()`, `__repr__()` : String formats.
 
-**Attributes**:
+### Exceptions:
+- `SymbolTableError` : Base exception.
+- `SymbolNotFoundError(name)` : Lookup failure.
+- `DuplicateSymbolError(name, depth)` : Redeclaration in scope.
 
-- `definitions`: Instance of Definitions class
-- `logger`: Logger for recording analysis information
+### Class: SymbolTable
+- `__init__()` : Initializes global scope.
+- `enter_scope()` : Pushes a new scope.
+- `exit_scope()` : Pops current scope.
+- `insert(symbol: Symbol)` : Inserts symbol, enforcing unique names per scope.
+- `lookup(name: str, lookup_current_scope_only: bool = False) -> Symbol` : Finds symbol across scopes.
+- `get_current_scope_symbols() -> Dict[str, Symbol]` : Retrieves symbols in active scope.
+- `__str__()` : Formatted view of current scope.
 
-**Methods**:
+---
 
-- `analyze_file(file_path: str) -> List[Token]`: Analyzes a file and returns tokens
-- `analyze_string(source: str) -> List[Token]`: Analyzes a string and returns tokens
-- `tokenize(source: str) -> List[Token]`: Breaks source into tokens
+## ParseTree Module
 
-### AdaSymbolTable Module
+**File**: `src/jakadac/modules/ParseTree.py`
 
-**File**: `Modules/AdaSymbolTable.py`
+**Purpose**: Defines tree structures for syntax representation.
 
-The AdaSymbolTable module implements the symbol table for the Ada compiler.
+### Class: ParseTreeNode
+- `__init__(name: str, token: Optional[Token] = None)` : Node label and optional token.
+- `add_child(child)` : Adds subtree.
+- `__str__()`, `__repr__()` : Node display.
 
-#### Enum: VarType
+### Class: ParseTree
+- `__init__()` : Initializes empty tree.
+- `root` : Holds root node.
 
-**Description**: Enumeration of variable types.
+### Class: ParseTreePrinter
+- `print_tree(node, indent: int = 0)` : Recursively prints the tree structure.
 
-**Values**:
+---
 
-- `INT`: Integer type
-- `FLOAT`: Floating-point type
-- `CHAR`: Character type
+## Logger Module
 
-#### Enum: EntryType
+**File**: `src/jakadac/modules/Logger.py`
 
-**Description**: Enumeration of symbol table entry types.
+**Purpose**: Centralized logging with file/console handlers, filters, and formatters.
 
-**Values**:
+### Class: CallerFilter
+- `filter(record)` : Attaches `caller_class` to log records.
 
-- `VARIABLE`: Variable entry
-- `CONSTANT`: Constant entry
-- `PROCEDURE`: Procedure entry
+### Class: ColoredFormatter
+- `__init__(fmt, datefmt=None, use_color=True)` : Sets up ANSI color codes for levels.
+- `format(record)` : Inserts color codes if enabled.
 
-#### Enum: ParameterMode
+### Class: Logger
+- `__new__()`, `__init__(...)` : Singleton setup of file and console handlers.
+- `debug(msg, ...)`, `info(msg, ...)`, `warning(msg, ...)`, `error(msg, ...)`, `critical(msg, ...)` : Logging methods.
+- `set_level(level, handler_type='both')` : Adjusts logging thresholds.
 
-**Description**: Enumeration of parameter passing modes.
+---
 
-**Values**:
+## FileHandler Module
 
-- `IN`: Input parameter
-- `OUT`: Output parameter
-- `INOUT`: Input/output parameter
+**File**: `src/jakadac/modules/FileHandler.py`
 
-#### Class: Parameter
+**Purpose**: Utility for robust file I/O and user prompts.
 
-**Description**: Represents a procedure parameter.
+### Class: FileHandler
+- `__init__()` : Initializes logger.
+- `process_file(file_name: str) -> List[str] | None` : Reads and cleans lines.
+- `process_arg_file(file_name: str)` : Handles CLI file args.
+- `find_file(file_name, create_if_missing=False) -> Optional[str]` : Locates or creates file.
+- `prompt_for_file(...)`, `use_system_explorer()` : Interactive selection.
+- `open_file(file_path)` : Generator for file lines.
+- `read_file(file_gen) -> List[str]` : Cleans and returns lines.
+- `read_file_raw(file_name) -> List[str]` : Raw read.
+- `process_file_char_stream(file_name)` : Char-by-char read.
+- `read_file_as_string(file_name) -> str` : Full content.
+- `read_line_from_file(line) -> str` : Cleans individual line.
+- `write_file(file_name, lines)` : Overwrites with lines.
+- `write_string_to_file(file_name, content)` : Writes string.
+- `append_to_file(file_name, lines)` : Appends lines.
+- `file_exists(file_name) -> bool` : Existence check.
 
-**Attributes**:
+---
 
-- `param_type`: Parameter type (VarType)
-- `mode`: Parameter passing mode (ParameterMode)
+## RDParser Module
 
-**Methods**:
+**File**: `src/jakadac/modules/RDParser.py`
 
-- `__init__(param_type: VarType, mode: ParameterMode)`: Constructor
-- `__str__()`: String representation of the parameter
+**Purpose**: Recursive-descent syntax analyzer for core Ada grammar.
 
-#### Class: TableEntry
+### Class: RDParser
+- `__init__(tokens, defs, stop_on_error=False, panic_mode_recover=False, build_parse_tree=False)` : Sets up parser state.
+- `parse() -> bool` : Entry point; applies grammar and checks EOF.
+- `advance()` : Moves to next token.
+- `match(expected_token_type)` : Verifies token type or records error.
+- `match_leaf(expected_token_type, parent_node)` : Builds parse tree leaf.
+- `report_error(message)` : Logs syntax errors.
+- `panic_recovery(sync_set: Set)` : Skip tokens to recover.
+- `print_summary()` : Reports error count.
+- `print_parse_tree()` / `_print_tree(...)` : Renders tree.
+- Grammar methods: `parseProg()`, `parseDeclarativePart()`, `parseProcedures()`, `parseArgs()`, `parseSeqOfStatements()`, etc.
 
-**Description**: Represents an entry in the symbol table.
+---
 
-**Attributes**:
+## RDParserExtended Module
 
-- `lexeme`: The identifier name
-- `token_type`: Token type from lexical analyzer
-- `depth`: Lexical scope depth
-- `entry_type`: Type of entry (variable, constant, procedure)
-- Various type-specific attributes (var_type, offset, size, etc.)
-- `next`: Next entry in the chain (for collision resolution)
+**File**: `src/jakadac/modules/RDParserExtended.py`
 
-**Methods**:
+**Purpose**: Extends `RDParser` with Ada statements and expressions.
 
-- `__init__(lexeme: str, token_type: Any, depth: int)`: Constructor
-- `set_variable_info(var_type: VarType, offset: int, size: int)`: Sets variable info
-- `set_constant_info(const_type: VarType, const_value: Any)`: Sets constant info
-- `set_procedure_info(local_size: int, param_count: int, return_type: VarType, param_list: List[Parameter])`: Sets procedure info
-- `__str__()`: String representation of the entry
+### Class: RDParserExtended
+- Extends core parser: adds `symbol_table` and semantic checks.
+- `__init__(...)` : Inherits and extends parser initialization.
+- `parseProg()` : Overrides to enforce matching procedure names.
+- `parseSeqOfStatements()`, `parseStatTail()`, `parseStatement()`, `parseAssignStat()`, `parseIOStat()`, `parseExpr()`, etc.
+- Semantic error reporting via `report_error` and a new `semantic_errors` list.
 
-#### Class: AdaSymbolTable
+---
 
-**Description**: Symbol table implementation using a hash table with chaining.
+## NewSemanticAnalyzer Module
 
-**Attributes**:
+**File**: `src/jakadac/modules/NewSemanticAnalyzer.py`
 
-- `table_size`: Size of the hash table
-- `table`: The hash table array
+**Purpose**: Performs semantic analysis on the parse tree.
 
-**Methods**:
+### Class: NewSemanticAnalyzer
+- `__init__(symtab, root, defs)` : Links symbol table and parse tree.
+- `analyze() -> bool` : Drives symbol insertion and scope dumps.
+- `_visit_program(node)` : Inserts program symbol and enters scope.
+- `_visit_formals(node)` : Inserts parameters with offsets and modes.
+- `_visit_declarative_part(node)` : Processes constant/variable declarations.
+- `_insert_constants(...)` / `_insert_variables(...)` : Handle symbol creation.
+- `_map_typemark_to_vartype(type_mark) -> VarType` : Type mapping.
+- `_visit_statements(node)` / `_visit_statement(node)` : Checks undeclared IDs.
+- `_dump_scope(depth)` : Pretty-prints symbols using table layout.
+- `_error(message)` : Records semantic errors.
 
-- `__init__(table_size: int = 211)`: Constructor
-- `_hash(lexeme: str) -> int`: Hash function for lexemes
-- `insert(lexeme: str, token_type: Any, depth: int) -> TableEntry`: Inserts a new entry
-- `lookup(lexeme: str, depth: Optional[int] = None) -> Optional[TableEntry]`: Looks up an entry
-- `deleteDepth(depth: int) -> None`: Deletes all entries at a specific depth
-- `writeTable(depth: int) -> Dict[str, TableEntry]`: Returns all entries at a specific depth
+---
 
-### RDParser Module
+## TACGenerator Module
 
-**File**: `Modules/RDParser.py`
+**File**: `src/jakadac/modules/TACGenerator.py`
 
-The RDParser module implements a recursive descent parser for Ada.
+**Purpose**: Generates three-address code (TAC) from parse tree.
 
-#### Class: RDParser
+### Class: TACInstruction
+- `__init__(op: str, arg1: str, arg2: Optional[str], result: Optional[str])` : Defines an IR instruction.
+- `__str__() -> str` : Formats instruction for output.
 
-**Description**: Recursive descent parser for Ada syntax analysis.
+### Class: TACProgram
+- `__init__()` : Initializes instruction list.
+- `add_instruction(instr: TACInstruction)` : Appends to program.
+- `__iter__()`, `__str__()` : Iteration and full program print.
 
-**Attributes**:
+### Class: ThreeAddressCodeGenerator
+- `__init__(parse_tree, symtab)` : Sets IR inputs.
+- `generate()` : Walks parse tree and emits TAC.
+- Internal helpers: `_gen_procedure`, `_gen_statement`, `_gen_expression`, etc.
+- Implements depth-based addressing and constant substitution.
 
-- `tokens`: List of tokens from lexical analyzer
-- `current_token_index`: Index of the current token being processed
-- `parse_tree`: The resulting parse tree
+---
 
-**Methods**:
+## TypeUtils Module
 
-- `__init__(tokens: List[Token])`: Constructor
-- `parse() -> ParseTree`: Parses the tokens and returns a parse tree
-- Various parsing methods for different grammar rules
+**File**: `src/jakadac/modules/TypeUtils.py`
 
-### ParseTree Module
+**Purpose**: Utility for mapping token types to variable types and computing sizes.
 
-**File**: `Modules/ParseTree.py`
+### Class: TypeUtils
+- `token_type_to_var_type(token_type: str) -> VarType` : Maps lexeme type to `VarType`.
+- `get_type_size(var_type: VarType) -> int` : Returns byte size of type.
+- `parse_value_from_token(token_type: str, lexeme: str) -> Tuple[VarType, Any]` : Parses literal values.
 
-The ParseTree module defines the parse tree structure for representing the syntactic structure of the program.
+---
 
-#### Class: ParseTreeNode
+## Driver Module
 
-**Description**: Represents a node in the parse tree.
+**File**: `src/jakadac/modules/Driver.py`
 
-**Attributes**:
+**Purpose**: Base driver orchestrating compilation phases and I/O.
 
-- `type`: Node type
-- `value`: Node value
-- `children`: List of child nodes
-
-**Methods**:
-
-- `__init__(type: str, value: Any = None)`: Constructor
-- `add_child(node: 'ParseTreeNode')`: Adds a child node
-- `to_dict()`: Converts node to dictionary format
-
-#### Class: ParseTree
-
-**Description**: Represents the entire parse tree.
-
-**Attributes**:
-
-- `root`: Root node of the tree
-
-**Methods**:
-
-- `__init__(root: ParseTreeNode = None)`: Constructor
-- `set_root(node: ParseTreeNode)`: Sets the root node
-- `to_dict()`: Converts tree to dictionary format
-
-### ErrorHandler Module
-
-**File**: `Modules/ErrorHandler.py`
-
-The ErrorHandler module provides error handling functionality for the compiler.
-
-#### Class: ErrorHandler
-
-**Description**: Handles and reports compiler errors.
-
-**Attributes**:
-
-- `errors`: List of errors encountered
-
-**Methods**:
-
-- `__init__()`: Constructor
-- `add_error(message: str, line: int, column: int)`: Adds an error
-- `has_errors() -> bool`: Checks if there are any errors
-- `get_errors() -> List[Dict]`: Returns all errors
-- `print_errors()`: Prints all errors
-
-### Logger Module
-
-**File**: `Modules/Logger.py`
-
-Provides a centralized logging facility with configurable levels, timestamps, and output targets (console/file).
-
-### FileHandler Module
-
-**File**: `Modules/FileHandler.py`
-
-Handles file I/O, command-line path parsing, and ensures directory existence for source inputs and outputs.
-
-### RDParserExtended Module
-
-**File**: `Modules/RDParserExtended.py`
-
-Extends the base RDParser with full Ada statement and expression support, multiple top-level procedures, panic-mode recovery, and debug hooks for token mismatches.
-
-### NewSemanticAnalyzer Module
-
-**File**: `Modules/NewSemanticAnalyzer.py`
-
-Traverses the parse tree to perform semantic analyses: symbol-table population, nested scoping, type checking, offset computation, and scope dumps via PrettyTable.
-
-### TACGenerator Module
-
-**File**: `Modules/TACGenerator.py`
-
-Implements `TACInstruction`, `TACProgram`, and `ThreeAddressCodeGenerator` to emit three-address code IR with depth-based addressing and immediate constant propagation.
-
-### TypeUtils Module
-
-**File**: `Modules/TypeUtils.py`
-
-Utility functions for mapping token types to variable types (`VarType`), computing type sizes, and other type-related helpers.
-
-### Driver Module
-
-**File**: `Modules/Driver.py`
-
-Defines `BaseDriver` to orchestrate compilation phases (lexical, syntax, semantic, code generation), parse CLI args, and manage logging and outputs.
-
-## Semantic Analyzer Module
-
-**File**: `Modules/SemanticAnalyzer.py`
-
-The Semantic Analyzer module performs semantic analysis on the parse tree generated by the parser. It inserts constants, variables, and procedures into the symbol table, performs type checking and offset calculations, and reports errors. Notably, its `analyze_arg_list` method has been updated so that it now returns a tuple `(parameter_count, parameter_list)` when the analysis is successful, or returns `None` if a critical error is encountered—thereby propagating error status back to the caller.
+### Class: BaseDriver
+- `__init__(input_file_name: str, output_file_name: Optional[str] = None, debug: bool = False, logger: Optional[Logger] = None)` : Initializes phases and paths.
+- `get_source_code_from_file() -> None` : Reads input file.
+- `print_source_code() -> None` : Prints source to console.
+- `process_tokens() -> None` : Runs lexical analysis.
+- `format_and_output_tokens() -> None` : Formats and writes token table.
+- `write_output_to_file(output_file_name, content) -> bool` : Writes text to file.
+- `print_tokens() -> None` : Prints raw tokens.
+- `get_processing_status() -> Dict[str, Any]` : Reports counts and error tallies.
+- `print_compilation_summary() -> None` : Prints overall summary.
