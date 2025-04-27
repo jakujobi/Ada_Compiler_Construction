@@ -36,24 +36,34 @@ This approach combines unit testing for core components with incremental feature
     *   Implement offset calculation logic in `RDParserExtended.py` (declarations/parameters), populating `Symbol.offset` and `Symbol.size`.
     *   Run end-to-end tests with locals/params (e.g., `test74`, `test75`).
     *   Debug using logging (`Logger`) to verify symbol table state and `getPlace` output in the generated TAC.
+    *   Create visual stack frame diagrams to validate offset calculation.
+    *   Add validation checks that verify offsets follow expected patterns.
     *   *Rationale:* Tackles complex Parser-SymTable interaction early, verifies result via TAC output.
 
-3.  **Phase 2: Basic Statements & Expressions (Incremental + End-to-End Testing)**
+3.  **Verification Checkpoint After Phase 1**
+    *   Create and run specific tests just for offset calculation correctness.
+    *   Verify through logging that locals start at BP-2 and decrease, while parameters start at BP+4 and increase.
+    *   Create a visualization of at least one complex procedure's stack frame layout.
+    *   *Rationale:* Ensures offset calculation is correct before proceeding to expression handling.
+
+4.  **Phase 2: Basic Statements & Expressions (Incremental + End-to-End Testing)**
     *   **Increment 2a (Constants & Globals):** Modify `parseFactor`/`parseAssignStat`. Test `A := 5; B := A;`. Verify TAC.
     *   **Increment 2b (Locals/Params in Factor):** Ensure `parseFactor` uses `getPlace`. Test `_BP-2 := _BP+4;`. Verify TAC.
     *   **Increment 2c (Simple Binary Ops):** Add `+`/`-` logic. Test `test71.ada`. Verify temp usage.
     *   **Increment 2d (Other Ops/Precedence):** Add `*`, `/`, unary ops. Test `test72`, `test73`, complex expressions. Verify precedence via TAC.
     *   *Rationale:* Builds expression complexity incrementally, verifying each step with targeted tests.
 
-4.  **Phase 3: Procedure Calls (Grammar + Integration Testing)**
+5.  **Phase 3: Procedure Calls (Grammar + Integration Testing)**
     *   Implement procedure call grammar (`parseProcCall`, etc.) and `AssignStat` lookahead in parser.
     *   Integrate `emitPush` (checking mode) and `emitCall` actions.
-    *   Test with `test74`, `test75`. Verify `push`/`push @`/`call` sequence.
+    *   Add validation in `emitPush` to verify mode matches expected format.
+    *   Create trace logs showing each parameter's resolved mode.
+    *   Test with `test74`, `test75`, and additional mode-specific tests. Verify `push`/`push @`/`call` sequence.
     *   *Rationale:* Adds the final major syntax and TAC generation feature.
 
-5.  **Phase 4: Finalization (End-to-End Testing)**
+6.  **Phase 4: Finalization (End-to-End Testing)**
     *   Implement `emitProgramStart` logic and update driver (`JohnA7.py`).
-    *   Run *all* test cases (`test71-75`).
+    *   Run *all* test cases (`test71-75` plus additional edge case tests).
     *   Perform `diff` comparisons of generated vs. expected `.tac` files. Debug remaining issues.
     *   *Rationale:* Ensures all requirements are met across the full test suite.
 
@@ -380,9 +390,9 @@ proc_symbol.local_size = total_local_size
 
 | Risk                                   | Likelihood | Impact | Mitigation                                                                          | Status |
 |----------------------------------------|------------|--------|-------------------------------------------------------------------------------------|--------|
-| Incorrect Offset Calculation (Locals/Params)| Medium     | High   | Implement carefully per spec. Add debug logging. Create specific unit/integration tests for offsets. | Open   |
-| Incorrect "Place" Propagation in Expr  | Medium     | High   | Clear return value contracts for parse functions. Trace values during debugging. Use intermediate prints. | Open   |
-| Handling `push @` vs `push` incorrectly| Medium     | Medium | Retrieve `mode` from `proc_symbol.param_modes` in `parseProcCall`. Pass mode to `tac_gen.emitPush`. Test both cases. | Open   |
+| Incorrect Offset Calculation (Locals/Params)| Medium     | High   | Implement carefully per spec. Add debug logging. Create visual stack frame diagrams during implementation. Implement validation checks that verify offsets follow expected patterns (-2 decreasing for locals, +4 increasing for params). Add runtime assertions to catch invalid offsets. Compare with examples from Ada_Examples.md. | Open   |
+| Incorrect "Place" Propagation in Expr  | Medium     | High   | Clear return value contracts for parse functions. Trace values during debugging. Create unit tests specifically for expression result propagation. Implement contract verification that checks place values match expected patterns. Add a helper function to validate place strings. | Open   |
+| Handling `push @` vs `push` incorrectly| Medium     | Medium | Retrieve `mode` from `proc_symbol.param_modes` in `parseProcCall`. Pass mode to `tac_gen.emitPush`. Create specific test files for each parameter mode (IN/OUT/INOUT). Add validation in emitPush to verify mode matches expected format. Create a trace log showing each parameter's resolved mode. | Open   |
 | Off-by-one errors in offsets/loops     | Medium     | Medium | Double-check start/end conditions (-2, +4). Test cases with 0, 1, N locals/params. | Open   |
 | MASM reserved word conflict (`c`)      | Low        | Low    | Add check during `SymTable.insert` or parser declaration; emit warning log message. | Open   |
 | Underestimating Debug Time           | High       | Medium | Allocate buffer time. Use `Logger` module extensively for tracing parser state, symbol lookups, and emitted TAC. | Open   |
@@ -411,6 +421,7 @@ proc_symbol.local_size = total_local_size
         *   Test (Param): `getPlace(Symbol(name='P', depth=2, type=PARAM, offset=6))` -> Assert returns `"\_BP+6"`.
         *   Test (Temp Name): `getPlace("_t3")` -> Assert returns `"\_t3"`. *(Confirm if temps are ever passed as Symbols)*.
         *   Test (Error Case): `getPlace(Symbol(name='Bad', depth=2, type=VAR, offset=None))` -> Assert raises appropriate error or returns error string.
+        *   Test (Place Validation): Create a comprehensive test that examines all possible place string formats and verifies they match expected patterns.
     *   **`TACGenerator.emit<Op/Assign/Push/Call/Proc/etc.>()` Methods:**
         *   Setup: Instantiate `TACGenerator` potentially with a mock file/list for `emit`.
         *   Test (Binary): `emitBinaryOp("ADD", "_t1", "A", "_BP-2")` -> Assert internal `emit` was called with `"\_t1 = A ADD \_BP-2"` (or similar formatted string). Check Ada op mapping (e.g., `rem` -> `MOD`).
@@ -422,6 +433,8 @@ proc_symbol.local_size = total_local_size
         *   Test (Proc/Endp): Verify correct `proc`/`endp` strings.
     *   **Offset Calculation Helpers (if created separately):**
         *   Unit test any isolated helper functions used for calculating offsets or determining type sizes.
+        *   Test with 0, 1, and multiple parameters/locals to catch off-by-one errors.
+        *   Verify through assertions that offsets follow expected patterns.
 
 *   **Integration Tests / End-to-End Acceptance Cases (Using `.ada` -> `.tac`):**
     *   **Framework:** A script (or manual process) that:
@@ -443,6 +456,11 @@ proc_symbol.local_size = total_local_size
         *   **Procedure Call (No Params):** `ProcZ();` -> Verify `call ProcZ`.
         *   **Procedure Call (Complex Args):** `ProcX(A+B, 5);` -> Verify expression for arg is evaluated into a temp first, then `push _tN` / `push 5`.
         *   **MASM Conflict (`c`):** File containing `c : integer;` -> Check log output for warning (no specific TAC change expected).
+        *   **Additional Targeted Test Cases:**
+            *   **Offset Validation (`test76.ada`):** Test procedures with 0, 1, and many parameters/locals to verify correct offsets.
+            *   **Parameter Mode Coverage (`test77.ada`):** Create test with full coverage of IN/OUT/INOUT modes.
+            *   **Expression Tree Validation (`test78.ada`):** Test with complex nested expressions to verify accurate TAC generation.
+            *   **Edge Cases (`test79.ada`):** Empty procedure, procedure with only declaration/no statements.
 *   **Verification**: Primarily automated file comparison. Manual inspection for specific formatting rules or subtle issues. Log files essential for debugging failures.
 
 ---
