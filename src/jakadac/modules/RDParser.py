@@ -276,11 +276,12 @@ class RDParser:
     def parseIdentifierList(self):
         """
         IdentifierList -> idt | IdentifierList , idt
+        This method ALWAYS returns a node, even if build_parse_tree is False,
+        because the caller (parseDeclarativePart) needs it for semantic analysis.
         """
-        if self.build_parse_tree:
-            node = ParseTreeNode("IdentifierList")
-        else:
-            node = None
+        # Always create a node for IdentifierList
+        node = ParseTreeNode("IdentifierList")
+        
         self.logger.debug("Parsing IdentifierList")
         self.match_leaf(self.defs.TokenType.ID, node)
         while self.current_token and self.current_token.token_type == self.defs.TokenType.COMMA:
