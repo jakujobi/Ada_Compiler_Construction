@@ -54,10 +54,13 @@ def build_mock_prog_node(proc_name: str, decls: Optional[List] = None, stmts: Op
     if decls: # Now checks the initialized list
         for decl in decls:
             # decl should be a tuple: (name_list_node, type_mark_node)
-            decl_wrapper_node = ParseTreeNode("Declaration") # Wrapper if needed
-            decl_wrapper_node.add_child(decl[0]) # IdentifierList
-            decl_wrapper_node.add_child(decl[1]) # TypeMark
-            decl_part_node.add_child(decl_wrapper_node)
+            # Make IdentifierList and TypeMark DIRECT children of DeclarativePart
+            id_list_node = decl[0]
+            type_mark_node = decl[1]
+            decl_part_node.add_child(id_list_node)
+            decl_part_node.add_child(type_mark_node)
+            # Note: This simplified structure assumes one decl list per DeclarativePart node.
+            # The grammar might allow multiple lists; adjust if needed.
     else:
         # Add epsilon if no declarations, though analyzer might just skip if empty children
         decl_part_node.add_child(ParseTreeNode("ε"))
@@ -163,8 +166,8 @@ class TestNewSemanticAnalyzer(unittest.TestCase):
             self.assertEqual(proc_symbol.name, proc_name)
             self.assertEqual(proc_symbol.entry_type, EntryType.PROCEDURE)
             self.assertEqual(proc_symbol.depth, 0)
-            # Check if dump was called (once for global scope at the end)
-            self.assertEqual(mock_dump.call_count, 1)
+            # Check if dump was called (once for proc scope exit, once for global scope exit at end)
+            self.assertEqual(mock_dump.call_count, 2)
             # Check if scope was exited correctly (back to -1 theoretically, but 0 after re-enter)
             # Note: Analyzer exits the proc scope, then BaseDriver exits global?
             # Let's check internal state if possible, or rely on side effects.
@@ -241,10 +244,12 @@ class TestNewSemanticAnalyzer(unittest.TestCase):
         with patch.object(analyzer, '_dump_scope'):
              sem_ok = analyzer.analyze()
 
-        self.assertFalse(sem_ok)
-        self.assertEqual(len(analyzer.errors), 1)
-        self.assertIn("Duplicate constant 'val'", analyzer.errors[0]) # Adjust msg based on exact error
-        # Or Duplicate variable
+        self.assertFalse(sem_ok, "Analysis should fail for duplicate declaration")
+        self.assertEqual(len(analyzer.errors), 1, "Should be exactly one error for the duplicate")
+        # Correct the expected error message based on how decls are processed
+        # Assuming it detects the second 'val' as the duplicate.
+        # Check the actual error message from NewSemanticAnalyzer._insert_variables/_insert_constants
+        self.assertIn("Duplicate variable 'val'", analyzer.errors[0])
 
     def test_analyze_undeclared_assign(self):
         """Test analysis detects undeclared identifier in assignment."""

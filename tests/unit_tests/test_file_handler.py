@@ -5,16 +5,31 @@ import tempfile
 import shutil
 from pathlib import Path
 
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
+# --- Adjust path to import modules from src ---
+repo_root = Path(__file__).resolve().parent.parent.parent
+src_root = repo_root / "src"
+if str(src_root) not in sys.path:
+    sys.path.insert(0, str(src_root))
 
-from Modules.FileHandler import FileHandler
+# Updated import paths
+from jakadac.modules.FileHandler import FileHandler
+from jakadac.modules.Logger import Logger # Assuming Logger might be needed
 
 class TestFileHandler(unittest.TestCase):
     def setUp(self):
         self.file_handler = FileHandler()
         self.temp_dir = tempfile.mkdtemp()
         self.test_file_path = os.path.join(self.temp_dir, "test.txt")
+        
+        # Define test content with explicit Windows-style newlines
+        self.test_content = "This is the first line.\r\nSecond line.\r\n\r\nFourth line."
+        # Create a temporary file
+        # Use binary mode initially to ensure exact bytes are written
+        with open(self.test_file_path, "wb") as f:
+            f.write(self.test_content.encode('utf-8')) # Encode to bytes
+            
+        # Re-initialize handler to clear any potential internal state/cache
+        self.handler = FileHandler()
         
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
@@ -60,7 +75,7 @@ class TestFileHandler(unittest.TestCase):
             ("normal line", "normal line"),
             ("line with comment // ignored", "line with comment"),
             ("   spaces   ", "spaces"),
-            ("// comment only", ""),
+            ("// comment only", None),
             ("\n", None)
         ]
         

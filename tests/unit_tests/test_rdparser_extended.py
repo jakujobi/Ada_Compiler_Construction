@@ -33,7 +33,7 @@ class TestRDParserExtended(unittest.TestCase):
         self.lexer.current_pos = 0
         self.lexer.current_line = 1
         self.lexer.current_col = 1
-        tokens = self.lexer.analyze()
+        tokens = self.lexer.analyze(source_code)
         # Filter out comments if necessary (assuming analyze includes them)
         # tokens = [t for t in tokens if t.token_type != self.defs.TokenType.COMMENT]
         return tokens
@@ -151,7 +151,7 @@ class TestRDParserExtended(unittest.TestCase):
 
         self.assertFalse(parse_ok, "Parsing should fail due to name mismatch")
         self.assertEqual(len(parser.errors), 1, "Should have one syntax error for name mismatch")
-        self.assertIn("Procedure name mismatch", parser.errors[0]['message'])
+        self.assertIn("Procedure name mismatch", parser.errors[0])
         self.assertEqual(len(parser.semantic_errors), 1, "Should have one semantic error for name mismatch")
         self.assertIn("Procedure name mismatch", parser.semantic_errors[0]['message'])
 

@@ -105,6 +105,9 @@ class RDParserExtended(RDParser):
         
         self.match_leaf(self.defs.TokenType.IS, node)
         
+        # Enter new scope for procedure body
+        if self.symbol_table: self.symbol_table.enter_scope()
+        
         child = self.parseDeclarativePart()
         if self.build_parse_tree and node is not None and child:
             self._add_child(node, child)
@@ -138,6 +141,9 @@ class RDParserExtended(RDParser):
             self.report_semantic_error(error_msg, line, col)
         
         self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+        
+        # Exit procedure scope before returning
+        if self.symbol_table: self.symbol_table.exit_scope()
         
         return node
     

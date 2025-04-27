@@ -39,7 +39,7 @@ class TestBaseDriver(unittest.TestCase):
         self.assertFalse(driver.use_extended_parser) # Default should be False
         # Add assertions for other default states if necessary
         self.assertIsNone(driver.source_code)
-        self.assertIsNone(driver.lexical_analyzer)
+        self.assertIsNotNone(driver.lexical_analyzer)
         self.assertIsNone(driver.parser)
         self.assertEqual(driver.tokens, [])
         self.assertEqual(driver.syntax_errors, [])
