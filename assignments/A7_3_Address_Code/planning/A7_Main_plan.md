@@ -33,7 +33,7 @@ This approach combines unit testing for core components with incremental feature
     *   *Rationale:* Builds a reliable, testable `TACGenerator` foundation before complex integration.
 
 2.  **Phase 1: Offset Calculation (Integration Testing Focus)**
-    *   Implement offset calculation logic in `RDParserExtended.py` (declarations/parameters), populating `Symbol.offset` and `Symbol.size`.
+    *   Implement offset calculation logic in `RDParserA7.py` (declarations/parameters), populating `Symbol.offset` and `Symbol.size`.
     *   Run end-to-end tests with locals/params (e.g., `test74`, `test75`).
     *   Debug using logging (`Logger`) to verify symbol table state and `getPlace` output in the generated TAC.
     *   Create visual stack frame diagrams to validate offset calculation.
@@ -137,7 +137,7 @@ This approach combines unit testing for core components with incremental feature
 graph LR
     A[Ada Source (.ada)] --> B(LexicalAnalyzer);
     B --> C{Token Stream};
-    C --> D(RDParserExtended);
+    C --> D(RDParserA7);
     D -- Accesses / Updates --> E(SymTable);
     D -- Drives --> F(TACGenerator);
     F --> G[TAC File (.tac)];
@@ -166,11 +166,11 @@ graph LR
         *   Ensure `Symbol.offset` field exists and is usable.
         *   Ensure `Symbol.param_modes` (dict mapping param name to `ParameterMode` on *procedure* symbol) exists.
         *   Ensure `Symbol.local_size` and `Symbol.param_size` fields exist on procedure/function symbols.
-    *   **Offset Calculation Logic (to be integrated into `RDParserExtended.py` logic):** See Algorithm section below. Key points: locals start at `-2` and decrease, params start at `+4` (for last param) and increase. Store `total_local_size` and `total_param_size`.
+    *   **Offset Calculation Logic (to be integrated into `RDParserA7.py` logic):** See Algorithm section below. Key points: locals start at `-2` and decrease, params start at `+4` (for last param) and increase. Store `total_local_size` and `total_param_size`.
     *   **Constants:** Ensure `Symbol.const_value` stores the actual value for constants.
 *   **Rationale**: TAC generation relies entirely on accurate symbol table info.
 
-### `RDParserExtended.py`
+### `RDParserA7.py`
 
 *   **Objective**: Update the parser to handle the extended grammar (including procedure calls), integrate offset calculation, and embed semantic actions to drive TAC generation.
 *   **Implementation Details**:
@@ -214,7 +214,7 @@ graph LR
 *   **Implementation Details**:
     *   Construct output filename: `Path(input_file).with_suffix('.tac')`.
     *   Instantiate `LexicalAnalyzer`, `Definitions`, `SymTable`, `TACGenerator(output_filename)`.
-    *   Instantiate `RDParserExtended(tokens, defs, symbol_table, tac_generator=tac_gen)`.
+    *   Instantiate `RDParserA7(tokens, defs, symbol_table, tac_generator=tac_gen)`.
     *   Call `parser.parse()`. Check for errors. Store/retrieve outermost procedure name (`start_proc_name`).
     *   Call `tac_gen.emitProgramStart(start_proc_name)`.
     *   Call `tac_gen.writeOutput()`.
