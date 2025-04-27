@@ -40,6 +40,9 @@ This folder contains the core compiler components for the Ada compiler project. 
 - **RDParserExtended.py**
   A variant of the parser with additional grammar rules and recovery strategies (extension of `RDParser`).
 
+- **TACGenerator.py**
+  Implements the `ThreeAddressCodeGenerator` for producing three-address code IR with depth-based addressing and constant substitution.
+
 ## Usage
 
 1. **Lexical Analysis**
@@ -73,6 +76,13 @@ This folder contains the core compiler components for the Ada compiler project. 
    from jakadac.modules.Driver import BaseDriver
    class MyDriver(BaseDriver):
        # implement custom behavior or reuse BaseDriver.run_lexical/run_syntax/run_semantic
+   ```
+
+5. **Three-Address Code Generation**
+   ```python
+   from jakadac.modules.TACGenerator import ThreeAddressCodeGenerator
+   tacgen = ThreeAddressCodeGenerator(symbol_table, parse_tree_root)
+   tac_program = tacgen.generate()
    ```
 
 Refer to individual module docstrings for detailed API documentation and examples. 

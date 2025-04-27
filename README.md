@@ -23,6 +23,7 @@ This repository contains the code and assignments for CSC 446 Compiler Construct
 │  ├─ RDParser.py
 │  ├─ SymTable.py
 │  ├─ NewSemanticAnalyzer.py
+│  ├─ docs/                  # Project documentation (Markdown)
 │  └─ Driver.py
 
 └─ README.md              # This file
@@ -52,11 +53,23 @@ This repository contains the code and assignments for CSC 446 Compiler Construct
    python JohnA5b.py path/to/source.ada
    ```
 
-5. Use the BaseDriver pipeline in `src/jakadac/modules/Driver.py` for custom tests.
+5. For grammar rules implementation (A6):
+   ```sh
+   cd assignments/A6_New_Grammar_Rules
+   python JohnA6.py path/to/source.ada
+   ```
+
+6. For three-address code generation (A7):
+   ```sh
+   cd assignments/A7_3_Address_Code
+   python JohnA7.py path/to/source.ada
+   ```
+
+7. Use the BaseDriver pipeline in `src/jakadac/modules/Driver.py` for custom tests.
 
 ## Module Documentation
 See `src/jakadac/modules/README.md` for details on each compiler component.
 
 ---
 
-© 2025 John Akujobi / AI Assistant
+ 2025 John Akujobi / AI Assistant

@@ -7,7 +7,7 @@ This documentation provides a comprehensive guide to the Ada Compiler Constructi
 1. **Lexical Analysis**: Tokenizing the source code
 2. **Syntax Analysis**: Parsing the tokens into a syntax tree
 3. **Semantic Analysis**: Type checking and symbol table management
-4. **Code Generation**: Generating target code (future phase)
+4. **Code Generation**: Three-address code IR generation
 
 ## Project Structure
 
@@ -56,3 +56,4 @@ symbol_table = AdaSymbolTable()
 - [Assignment Implementations](assignments.md): Documentation of assignment-specific implementations
 - [Testing Guide](testing.md): Information about the test suite
 - [Development Guide](development.md): Guidelines for contributing to the project
+- [Improvements & Roadmap](IMPROVEMENTS.md): Future enhancements and improvement ideas.
