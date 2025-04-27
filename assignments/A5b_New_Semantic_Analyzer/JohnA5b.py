@@ -29,15 +29,13 @@ try:
     from jakadac.modules.SymTable import SymbolTable  # type: ignore
     from jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer  # type: ignore
 except ImportError:
-    # Add 'src' folder to path so 'jakadac' package is discoverable
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    src_root = os.path.join(repo_root, "src")
-    sys.path.append(src_root)
-    from jakadac.modules.Driver import BaseDriver  # type: ignore
-    from jakadac.modules.Logger import Logger  # type: ignore
-    from jakadac.modules.RDParser import RDParser  # type: ignore
-    from jakadac.modules.SymTable import SymbolTable  # type: ignore
-    from jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer  # type: ignore
+    sys.path.append(repo_root)
+    from src.jakadac.modules.Driver import BaseDriver
+    from src.jakadac.modules.Logger import Logger
+    from src.jakadac.modules.RDParser import RDParser
+    from src.jakadac.modules.SymTable import SymbolTable
+    from src.jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer
 
 class JohnA5b(BaseDriver):
     """

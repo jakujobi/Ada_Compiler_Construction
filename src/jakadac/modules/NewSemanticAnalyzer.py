@@ -59,20 +59,37 @@ class NewSemanticAnalyzer:
         self.offsets[depth0] = 0
         self.param_offsets[depth0] = 0
 
-        # Process the main program/procedure node (inserts program, enters body scope)
-        self._visit_program(self.root)
+        # Process program(s): handle single Prog node or a ProgramList
+        if hasattr(self.root, 'name') and self.root.name == 'ProgramList':  # multiple procs
+            for prog_node in self.root.children or []:
+                self._visit_program(prog_node)
+        else:
+            # Single program/procedure node
+            self._visit_program(self.root)
 
         # Dump remaining global symbols at depth0
         self._dump_scope(self.symtab.current_depth)
         return len(self.errors) == 0
+
+    def _find_first_id(self, node: ParseTreeNode) -> Optional[ParseTreeNode]:
+        """Recursively find the first ID node in the parse subtree."""
+        # Direct ID leaf
+        if node.name == "ID" and node.token:
+            return node
+        # Recurse into children
+        for child in getattr(node, 'children', []):
+            found = self._find_first_id(child)
+            if found:
+                return found
+        return None
 
     def _visit_program(self, node: ParseTreeNode) -> None:
         """
         Visit a 'Prog' node to insert procedure, process params, declarations, nested procs.
         """
         depth = self.symtab.current_depth
-        # Get procedure name
-        id_node = node.find_child_by_name("ID")
+        # Get program/procedure name from first ID leaf in subtree
+        id_node = self._find_first_id(node)
         if id_node is None or id_node.token is None:
             self._error("Missing program/procedure name")
             return
@@ -329,8 +346,11 @@ class NewSemanticAnalyzer:
         """
         Check each statement for undeclared identifier uses.
         """
-        # Recursively find and process each Statement node
         def dfs(n: ParseTreeNode):
+            # First handle assignment statements explicitly
+            if n.name == "AssignStat":
+                self._visit_assign_stat(n)
+            # Then handle any statement-level undeclared IDs
             if n.name == "Statement":
                 self._visit_statement(n)
             for c in n.children:
@@ -353,3 +373,15 @@ class NewSemanticAnalyzer:
             for c in n.children:
                 check_id(c)
         check_id(node)
+
+    def _visit_assign_stat(self, node: ParseTreeNode) -> None:
+        """Check that the variable on the left side of an assignment is declared."""
+        # The first ID child in an AssignStat node is the LHS
+        id_node = node.find_child_by_name("ID")
+        if id_node and id_node.token:
+            lex = id_node.token.lexeme
+            try:
+                self.symtab.lookup(lex)
+            except SymbolNotFoundError:
+                line = getattr(id_node.token, 'line_number', -1)
+                self._error(f"Undeclared identifier '{lex}' used in assignment at line {line}")
