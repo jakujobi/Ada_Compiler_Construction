@@ -21,6 +21,16 @@ class TestFileHandler(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.test_file_path = os.path.join(self.temp_dir, "test.txt")
         
+        # Define test content with explicit Windows-style newlines
+        self.test_content = "This is the first line.\r\nSecond line.\r\n\r\nFourth line."
+        # Create a temporary file
+        # Use binary mode initially to ensure exact bytes are written
+        with open(self.test_file_path, "wb") as f:
+            f.write(self.test_content.encode('utf-8')) # Encode to bytes
+            
+        # Re-initialize handler to clear any potential internal state/cache
+        self.handler = FileHandler()
+        
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
         
