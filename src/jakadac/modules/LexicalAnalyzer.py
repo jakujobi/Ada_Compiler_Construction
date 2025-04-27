@@ -6,7 +6,7 @@
 # Description:
 # This module implements a lexical analyzer for a subset of the Ada programming language.
 # It scans source code, breaks it into tokens, and enforces specific rules (like a max identifier length).
-# The code is documented so that even a Python beginner can understand what’s going on.
+# The code is documented so that even a Python beginner can understand what's going on.
 
 import os
 import re
@@ -27,18 +27,19 @@ class LexicalAnalyzer:
     # A special marker (object) used to signal that a token should be skipped.
     SKIP = object()
 
-    def __init__(self, stop_on_error=False):
+    def __init__(self, stop_on_error=False, defs=None):
         """
         Initialize the lexical analyzer.
 
         Parameters:
           stop_on_error (bool): If True, the analyzer stops processing when it encounters an error.
                                 If False, it logs the error and skips the problematic token.
+          defs (Definitions): The Definitions instance to use for token patterns and token type info.
         """
         # Get our custom logger instance.
         self.logger = Logger()
-        # Create an instance of Definitions to hold token patterns and token type info.
-        self.defs = Definitions()
+        # Use the provided Definitions instance or create a new one.
+        self.defs = defs if defs is not None else Definitions()
         # Configure whether to stop on error or continue and log errors.
         self.stop_on_error = stop_on_error
         # List to collect error messages.
@@ -279,8 +280,6 @@ class LexicalAnalyzer:
 
         self.logger.debug(f"No matching token found at pos {pos} (line {line}, column {column}).")
         return None, pos, line, column
-
-
 
     def _process_identifier(self, lexeme: str, line: int, column: int):
         """
