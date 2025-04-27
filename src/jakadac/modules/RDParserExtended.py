@@ -39,7 +39,7 @@ from .RDParser import RDParser, ParseTreeNode
 from .Token import Token
 from .Definitions import Definitions
 from .Logger import Logger
-from .SymTable import SymbolTable, Symbol, EntryType
+from .SymTable import SymbolTable, Symbol, EntryType, DuplicateSymbolError
 
 
 class RDParserExtended(RDParser):
@@ -594,7 +594,15 @@ class RDParserExtended(RDParser):
                             EntryType.VARIABLE,
                             self.symbol_table.current_depth
                         )
-                        self.symbol_table.insert(sym)
+                        try:
+                            self.symbol_table.insert(sym)
+                        except DuplicateSymbolError as e:
+                            # report duplicate declaration but continue parsing
+                            self.report_semantic_error(
+                                f"Duplicate symbol declaration: '{e.name}' at depth {e.depth}",
+                                getattr(id_leaf.token, 'line_number', -1),
+                                getattr(id_leaf.token, 'column_number', -1)
+                            )
                 # Type and semicolon
                 self.match_leaf(self.defs.TokenType.COLON, node)
                 type_mark_node = self.parseTypeMark()
@@ -624,7 +632,15 @@ class RDParserExtended(RDParser):
                         EntryType.VARIABLE,
                         self.symbol_table.current_depth
                     )
-                    self.symbol_table.insert(sym)
+                    try:
+                        self.symbol_table.insert(sym)
+                    except DuplicateSymbolError as e:
+                        # report duplicate declaration but continue parsing
+                        self.report_semantic_error(
+                            f"Duplicate symbol declaration: '{e.name}' at depth {e.depth}",
+                            getattr(id_leaf.token, 'line_number', -1),
+                            getattr(id_leaf.token, 'column_number', -1)
+                        )
             self.match(self.defs.TokenType.COLON)
             self.parseTypeMark()
             self.match(self.defs.TokenType.SEMICOLON)
