@@ -147,8 +147,8 @@ class TestSymbolTable(unittest.TestCase):
         self.symtab.exit_scope() # Back to depth 0
         found_global_again = self.symtab.lookup("x")
         self.assertEqual(found_global_again, symbol0)
-        with self.assertRaises(SymbolNotFoundError):
-            self.symtab.lookup("x", lookup_current_scope_only=True) # symbol1 should not be found in depth 0
+        found_current_global = self.symtab.lookup("x", lookup_current_scope_only=True)
+        self.assertEqual(found_current_global, symbol0, "Lookup restricted to current scope (0) should find global symbol")
 
     def test_duplicate_symbol_in_same_scope(self):
         """Test inserting a duplicate symbol in the same scope raises error."""

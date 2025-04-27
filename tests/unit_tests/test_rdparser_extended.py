@@ -33,7 +33,7 @@ class TestRDParserExtended(unittest.TestCase):
         self.lexer.current_pos = 0
         self.lexer.current_line = 1
         self.lexer.current_col = 1
-        tokens = self.lexer.analyze()
+        tokens = self.lexer.analyze(source_code)
         # Filter out comments if necessary (assuming analyze includes them)
         # tokens = [t for t in tokens if t.token_type != self.defs.TokenType.COMMENT]
         return tokens

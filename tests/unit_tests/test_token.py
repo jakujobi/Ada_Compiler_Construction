@@ -3,11 +3,15 @@ import sys
 import os
 from pathlib import Path
 
-repo_home_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(repo_home_path)
+# --- Adjust path to import modules from src ---
+repo_root = Path(__file__).resolve().parent.parent.parent
+src_root = repo_root / "src"
+if str(src_root) not in sys.path:
+    sys.path.insert(0, str(src_root))
 
-from Modules.Token import Token
-from Modules.Definitions import Definitions
+# Updated import paths
+from jakadac.modules.Token import Token
+from jakadac.modules.Definitions import Definitions
 
 class TestToken(unittest.TestCase):
     def setUp(self):
