@@ -77,6 +77,8 @@ class BaseDriver:
         self.semantic_errors: List[Dict[str, Any]] = []
         # Parser selection flag
         self.use_extended_parser = use_extended_parser
+        # Initialize parser attribute to None
+        self.parser: Optional[RDParser | RDParserExtended] = None
 
     def get_source_code_from_file(self) -> None:
         """
