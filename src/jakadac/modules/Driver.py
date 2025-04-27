@@ -228,35 +228,46 @@ class BaseDriver:
         else:
             print("Compilation failed due to errors.")
             self.logger.error(f"Compilation failed with {total_errors} total errors.")
-        # Show detailed errors in debug mode
-        if self.debug:
+            # Always show detailed errors if any occurred
             self._print_error_details()
 
     def _print_error_details(self) -> None:
-        """Print detailed error information when in debug mode."""
-        if self.lexical_errors:
-            print("\nLexical Errors:")
-            print("-" * 20)
-            for i, error in enumerate(self.lexical_errors[:5], 1):
-                print(f"{i}. {error.get('message', 'Unknown error')}")
-            if len(self.lexical_errors) > 5:
-                print(f"...and {len(self.lexical_errors) - 5} more lexical errors")
-        
-        if self.syntax_errors:
-            print("\nSyntax Errors:")
-            print("-" * 20)
-            for i, error in enumerate(self.syntax_errors[:5], 1):
-                print(f"{i}. {error.get('message', 'Unknown error')}")
-            if len(self.syntax_errors) > 5:
-                print(f"...and {len(self.syntax_errors) - 5} more syntax errors")
-        
-        if self.semantic_errors:
-            print("\nSemantic Errors:")
-            print("-" * 20)
-            for i, error in enumerate(self.semantic_errors[:5], 1):
-                print(f"{i}. {error.get('message', 'Unknown error')}")
-            if len(self.semantic_errors) > 5:
-                print(f"...and {len(self.semantic_errors) - 5} more semantic errors")
+        """Print detailed error information for all phases in a consolidated list."""
+        all_errors = []
+        # Collect all errors with their type
+        for error in self.lexical_errors:
+            all_errors.append(("Lexical", error))
+        for error in self.syntax_errors:
+            all_errors.append(("Syntax", error))
+        for error in self.semantic_errors:
+            all_errors.append(("Semantic", error))
+
+        if not all_errors:
+            return # No errors to print
+
+        print("\nError Details:")
+        print("--------------")
+        for i, (err_type, error) in enumerate(all_errors, 1):
+            message = "Unknown Error"
+            location = ""
+            
+            # Robustly handle dict, str, or other error types
+            if isinstance(error, dict):
+                # Attempt to extract message and location from dict
+                message = error.get('message', message)
+                line = error.get('line', None)
+                col = error.get('column', None)
+                if line is not None and line != -1 and col is not None and col != -1:
+                    location = f" (Line {line}, Col {col})"
+            elif isinstance(error, str):
+                # Use the string directly as the message
+                message = error
+            else:
+                # Handle unexpected error types
+                message = f"Unexpected error format: {type(error)} - {str(error)}"
+
+            print(f"{i}. [{err_type}]{location}: {message}")
+        print("--------------")
 
     def run_lexical(self) -> None:
         """
