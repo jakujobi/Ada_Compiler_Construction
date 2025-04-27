@@ -47,7 +47,7 @@ class RDParserExtended(RDParser):
     Extended Recursive Descent Parser with grammar rules for statements and expressions
     """
     
-    def __init__(self, tokens, defs, symbol_table=None, stop_on_error=False, panic_mode_recover=False, build_parse_tree=False):
+    def __init__(self, tokens, defs, symbol_table=None, tac_generator=None, stop_on_error=False, panic_mode_recover=False, build_parse_tree=False):
         """
         Initialize the extended parser.
         
@@ -55,6 +55,7 @@ class RDParserExtended(RDParser):
             tokens (List[Token]): The list of tokens from the lexical analyzer.
             defs (Definitions): The definitions instance from the lexical analyzer.
             symbol_table (AdaSymbolTable): Symbol table for semantic checking.
+            tac_generator (TACGenerator): Three Address Code generator.
             stop_on_error (bool): Whether to stop on error.
             panic_mode_recover (bool): Whether to attempt recovery from errors.
             build_parse_tree (bool): Whether to build a parse tree.
@@ -63,6 +64,17 @@ class RDParserExtended(RDParser):
         # Use provided symbol_table or default to a new one
         self.symbol_table: SymbolTable = symbol_table if symbol_table is not None else SymbolTable()
         self.semantic_errors = []
+        
+        # TAC generator for code generation
+        self.tac_generator = tac_generator
+        
+        # Tracking for offsets and procedure context
+        self.current_proc_symbol = None  # Current procedure being processed
+        self.next_local_offset = -2      # Start of local variables offset (negative)
+        self.next_temp_offset = -2       # Start of temporary variables (will be updated after locals)
+        self.total_local_size = 0        # Total size of local variables
+        self.parameter_info_list = []    # List to store parameter info during parsing
+        self.outermost_proc_name = None  # Track the outermost procedure name for "start" directive
         
     def _add_child(self, parent, child):
         """
@@ -75,7 +87,10 @@ class RDParserExtended(RDParser):
         """
         Prog -> procedure idt Args is DeclarativePart Procedures begin SeqOfStatements end idt;
         
-        Enhanced to check that the procedure identifier at the end matches the one at the beginning.
+        Enhanced to:
+        1. Check that procedure identifier at the end matches the beginning
+        2. Set up procedure context for offset calculations
+        3. Emit TAC procedure directives when TAC generator is available
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Prog")
@@ -84,6 +99,11 @@ class RDParserExtended(RDParser):
         
         self.logger.debug("Parsing Prog")
         
+        # Reset procedure context 
+        self.next_local_offset = -2
+        self.total_local_size = 0
+        self.parameter_info_list = []
+        
         # Match procedure keyword
         self.match_leaf(self.defs.TokenType.PROCEDURE, node)
         
@@ -91,6 +111,9 @@ class RDParserExtended(RDParser):
         if self.current_token is not None:
             start_id_token = self.current_token
             procedure_name = self.current_token.lexeme
+            # Track the outermost procedure for the "start" directive
+            if self.outermost_proc_name is None:
+                self.outermost_proc_name = procedure_name
         else:
             start_id_token = None
             procedure_name = "unknown"
@@ -98,23 +121,59 @@ class RDParserExtended(RDParser):
         # Match the identifier and continue parsing
         self.match_leaf(self.defs.TokenType.ID, node)
         
-        # Parse the rest of the procedure declaration
+        # Create procedure symbol and enter its scope
+        proc_symbol = Symbol(procedure_name, start_id_token, EntryType.PROCEDURE, self.symbol_table.current_depth)
+        try:
+            self.symbol_table.insert(proc_symbol)
+            self.current_proc_symbol = proc_symbol
+        except DuplicateSymbolError as e:
+            self.report_semantic_error(
+                f"Duplicate procedure declaration: '{e.name}' at depth {e.depth}",
+                getattr(start_id_token, 'line_number', -1),
+                getattr(start_id_token, 'column_number', -1)
+            )
+        
+        # Enter the procedure's scope for parameters and local variables
+        self.symbol_table.enter_scope()
+        
+        # Emit TAC procedure start if we have a generator
+        if self.tac_generator:
+            self.tac_generator.emitProcStart(procedure_name)
+        
+        # Parse parameters
         child = self.parseArgs()
         if self.build_parse_tree and node is not None and child:
             self._add_child(node, child)
+            
+        # Calculate parameter offsets (post-parsing)
+        self._calculate_parameter_offsets()
         
         self.match_leaf(self.defs.TokenType.IS, node)
         
+        # Parse local declarations
         child = self.parseDeclarativePart()
         if self.build_parse_tree and node is not None and child:
             self._add_child(node, child)
         
+        # Now that all locals are parsed, update the temp offset to start after locals
+        self.next_temp_offset = self.next_local_offset
+        
+        # Store sizes in procedure symbol
+        if self.current_proc_symbol:
+            # Store local size in the procedure symbol for future reference
+            self.current_proc_symbol.local_size = abs(self.next_local_offset + 2)  # Add 2 since we started at -2
+            # Initialize param_modes if not already set
+            if self.current_proc_symbol.param_modes is None:
+                self.current_proc_symbol.param_modes = {}
+        
+        # Parse nested procedures
         child = self.parseProcedures()
         if self.build_parse_tree and node is not None and child:
             self._add_child(node, child)
         
         self.match_leaf(self.defs.TokenType.BEGIN, node)
         
+        # Parse statements
         child = self.parseSeqOfStatements()
         if self.build_parse_tree and node is not None and child:
             self._add_child(node, child)
@@ -138,6 +197,16 @@ class RDParserExtended(RDParser):
             self.report_semantic_error(error_msg, line, col)
         
         self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+        
+        # Exit the procedure's scope
+        self.symbol_table.exit_scope()
+        
+        # Emit TAC procedure end if we have a generator
+        if self.tac_generator:
+            self.tac_generator.emitProcEnd(procedure_name)
+        
+        # Clear current procedure
+        self.current_proc_symbol = None
         
         return node
     
@@ -584,26 +653,65 @@ class RDParserExtended(RDParser):
     def parseDeclarativePart(self):
         """
         DeclarativePart -> IdentifierList : TypeMark ; DeclarativePart | ε
-        Also insert each declared identifier into the symbol table.
+        
+        Enhanced to:
+        1. Insert each declared identifier into the symbol table
+        2. Calculate memory offsets for local variables
+        3. Track total size of locals for procedure frames
         """
         self.logger.debug("Parsing DeclarativePart (Extended)")
+        
         # Build tree branch
         if self.build_parse_tree:
             node = ParseTreeNode("DeclarativePart")
+            
             # If there's a declaration
             if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
-                # Identifiers
+                # Parse identifiers
                 id_list_node = self.parseIdentifierList()
                 assert id_list_node is not None
-                # Insert declarations
+                
+                # Get type token for these identifiers
+                self.match_leaf(self.defs.TokenType.COLON, node)
+                type_node = self.parseTypeMark()
+                type_token = None
+                if type_node and type_node.children:
+                    for child in type_node.children:
+                        if hasattr(child, 'token'):
+                            type_token = child.token
+                            break
+                
+                # Convert to VarType enum value
+                var_type = None
+                if type_token:
+                    var_type = self._convert_to_var_type(type_token)
+                    
+                # Insert declarations with appropriate offsets
                 for id_leaf in id_list_node.find_children_by_name("ID"):
                     if id_leaf.token:
+                        # Create symbol entry
                         sym = Symbol(
                             id_leaf.token.lexeme,
                             id_leaf.token,
                             EntryType.VARIABLE,
                             self.symbol_table.current_depth
                         )
+                        
+                        # Determine size based on type
+                        size = var_type.size if var_type else 2  # Default to 2 bytes if type unknown
+                        
+                        # Set variable info including offset
+                        sym.var_type = var_type
+                        sym.size = size
+                        sym.offset = self.next_local_offset  # Negative offset for locals
+                        
+                        # Update offset for next local
+                        self.next_local_offset -= size
+                        
+                        # Update total local size
+                        self.total_local_size += size
+                        
+                        # Insert into symbol table
                         try:
                             self.symbol_table.insert(sym)
                         except DuplicateSymbolError as e:
@@ -613,47 +721,167 @@ class RDParserExtended(RDParser):
                                 getattr(id_leaf.token, 'line_number', -1),
                                 getattr(id_leaf.token, 'column_number', -1)
                             )
-                # Type and semicolon
-                self.match_leaf(self.defs.TokenType.COLON, node)
-                type_mark_node = self.parseTypeMark()
-                assert type_mark_node is not None
+                
+                # Match semicolon
                 self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+                
                 # Recursively parse further declarations
                 next_node = self.parseDeclarativePart()
-                # Attach children
+                
+                # Attach children to parse tree
                 node.add_child(id_list_node)
-                node.add_child(type_mark_node)
+                node.add_child(type_node)
                 if next_node:
                     node.add_child(next_node)
             else:
-                # Epsilon
+                # Epsilon - no more declarations
                 node.add_child(ParseTreeNode("ε"))
+                
             return node
+            
         # Non-tree branch: just parse and insert
-        if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
-            id_list_node = self.parseIdentifierList()
-            assert id_list_node is not None
-            # Insert declarations
-            for id_leaf in id_list_node.find_children_by_name("ID"):
-                if id_leaf.token:
-                    sym = Symbol(
-                        id_leaf.token.lexeme,
-                        id_leaf.token,
-                        EntryType.VARIABLE,
-                        self.symbol_table.current_depth
-                    )
-                    try:
-                        self.symbol_table.insert(sym)
-                    except DuplicateSymbolError as e:
-                        # report duplicate declaration but continue parsing
-                        self.report_semantic_error(
-                            f"Duplicate symbol declaration: '{e.name}' at depth {e.depth}",
-                            getattr(id_leaf.token, 'line_number', -1),
-                            getattr(id_leaf.token, 'column_number', -1)
+        else:
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+                # Parse identifiers
+                id_list_node = self.parseIdentifierList()
+                assert id_list_node is not None
+                
+                # Get type token
+                self.match(self.defs.TokenType.COLON)
+                type_token = None
+                if self.parseTypeMark():  # This advances the token
+                    # We don't have the type token directly in non-tree mode
+                    # So use the previously seen token
+                    prev_token = self.tokens[self.current_token_index - 1] if self.current_token_index > 0 else None
+                    if prev_token:
+                        type_token = prev_token
+                
+                # Convert to VarType enum value
+                var_type = None
+                if type_token:
+                    var_type = self._convert_to_var_type(type_token)
+                
+                # Insert declarations with appropriate offsets
+                for id_leaf in id_list_node.find_children_by_name("ID"):
+                    if id_leaf.token:
+                        # Create symbol entry
+                        sym = Symbol(
+                            id_leaf.token.lexeme,
+                            id_leaf.token,
+                            EntryType.VARIABLE,
+                            self.symbol_table.current_depth
                         )
-            self.match(self.defs.TokenType.COLON)
-            self.parseTypeMark()
-            self.match(self.defs.TokenType.SEMICOLON)
-            # Further declarations
-            self.parseDeclarativePart()
-        return None
+                        
+                        # Determine size based on type
+                        size = var_type.size if var_type else 2  # Default to 2 bytes if type unknown
+                        
+                        # Set variable info including offset
+                        sym.var_type = var_type
+                        sym.size = size
+                        sym.offset = self.next_local_offset  # Negative offset for locals
+                        
+                        # Update offset for next local
+                        self.next_local_offset -= size
+                        
+                        # Update total local size
+                        self.total_local_size += size
+                        
+                        # Insert into symbol table
+                        try:
+                            self.symbol_table.insert(sym)
+                        except DuplicateSymbolError as e:
+                            # report duplicate declaration but continue parsing
+                            self.report_semantic_error(
+                                f"Duplicate symbol declaration: '{e.name}' at depth {e.depth}",
+                                getattr(id_leaf.token, 'line_number', -1),
+                                getattr(id_leaf.token, 'column_number', -1)
+                            )
+                
+                # Match semicolon
+                self.match(self.defs.TokenType.SEMICOLON)
+                
+                # Recursively parse further declarations
+                self.parseDeclarativePart()
+            
+            return None
+    
+    def _calculate_parameter_offsets(self):
+        """
+        Calculate offsets for parameters.
+        Parameters are placed in the activation record with positive offsets from BP.
+        Parameters are pushed onto the stack in reverse order (right to left),
+        so the first parameter has the highest offset.
+        """
+        if not self.parameter_info_list:
+            return
+        
+        # Start at base offset for parameters (after saved BP and return address)
+        next_param_offset = 4
+        # Need to store parameter info
+        param_symbols = []
+        
+        # Initialize param_modes if not already done
+        if self.current_proc_symbol and self.current_proc_symbol.param_modes is None:
+            self.current_proc_symbol.param_modes = {}
+        
+        # Process parameters in reverse order (since we push right-to-left)
+        # This ensures first parameter has largest offset
+        for name, token, var_type, mode in reversed(self.parameter_info_list):
+            # Get size for this type
+            size = var_type.size
+            
+            # Create parameter symbol
+            param_symbol = Symbol(name, token, EntryType.PARAMETER, self.symbol_table.current_depth)
+            param_symbol.var_type = var_type
+            param_symbol.size = size
+            param_symbol.offset = next_param_offset
+            
+            # Insert into symbol table
+            try:
+                self.symbol_table.insert(param_symbol)
+                param_symbols.append(param_symbol)
+                # Store the parameter mode in the procedure symbol
+                if self.current_proc_symbol and self.current_proc_symbol.param_modes is not None:
+                    self.current_proc_symbol.param_modes[name] = mode
+            except DuplicateSymbolError as e:
+                self.report_semantic_error(
+                    f"Duplicate parameter name: '{e.name}' at depth {e.depth}",
+                    getattr(token, 'line_number', -1),
+                    getattr(token, 'column_number', -1)
+                )
+            
+            # Update offset for next parameter
+            next_param_offset += size
+        
+        # Store total param size and parameter list in procedure symbol
+        if self.current_proc_symbol:
+            total_param_size = next_param_offset - 4
+            self.current_proc_symbol.param_list = param_symbols
+    
+    def _convert_to_var_type(self, type_token):
+        """
+        Convert a type token to a VarType enum value.
+        
+        Args:
+            type_token: The token representing a type.
+            
+        Returns:
+            The corresponding VarType enum value.
+        """
+        from .SymTable import VarType
+        
+        if type_token.lexeme.lower() == "integer":
+            return VarType.INT
+        elif type_token.lexeme.lower() in ("float", "real"):
+            return VarType.FLOAT
+        elif type_token.lexeme.lower() == "character":
+            return VarType.CHAR
+        elif type_token.lexeme.lower() == "boolean":
+            return VarType.BOOLEAN
+        else:
+            self.report_semantic_error(
+                f"Unsupported type: '{type_token.lexeme}'",
+                getattr(type_token, 'line_number', -1),
+                getattr(type_token, 'column_number', -1)
+            )
+            return VarType.INT  # Default to INT for unsupported types

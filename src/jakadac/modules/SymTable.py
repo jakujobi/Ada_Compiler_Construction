@@ -93,13 +93,18 @@ from .Token import Token
 
 # --- Enumerations ---
 class VarType(Enum):
-    """Enumeration for variable, constant, and parameter data types."""
-    CHAR = auto()
-    INT = auto()
-    FLOAT = auto()
-    REAL = auto() # Alias for FLOAT
-    BOOLEAN = auto() # Added Boolean type
+    """Enumeration for variable, constant, and parameter data types with size information."""
+    CHAR = 1    # 1 byte for a character
+    INT = 2     # 2 bytes for an integer
+    FLOAT = 4   # 4 bytes for a float
+    REAL = 4    # 4 bytes, alias for FLOAT
+    BOOLEAN = 1 # 1 byte for a boolean
     # Add other Ada types as needed (e.g., STRING, ARRAY, RECORD)
+    
+    @property
+    def size(self):
+        """Get the byte size for this type."""
+        return self.value
 
 class EntryType(Enum):
     """Enumeration for the kind of symbol being stored."""
