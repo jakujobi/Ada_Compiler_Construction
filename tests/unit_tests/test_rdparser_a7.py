@@ -1,6 +1,7 @@
 # Ada_Compiler_Construction/tests/unit_tests/test_rdparser_a7.py
 
 import pytest
+import unittest
 import sys
 from pathlib import Path
 import logging # Need logging module for levels
@@ -13,14 +14,15 @@ if str(src_root) not in sys.path:
 
 # Modules to test/mock
 try:
-    from src.jakadac.modules.LexicalAnalyzer import LexicalAnalyzer
-    from src.jakadac.modules.Definitions import Definitions
-    from src.jakadac.modules.SymTable import SymbolTable, Symbol, EntryType, VarType, ParameterMode
-    from src.jakadac.modules.TACGenerator import TACGenerator
-    from src.jakadac.modules.RDParserA7 import RDParserA7
-    from src.jakadac.modules.Logger import Logger
+    from jakadac.modules.LexicalAnalyzer import LexicalAnalyzer  # type: ignore
+    from jakadac.modules.Definitions import Definitions  # type: ignore
+    from jakadac.modules.SymTable import SymbolTable, Symbol, EntryType, VarType, ParameterMode  # type: ignore
+    from jakadac.modules.TACGenerator import TACGenerator  # type: ignore
+    from jakadac.modules.RDParserA7 import RDParserA7  # type: ignore
+    from jakadac.modules.Logger import Logger  # type: ignore
 except ImportError as e:
-    pytest.skip(f"Skipping RDParserA7 tests due to import error: {e}", allow_module_level=True)
+    # Skip entire module if essential imports are missing
+    raise unittest.SkipTest(f"Skipping RDParserA7 tests due to import error: {e}")
 
 # --- Fixtures ---
 
@@ -50,7 +52,9 @@ def tac_generator(tmp_path, dummy_logger):
 
 # Helper function to parse a snippet and return parser/symtab
 def parse_snippet(ada_code: str, defs, tac_generator, dummy_logger):
-    lex = LexicalAnalyzer(logger=dummy_logger)
+    # Instantiate the lexical analyzer with provided definitions and inject dummy logger
+    lex = LexicalAnalyzer(stop_on_error=False, defs=defs)
+    lex.logger = dummy_logger
     tokens = lex.analyze(ada_code)
     symtab = SymbolTable()
     # Inject logger into SymTable if it uses the shared one directly
@@ -60,7 +64,7 @@ def parse_snippet(ada_code: str, defs, tac_generator, dummy_logger):
         defs=defs,
         symbol_table=symtab,
         tac_generator=tac_generator,
-        stop_on_error=True, # Fail fast for offset tests
+        stop_on_error=True, # Fail fast for syntax errors
         panic_mode_recover=False,
         build_parse_tree=False # Not needed for offset testing
     )
@@ -294,4 +298,58 @@ def test_combined_offsets(defs, tac_generator, dummy_logger):
     assert local_l2.offset == -3 # L1(sz 4)@-2. Next offset = -2-4 = -6.
     # Corrected: L1(sz 4)@ -2. next = -2-4 = -6. L2(sz 1)@ -6. local_size = 4+1 = 5.
     assert local_l2.offset == -6
-    assert local_l2.size == 1 
+    assert local_l2.size == 1
+
+# --- Expanded Syntax & Semantic Tests from RDParserExtended ---
+
+def test_empty_program(defs, tac_generator, dummy_logger):
+    """Test minimal valid program structure."""
+    ada_code = "procedure empty is begin null; end empty;"
+    parser, symtab, success = parse_snippet(ada_code, defs, tac_generator, dummy_logger)
+    assert success, f"Parsing failed. Errors: {parser.errors}, Sem Errors: {parser.semantic_errors}"
+    assert not parser.errors
+    assert not parser.semantic_errors
+
+def test_simple_assignment(defs, tac_generator, dummy_logger):
+    """Test parsing a single assignment statement."""
+    ada_code = "procedure assign_test is x : integer; begin x := 5; end assign_test;"
+    parser, symtab, success = parse_snippet(ada_code, defs, tac_generator, dummy_logger)
+    assert success, f"Parsing failed. Errors: {parser.errors}, Sem Errors: {parser.semantic_errors}"
+    assert not parser.errors
+    assert not parser.semantic_errors
+
+def test_undeclared_variable_assignment(defs, tac_generator, dummy_logger):
+    """Test semantic error for assignment to undeclared variable."""
+    ada_code = "procedure undeclared is begin y := 10; end undeclared;"
+    parser, symtab, success = parse_snippet(ada_code, defs, tac_generator, dummy_logger)
+    assert success, f"Parsing failed. Errors: {parser.errors}, Sem Errors: {parser.semantic_errors}"
+    assert not parser.errors
+    assert len(parser.semantic_errors) == 1
+    assert "Undeclared variable 'y'" in parser.semantic_errors[0]['message']
+
+def test_undeclared_variable_factor(defs, tac_generator, dummy_logger):
+    """Test semantic error for undeclared variable in expression factor."""
+    ada_code = "procedure undeclared_expr is x : integer; begin x := z + 5; end undeclared_expr;"
+    parser, symtab, success = parse_snippet(ada_code, defs, tac_generator, dummy_logger)
+    assert success, f"Parsing failed. Errors: {parser.errors}, Sem Errors: {parser.semantic_errors}"
+    assert not parser.errors
+    assert len(parser.semantic_errors) == 1
+    assert "Undeclared variable 'z'" in parser.semantic_errors[0]['message']
+
+def test_procedure_name_mismatch(defs, tac_generator, dummy_logger):
+    """Test error reporting for mismatched procedure end name."""
+    ada_code = "procedure name_test is begin null; end different_name;"
+    parser, symtab, success = parse_snippet(ada_code, defs, tac_generator, dummy_logger)
+    assert not success
+    assert len(parser.errors) == 1
+    assert "Procedure name mismatch" in parser.errors[0]
+    assert len(parser.semantic_errors) == 1
+    assert "Procedure name mismatch" in parser.semantic_errors[0]['message']
+
+def test_sequence_of_statements(defs, tac_generator, dummy_logger):
+    """Test parsing multiple statements."""
+    ada_code = "procedure multi is a, b, c : integer; begin a := 1; b := a + 2; c := a * b; end multi;"
+    parser, symtab, success = parse_snippet(ada_code, defs, tac_generator, dummy_logger)
+    assert success, f"Parsing failed. Errors: {parser.errors}, Sem Errors: {parser.semantic_errors}"
+    assert not parser.errors
+    assert not parser.semantic_errors 

@@ -1,19 +1,26 @@
 # Ada_Compiler_Construction/tests/unit_tests/test_tac_generator.py
 
 import pytest
+import unittest
 import os
 import tempfile
+import sys
+from pathlib import Path
+# Adjust path to import modules from src
+repo_root = Path(__file__).resolve().parent.parent.parent
+src_root = repo_root / "src"
+if str(src_root) not in sys.path:
+    sys.path.insert(0, str(src_root))
 
 # Assuming the structure allows this import
 # Adjust if tests are run differently (e.g., using package install)
 try:
-    from src.jakadac.modules.TACGenerator import TACGenerator
-    from src.jakadac.modules.SymTable import Symbol, EntryType, VarType, ParameterMode
-    from src.jakadac.modules.Token import Token
-except ImportError:
-    # Fallback if running from a different structure or package not installed
-    # This might require adjusting PYTHONPATH or how tests are invoked
-    pytest.skip("Skipping TACGenerator tests, modules not found.", allow_module_level=True)
+    from jakadac.modules.TACGenerator import TACGenerator  # type: ignore
+    from jakadac.modules.SymTable import Symbol, EntryType, VarType, ParameterMode  # type: ignore
+    from jakadac.modules.Token import Token  # type: ignore
+except ImportError as e:
+    # Skip tests if essential imports are missing
+    raise unittest.SkipTest(f"Skipping TACGenerator tests due to import error: {e}")
 
 # --- Fixtures ---
 

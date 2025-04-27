@@ -13,8 +13,8 @@ from jakadac.modules.Token import Token
 from jakadac.modules.Definitions import Definitions
 from jakadac.modules.LexicalAnalyzer import LexicalAnalyzer
 from jakadac.modules.RDParserExtended import RDParserExtended
-from jakadac.modules.SymTable import SymbolTable, Symbol, EntryType, VarType, DuplicateSymbolError
-from jakadac.modules.Logger import Logger # Import logger if needed, or disable/mock
+from jakadac.modules.SymTable import *
+from jakadac.modules.Logger import Logger
 
 # Disable logging during tests unless debugging
 # logger.disable_logging()
