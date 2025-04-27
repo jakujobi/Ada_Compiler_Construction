@@ -32,7 +32,7 @@ class TestBaseDriver(unittest.TestCase):
 
         driver = BaseDriver(input_file_name=input_file, logger=dummy_logger)
 
-        self.assertEqual(driver.input_file_name, input_file)
+        self.assertEqual(str(driver.input_file_name), input_file)
         self.assertIsNone(driver.output_file_name)
         self.assertFalse(driver.debug)
         self.assertIs(driver.logger, dummy_logger)
@@ -50,7 +50,7 @@ class TestBaseDriver(unittest.TestCase):
         input_file = "in.ada"
         output_file = "out.txt"
         driver = BaseDriver(input_file, output_file, logger=dummy_logger)
-        self.assertEqual(driver.input_file_name, input_file)
+        self.assertEqual(str(driver.input_file_name), input_file)
         self.assertEqual(driver.output_file_name, output_file)
         self.assertFalse(driver.debug)
 
@@ -58,7 +58,7 @@ class TestBaseDriver(unittest.TestCase):
         """Test BaseDriver initialization with debug mode enabled."""
         input_file = "debug_test.ada"
         driver = BaseDriver(input_file, debug=True, logger=dummy_logger)
-        self.assertEqual(driver.input_file_name, input_file)
+        self.assertEqual(str(driver.input_file_name), input_file)
         self.assertTrue(driver.debug)
 
     def test_initialization_extended_parser(self):
@@ -69,7 +69,7 @@ class TestBaseDriver(unittest.TestCase):
         #      patch('jakadac.modules.Driver.RDParserExtended') as MockExtendedParser:
 
         driver = BaseDriver(input_file, use_extended_parser=True, logger=dummy_logger)
-        self.assertEqual(driver.input_file_name, input_file)
+        self.assertEqual(str(driver.input_file_name), input_file)
         self.assertTrue(driver.use_extended_parser)
         # Verify if the correct parser class *would* be selected later
         # This might require mocking the parser setup method if it happens in __init__
@@ -91,7 +91,7 @@ class TestBaseDriver(unittest.TestCase):
             use_extended_parser=use_extended
         )
 
-        self.assertEqual(driver.input_file_name, input_file)
+        self.assertEqual(str(driver.input_file_name), input_file)
         self.assertEqual(driver.output_file_name, output_file)
         self.assertEqual(driver.debug, debug_mode)
         self.assertIs(driver.logger, test_logger)

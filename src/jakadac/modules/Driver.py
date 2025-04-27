@@ -22,6 +22,7 @@ from .LexicalAnalyzer import LexicalAnalyzer
 from .FileHandler import FileHandler
 from .RDParser import RDParser
 from .RDParserExtended import RDParserExtended
+from .TACGenerator import TACGenerator
 
 
 class BaseDriver:
@@ -36,7 +37,9 @@ class BaseDriver:
         output_file_name: Optional[str] = None,
         debug: bool = False,
         logger: Optional[Logger] = None,
-        use_extended_parser: bool = False
+        use_extended_parser: bool = False,
+        use_tac_generator: bool = False,
+        tac_output_filename: Optional[str] = None
     ):
         """
         Initialize the base driver.
@@ -47,13 +50,16 @@ class BaseDriver:
             debug: Whether to enable debug mode
             logger: Optional logger instance to use
             use_extended_parser: Whether to use the extended RDParser
+            use_tac_generator: Whether to enable TAC generation
+            tac_output_filename: Optional path for the TAC output file (defaults to <input>.tac)
         """
         # Use provided logger or create a new one
         self.logger = logger if logger is not None else Logger(log_level_console=logging.INFO)
         
         # Store file paths
-        self.input_file_name = input_file_name
+        self.input_file_name = Path(input_file_name)
         self.output_file_name = output_file_name
+        self.tac_output_filename = tac_output_filename
         
         # Set debug mode
         self.debug = debug
@@ -70,15 +76,33 @@ class BaseDriver:
         self.ran_lexical = False
         self.ran_syntax = False
         self.ran_semantic = False
+        self.ran_tac_write = False
         
         # Initialize error tracking
         self.lexical_errors: List[Dict[str, Any]] = []
         self.syntax_errors: List[Dict[str, Any]] = []
         self.semantic_errors: List[Dict[str, Any]] = []
+        self.tac_errors: List[Dict[str, Any]] = []
         # Parser selection flag
         self.use_extended_parser = use_extended_parser
         # Initialize parser attribute to None
         self.parser: Optional[RDParser | RDParserExtended] = None
+        # Initialize TAC Generator (conditionally)
+        self.use_tac_generator = use_tac_generator
+        self.tac_generator: Optional[TACGenerator] = None
+
+        if self.use_tac_generator:
+            if self.tac_output_filename is None:
+                # Default TAC output filename is <input_base>.tac
+                self.tac_output_filename = self.input_file_name.with_suffix('.tac')
+            else:
+                # Use the provided specific TAC output filename
+                self.tac_output_filename = Path(self.tac_output_filename)
+
+            self.logger.info(f"TAC Generation enabled. Output will be written to: {self.tac_output_filename}")
+            self.tac_generator = TACGenerator(str(self.tac_output_filename))
+        else:
+            self.logger.info("TAC Generation disabled.")
 
     def get_source_code_from_file(self) -> None:
         """
@@ -201,7 +225,8 @@ class BaseDriver:
             'has_source': bool(self.source_code),
             'lexical_errors': len(self.lexical_errors),
             'syntax_errors': len(self.syntax_errors),
-            'semantic_errors': len(self.semantic_errors)
+            'semantic_errors': len(self.semantic_errors),
+            'tac_errors': len(self.tac_errors)
         }
 
     def print_compilation_summary(self) -> None:
@@ -214,6 +239,7 @@ class BaseDriver:
             ("Lexical", self.ran_lexical, len(self.lexical_errors)),
             ("Syntax", self.ran_syntax, len(self.syntax_errors)),
             ("Semantic", self.ran_semantic, len(self.semantic_errors)),
+            ("TAC Write", self.ran_tac_write, len(self.tac_errors))
         ]
         for phase, ran, errs in phases:
             status = "Done" if ran else "Skipped"
@@ -241,6 +267,8 @@ class BaseDriver:
             all_errors.append(("Syntax", error))
         for error in self.semantic_errors:
             all_errors.append(("Semantic", error))
+        for error in self.tac_errors:
+            all_errors.append(("TAC", error))
 
         if not all_errors:
             return # No errors to print
@@ -295,15 +323,24 @@ class BaseDriver:
         # Choose parser implementation
         if self.use_extended_parser:
             self.logger.info("Using extended RDParser for syntax analysis.")
-            # RDParserExtended signature: (tokens, defs, symbol_table=None, stop_on_error, panic_mode_recover, build_parse_tree)
-            self.parser = RDParserExtended(
-                self.tokens,
-                self.lexical_analyzer.defs,
-                None,
-                stop_on_error,
-                panic_mode_recover,
-                build_parse_tree
-            )
+            # Placeholder for SymbolTable, needs proper instantiation if required by RDParserExtended
+            # symbol_table = None
+            # Pass tac_generator if it exists
+            parser_kwargs = {
+                'tokens': self.tokens,
+                'defs': self.lexical_analyzer.defs,
+                'symbol_table': None, # Placeholder, needs proper instantiation
+                'stop_on_error': stop_on_error,
+                'panic_mode_recover': panic_mode_recover,
+                'build_parse_tree': build_parse_tree
+            }
+            if self.tac_generator:
+                # RDParserExtended needs to be updated to accept this argument
+                parser_kwargs['tac_generator'] = self.tac_generator
+                self.logger.debug("Passing TACGenerator instance to RDParserExtended.")
+
+            # TODO: Update RDParserExtended.__init__ signature to accept tac_generator
+            self.parser = RDParserExtended(**parser_kwargs)
         else:
             self.parser = RDParser(
                 self.tokens,
@@ -330,4 +367,46 @@ class BaseDriver:
             self.run_syntax(build_parse_tree=True)
         # Mark that semantic phase was run (to be extended by assignments)
         self.ran_semantic = True
-        self.logger.info("Semantic analysis phase is not yet implemented.") 
+        self.logger.info("Semantic analysis phase is not yet implemented.")
+
+    def run_tac_write(self) -> bool:
+        """
+        Run the TAC writing phase.
+        This assumes the parser has already driven the TACGenerator to emit instructions.
+        Returns True if writing succeeded without errors, False otherwise.
+        """
+        if not self.use_tac_generator or self.tac_generator is None:
+            self.logger.info("TAC generation was not enabled, skipping TAC write phase.")
+            return True # Not an error if TAC wasn't requested
+
+        if not self.ran_syntax:
+            self.logger.error("Cannot write TAC output: Syntax analysis phase did not run or failed.")
+            # Optionally add an error to tac_errors or rely on syntax_errors
+            return False
+
+        if self.syntax_errors:
+             self.logger.warning(f"Skipping TAC write due to {len(self.syntax_errors)} syntax errors.")
+             return False
+
+        self.logger.info(f"Starting TAC write phase to {self.tac_output_filename}.")
+        self.ran_tac_write = True # Mark phase as attempted
+        try:
+            # The parser should have called emitProgramStart during parsing.
+            # We just need to call writeOutput here.
+            self.tac_generator.writeOutput()
+            self.logger.info("TAC write phase completed successfully.")
+            return True
+        except RuntimeError as e:
+            # Likely caused by start_proc_name not being set by parser
+            self.logger.error(f"TAC write failed: {e}")
+            self.tac_errors.append({"message": str(e), "type": "RuntimeError"})
+            return False
+        except IOError as e:
+            self.logger.error(f"TAC write failed due to file I/O error: {e}")
+            self.tac_errors.append({"message": str(e), "type": "IOError"})
+            return False
+        except Exception as e:
+            # Catch any other unexpected errors during write
+            self.logger.error(f"An unexpected error occurred during TAC write: {e}")
+            self.tac_errors.append({"message": str(e), "type": "UnexpectedError"})
+            return False 
