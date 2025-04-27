@@ -143,6 +143,7 @@ class Symbol:
         self.param_modes: Optional[Dict[str, ParameterMode]] = None # Modes for parameters
         self.return_type: Optional[VarType] = None # Return type for FUNCTION
         self.local_size: Optional[int] = None # Size of locals for PROCEDURE/FUNCTION
+        self.param_size: Optional[int] = None  # Total bytes for parameters
         # Add fields for TYPE definitions if needed (e.g., base type, fields)
 
     def set_variable_info(self, var_type: VarType, offset: int, size: int):
@@ -167,6 +168,7 @@ class Symbol:
         self.param_list = param_list or []
         self.param_modes = param_modes or {}
         self.local_size = local_size
+        # Note: param_size is not set here; calculated/set by parser/offset logic.
 
     def set_function_info(self, return_type: VarType, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int):
         """Sets attributes specific to FUNCTION symbols."""
@@ -176,6 +178,7 @@ class Symbol:
         self.param_list = param_list or []
         self.param_modes = param_modes or {}
         self.local_size = local_size
+        # Note: param_size is not set here; calculated/set by parser/offset logic.
 
     def __str__(self) -> str:
         """Provides a concise string representation of the symbol."""
@@ -186,6 +189,10 @@ class Symbol:
         if self.const_value is not None: details += f", value={self.const_value!r}"
         if self.return_type: details += f", return={self.return_type.name}"
         if self.param_list is not None: details += f", params={len(self.param_list)}"
+        # Add new fields to str representation for debugging
+        if self.param_modes is not None: details += f", modes={len(self.param_modes)}"
+        if self.local_size is not None: details += f", local_sz={self.local_size}"
+        if self.param_size is not None: details += f", param_sz={self.param_size}"
         return f"Symbol({details})"
 
     def __repr__(self) -> str:

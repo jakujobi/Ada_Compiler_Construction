@@ -12,7 +12,7 @@ This module provides a common foundation for all compiler driver classes.
 import os
 import sys
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from pathlib import Path
 
 from .Token import Token
@@ -23,6 +23,7 @@ from .FileHandler import FileHandler
 from .RDParser import RDParser
 from .RDParserExtended import RDParserExtended
 from .TACGenerator import TACGenerator
+from .SymTable import SymbolTable
 
 
 class BaseDriver:
@@ -305,11 +306,57 @@ class BaseDriver:
         self.process_tokens()
         self.format_and_output_tokens()
 
+    def _create_parser(self, stop_on_error: bool, panic_mode_recover: bool, build_parse_tree: bool) -> Union[RDParser, RDParserExtended, None]:
+        """
+        Protected helper method to instantiate the appropriate parser.
+        Subclasses (like JohnA7Driver) can override this to provide
+        a different parser implementation (e.g., RDParserA7).
+
+        Args:
+            stop_on_error: Stop parsing on the first syntax error.
+            panic_mode_recover: Attempt to recover from syntax errors.
+            build_parse_tree: Whether to build a parse tree.
+
+        Returns:
+            An instance of RDParser or RDParserExtended, or None if prerequisites not met.
+        """
+        # Placeholder for SymbolTable - A real symbol table is needed for RDParserExtended.
+        # Subclasses needing a symbol table should instantiate it before calling run_syntax.
+        symbol_table = None # Base driver doesn't assume a symbol table is always needed.
+
+        if self.use_extended_parser:
+            self.logger.info("Creating extended RDParser for syntax analysis.")
+            # Note: RDParserExtended currently requires a SymbolTable in its signature
+            # in RDParserA7, but the base implementation might not.
+            # Adjust as per RDParserExtended's actual requirements.
+            # If RDParserExtended *always* needs a symbol table, instantiate one here:
+            # if symbol_table is None: symbol_table = SymbolTable()
+
+            # Basic RDParserExtended instantiation (without TAC)
+            # We assume RDParserExtended does NOT take tac_generator in its base form.
+            return RDParserExtended(
+                tokens=self.tokens,
+                defs=self.lexical_analyzer.defs,
+                symbol_table=symbol_table, # Pass None or an instance if required
+                stop_on_error=stop_on_error,
+                panic_mode_recover=panic_mode_recover,
+                build_parse_tree=build_parse_tree
+            )
+        else:
+            self.logger.info("Creating standard RDParser for syntax analysis.")
+            # Standard RDParser does not need symbol_table or tac_generator
+            return RDParser(
+                tokens=self.tokens,
+                defs=self.lexical_analyzer.defs,
+                stop_on_error=stop_on_error,
+                panic_mode_recover=panic_mode_recover,
+                build_parse_tree=build_parse_tree
+            )
+
     def run_syntax(self, stop_on_error: bool = False, panic_mode_recover: bool = False, build_parse_tree: bool = False) -> bool:
         """
-        Run the syntax analysis phase (recursive descent parser).
+        Run the syntax analysis phase using the parser created by _create_parser.
         Returns True if parsing succeeded, False otherwise.
-        If `use_extended_parser` was set, uses RDParserExtended instead of RDParser.
         """
         # Ensure lexical analysis has been run
         if not self.ran_lexical:
@@ -318,39 +365,22 @@ class BaseDriver:
         if not self.tokens:
             self.logger.error("No tokens available for syntax analysis after lexical phase.")
             return False
+
         self.ran_syntax = True
         self.logger.info("Starting syntax analysis.")
-        # Choose parser implementation
-        if self.use_extended_parser:
-            self.logger.info("Using extended RDParser for syntax analysis.")
-            # Placeholder for SymbolTable, needs proper instantiation if required by RDParserExtended
-            # symbol_table = None
-            # Pass tac_generator if it exists
-            parser_kwargs = {
-                'tokens': self.tokens,
-                'defs': self.lexical_analyzer.defs,
-                'symbol_table': None, # Placeholder, needs proper instantiation
-                'stop_on_error': stop_on_error,
-                'panic_mode_recover': panic_mode_recover,
-                'build_parse_tree': build_parse_tree
-            }
-            if self.tac_generator:
-                # RDParserExtended needs to be updated to accept this argument
-                parser_kwargs['tac_generator'] = self.tac_generator
-                self.logger.debug("Passing TACGenerator instance to RDParserExtended.")
 
-            # TODO: Update RDParserExtended.__init__ signature to accept tac_generator
-            self.parser = RDParserExtended(**parser_kwargs)
-        else:
-            self.parser = RDParser(
-                self.tokens,
-                self.lexical_analyzer.defs,
-                stop_on_error=stop_on_error,
-                panic_mode_recover=panic_mode_recover,
-                build_parse_tree=build_parse_tree
-            )
+        # Instantiate the parser using the helper method
+        self.parser = self._create_parser(stop_on_error, panic_mode_recover, build_parse_tree)
+
+        if self.parser is None:
+            self.logger.error("Parser could not be instantiated.")
+            # Consider adding an error to self.syntax_errors
+            return False
+
+        # Run the parser
         success = self.parser.parse()
         self.syntax_errors = self.parser.errors
+
         # Optionally print parse tree
         if build_parse_tree and hasattr(self.parser, 'parse_tree_root') and self.parser.parse_tree_root:
             self.parser.print_parse_tree()

@@ -19,7 +19,7 @@ import sys
 import logging
 import argparse
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any, Tuple, Union
 import traceback
 
 # Adjust import path based on where this script is run relative to the src directory
@@ -30,6 +30,12 @@ sys.path.insert(0, str(script_dir))
 try:
     from src.jakadac.modules.Driver import BaseDriver
     from src.jakadac.modules.Logger import Logger
+    # Import necessary components for A7
+    from src.jakadac.modules.SymTable import SymbolTable # Need to instantiate this
+    from src.jakadac.modules.RDParserA7 import RDParserA7 # Need the A7 parser
+    from src.jakadac.modules.TACGenerator import TACGenerator # For type hints
+    from src.jakadac.modules.RDParser import RDParser # For type hints
+    from src.jakadac.modules.RDParserExtended import RDParserExtended # For type hints
 except ImportError as e:
     print(f"Error importing modules: {e}", file=sys.stderr)
     print("Ensure the script is run from the project root directory or PYTHONPATH is set.", file=sys.stderr)
@@ -45,22 +51,56 @@ class JohnA7Driver(BaseDriver):
                  logger: Optional[Logger] = None):
         """
         Initializes the A7 driver, forcing extended parser and TAC generation.
+        Also initializes the SymbolTable needed for RDParserA7.
         """
         super().__init__(
             input_file_name=input_file_name,
-            output_file_name=output_file_name, # Pass along original output if used
+            output_file_name=output_file_name,
             debug=debug,
             logger=logger,
-            use_extended_parser=True, # A7 requires the extended parser
-            use_tac_generator=True,   # A7 requires TAC generation
-            tac_output_filename=tac_output_filename # Pass specific TAC filename if provided
+            use_extended_parser=True, # Force use of extended parser family
+            use_tac_generator=True,   # Force TAC generation
+            tac_output_filename=tac_output_filename
         )
-        self.logger.info("JohnA7Driver initialized (Extended Parser & TAC Gen Enabled).")
+        # Instantiate the SymbolTable required by RDParserA7
+        self.symbol_table = SymbolTable()
+        self.logger.info("JohnA7Driver initialized (Extended Parser, TAC Gen Enabled, SymbolTable created).")
+
+    def _create_parser(self, stop_on_error: bool, panic_mode_recover: bool, build_parse_tree: bool) -> Union[RDParser, RDParserExtended, RDParserA7, None]:
+        """
+        Overrides BaseDriver._create_parser to instantiate RDParserA7
+        for Assignment 7.
+        """
+        self.logger.info("JohnA7Driver: Creating RDParserA7 instance.")
+
+        if not self.tac_generator:
+            # This shouldn't happen because __init__ forces use_tac_generator=True
+            self.logger.critical("TAC Generator not initialized in JohnA7Driver, cannot create RDParserA7.")
+            return None
+
+        if not self.symbol_table:
+            # This also shouldn't happen as we create it in __init__
+             self.logger.critical("Symbol Table not initialized in JohnA7Driver, cannot create RDParserA7.")
+             return None
+
+        # Instantiate the A7-specific parser
+        return RDParserA7(
+            tokens=self.tokens,
+            defs=self.lexical_analyzer.defs,
+            symbol_table=self.symbol_table, # Pass the created symbol table
+            tac_generator=self.tac_generator, # Pass the created TAC generator
+            stop_on_error=stop_on_error,
+            panic_mode_recover=panic_mode_recover,
+            build_parse_tree=build_parse_tree
+        )
 
     def run_pipeline(self, stop_on_syntax_error: bool = True, panic_mode: bool = True) -> None:
         """Runs the full compilation pipeline for A7: Lex -> Syntax -> TAC Write."""
         try:
             self.logger.info(f"Starting A7 compilation for: {self.input_file_name}")
+            # Instantiate SymbolTable here if not done in __init__
+            # self.symbol_table = SymbolTable()
+
             self.run_lexical()
             if self.lexical_errors:
                 self.logger.error("Lexical errors detected. Stopping pipeline.")
