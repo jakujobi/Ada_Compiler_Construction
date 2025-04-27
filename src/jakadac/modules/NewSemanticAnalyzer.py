@@ -347,32 +347,13 @@ class NewSemanticAnalyzer:
         Check each statement for undeclared identifier uses.
         """
         def dfs(n: ParseTreeNode):
-            # First handle assignment statements explicitly
+            # Only need to explicitly check assignment LHS here.
+            # Other undeclared IDs will be caught when visiting expression nodes.
             if n.name == "AssignStat":
                 self._visit_assign_stat(n)
-            # Then handle any statement-level undeclared IDs
-            if n.name == "Statement":
-                self._visit_statement(n)
             for c in n.children:
                 dfs(c)
         dfs(node)
-
-    def _visit_statement(self, node: ParseTreeNode) -> None:
-        """
-        Check one statement for undeclared IDs.
-        """
-        # Recursively check all ID tokens in this statement subtree
-        def check_id(n: ParseTreeNode):
-            if n.token and getattr(n.token, 'token_type', None) == self.defs.TokenType.ID:
-                lex = n.token.lexeme
-                try:
-                    self.symtab.lookup(lex)
-                except SymbolNotFoundError:
-                    line = getattr(n.token, 'line_number', -1)
-                    self._error(f"Undeclared identifier '{lex}' used at line {line}")
-            for c in n.children:
-                check_id(c)
-        check_id(node)
 
     def _visit_assign_stat(self, node: ParseTreeNode) -> None:
         """Check that the variable on the left side of an assignment is declared."""
