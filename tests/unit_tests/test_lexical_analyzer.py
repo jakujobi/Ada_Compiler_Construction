@@ -23,34 +23,34 @@ class TestLexicalAnalyzer(unittest.TestCase):
     def test_basic_identifier(self):
         tokens = self.lexer.analyze("variable_name")
         self.assertEqual(len(tokens), 2)  # Including EOF token
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.ID)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.ID.value)
         self.assertEqual(tokens[0].lexeme, "variable_name")
         self.assertEqual(tokens[0].line_number, 1)
         self.assertEqual(tokens[0].column_number, 1)
 
     def test_reserved_word(self):
         tokens = self.lexer.analyze("begin")
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.BEGIN)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.BEGIN.value)
         self.assertEqual(tokens[0].lexeme, "begin")
 
     def test_numeric_literal(self):
         tokens = self.lexer.analyze("42")
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.NUM)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.NUM.value)
         self.assertEqual(tokens[0].value, 42)
 
     def test_real_number(self):
         tokens = self.lexer.analyze("3.14")
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.REAL)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.REAL.value)
         self.assertEqual(tokens[0].value, 3.14)
 
     def test_string_literal(self):
         tokens = self.lexer.analyze('"Hello, World!"')
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.LITERAL)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.LITERAL.value)
         self.assertEqual(tokens[0].literal_value, "Hello, World!")
 
     def test_character_literal(self):
         tokens = self.lexer.analyze("'A'")
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.CHAR_LITERAL)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.CHAR_LITERAL.value)
         self.assertEqual(tokens[0].literal_value, "A")
 
     def test_escaped_string_literal(self):
@@ -63,17 +63,17 @@ class TestLexicalAnalyzer(unittest.TestCase):
 
     def test_comment_skipping(self):
         tokens = self.lexer.analyze("-- This is a comment\nidentifier")
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.ID)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.ID.value)
         self.assertEqual(tokens[0].line_number, 2)
 
     def test_multiple_tokens(self):
         tokens = self.lexer.analyze("if x > 10 then")
         self.assertEqual(len(tokens), 6)  # 5 tokens + EOF
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.IF)
-        self.assertEqual(tokens[1].token_type, self.defs.TokenType.ID)
-        self.assertEqual(tokens[2].token_type, self.defs.TokenType.GT)
-        self.assertEqual(tokens[3].token_type, self.defs.TokenType.NUM)
-        self.assertEqual(tokens[4].token_type, self.defs.TokenType.THEN)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.IF.value)
+        self.assertEqual(tokens[1].token_type.value, self.defs.TokenType.ID.value)
+        self.assertEqual(tokens[2].token_type.value, self.defs.TokenType.RELOP.value) # Assuming '>' is RELOP
+        self.assertEqual(tokens[3].token_type.value, self.defs.TokenType.NUM.value)
+        self.assertEqual(tokens[4].token_type.value, self.defs.TokenType.THEN.value)
 
     def test_whitespace_handling(self):
         tokens = self.lexer.analyze("a\n  b\t\tc")
@@ -91,7 +91,7 @@ class TestLexicalAnalyzer(unittest.TestCase):
 
     def test_concatenation_operator(self):
         tokens = self.lexer.analyze('&')
-        self.assertEqual(tokens[0].token_type, self.defs.TokenType.CONCAT)
+        self.assertEqual(tokens[0].token_type.value, self.defs.TokenType.CONCAT.value)
 
 if __name__ == '__main__':
     unittest.main()
