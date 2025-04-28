@@ -610,6 +610,33 @@ class RDParserA7(RDParser):
             self.parse_tree_root = root
         return len(self.errors) == 0
         
+    def parseTypeMark(self):
+        """
+        Override TypeMark to return the actual VarType enum value rather than a node.
+        TypeMark -> integert | realt | chart | float | const/constant assignop Value 
+        """
+        self.logger.debug("Parsing TypeMark with type conversion")
+        token_type = None
+        if self.current_token:
+            token_type = self.current_token.token_type
+        
+        # Map token types to VarType enums
+        if token_type == self.defs.TokenType.INTEGERT:
+            return VarType.INT
+        elif token_type == self.defs.TokenType.REALT:
+            return VarType.REAL
+        elif token_type == self.defs.TokenType.CHART:
+            return VarType.CHAR
+        elif token_type == self.defs.TokenType.FLOAT:
+            return VarType.FLOAT  # Using FLOAT for both FLOAT and REAL tokens
+        elif token_type == self.defs.TokenType.CONSTANT:
+            # For constants, we'd need to determine the type from the value
+            # For now, default to INT for all constants
+            return VarType.INT
+        else:
+            self.logger.error(f"Unknown type token: {token_type}")
+            return VarType.INT  # Default to INT on error
+    
     def parseArgs(self):
         """
         Override Args production to add offset calculation for parameters.
@@ -713,8 +740,8 @@ class RDParserA7(RDParser):
             # Parse type mark
             self.match_leaf(self.defs.TokenType.COLON, node)
             var_type = self.parseTypeMark()
-            node.add_child(ParseTreeNode("TypeMark", var_type=var_type))
-            
+            type_mark_node = super().parseTypeMark()  # Get the parse tree node using parent method
+            node.add_child(type_mark_node)  # Add the type mark node without extra parameters       
             # Update the collected parameter information with the type
             for i in range(len(collected_params)):
                 if i >= len(collected_params) - len(id_list_node.find_children_by_name("ID")):
@@ -764,7 +791,8 @@ class RDParserA7(RDParser):
             
             # Parse type mark
             self.match(self.defs.TokenType.COLON)
-            var_type = self.parseTypeMark()
+            var_type = self.parseTypeMark()  # Get the variable type
+            super().parseTypeMark()  # Call parent method to consume tokens
             
             # Update the collected parameter information with the type
             for i in range(len(collected_params)):
@@ -880,6 +908,8 @@ class RDParserA7(RDParser):
                 self.match_leaf(self.defs.TokenType.COLON, node)
                 var_type = self.parseTypeMark()
                 assert var_type is not None
+                type_mark_node = super().parseTypeMark()  # Get the parse tree node using parent method
+                node.add_child(type_mark_node)  # Add the type mark node without extra parameters
                 self.match_leaf(self.defs.TokenType.SEMICOLON, node)
                 
                 # After parsing the TypeMark, look up each variable again to set type, size, and offset
@@ -917,7 +947,6 @@ class RDParserA7(RDParser):
                 next_node = self.parseDeclarativePart()
                 # Attach children
                 node.add_child(id_list_node)
-                node.add_child(ParseTreeNode("TypeMark", var_type=var_type))  # Store type in node
                 if next_node:
                     node.add_child(next_node)
             else:
@@ -951,6 +980,7 @@ class RDParserA7(RDParser):
             
             self.match(self.defs.TokenType.COLON)
             var_type = self.parseTypeMark()  # Get the variable type
+            super().parseTypeMark()  # Call parent method to consume tokens
             self.match(self.defs.TokenType.SEMICOLON)
             
             # After parsing the TypeMark, look up each variable again to set type, size, and offset

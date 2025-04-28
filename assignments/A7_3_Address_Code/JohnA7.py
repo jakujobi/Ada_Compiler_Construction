@@ -109,8 +109,8 @@ class JohnA7Driver(BaseDriver):
             # Run syntax, which will also drive TAC generation via callbacks
             # build_parse_tree might be needed depending on how TAC actions are implemented in parser
             syntax_ok = self.run_syntax(
-                stop_on_error=stop_on_syntax_error,
-                panic_mode_recover=panic_mode,
+                stop_on_error=False,  # Always set to False for automated testing
+                panic_mode_recover=True,  # Always try to recover from errors
                 build_parse_tree=True # Assume needed for TAC generation context
             )
 
