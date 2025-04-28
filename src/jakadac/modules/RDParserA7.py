@@ -18,15 +18,24 @@ from .RDParser import RDParser, ParseTreeNode
 from .Token import Token
 from .Definitions import Definitions
 from .Logger import Logger
-from .SymTable import SymbolTable, Symbol, EntryType, DuplicateSymbolError
+from .SymTable import SymbolTable, Symbol, EntryType, DuplicateSymbolError, VarType, ParameterMode
 from .TACGenerator import TACGenerator
+
+# Define type sizes for memory allocation (in bytes)
+TYPE_SIZES = {
+    VarType.INT: 2,     # Integer is 2 bytes
+    VarType.FLOAT: 4,   # Float is 4 bytes 
+    VarType.REAL: 4,    # REAL is an alias for FLOAT
+    VarType.BOOLEAN: 1, # Boolean is 1 byte
+    VarType.CHAR: 1     # Char is 1 byte
+}
 
 class RDParserA7(RDParser):
     """
     Extended Recursive Descent Parser with grammar rules for statements and expressions
     """
     
-    def __init__(self, tokens, defs, symbol_table=None, stop_on_error=False, panic_mode_recover=False, build_parse_tree=False):
+    def __init__(self, tokens, defs, symbol_table=None, tac_generator=None, stop_on_error=False, panic_mode_recover=False, build_parse_tree=False):
         """
         Initialize the extended parser.
         
@@ -34,6 +43,7 @@ class RDParserA7(RDParser):
             tokens (List[Token]): The list of tokens from the lexical analyzer.
             defs (Definitions): The definitions instance from the lexical analyzer.
             symbol_table (AdaSymbolTable): Symbol table for semantic checking.
+            tac_generator (TACGenerator): The three-address code generator.
             stop_on_error (bool): Whether to stop on error.
             panic_mode_recover (bool): Whether to attempt recovery from errors.
             build_parse_tree (bool): Whether to build a parse tree.
@@ -42,6 +52,13 @@ class RDParserA7(RDParser):
         # Use provided symbol_table or default to a new one
         self.symbol_table: SymbolTable = symbol_table if symbol_table is not None else SymbolTable()
         self.semantic_errors = []
+        
+        # Store the TAC generator reference
+        self.tac_generator = tac_generator
+        
+        # Variables for offset calculation
+        self.current_local_offset = None  # Will be set to -2 for each procedure
+        self.current_param_offset = None  # Will be set to +4 for each procedure
         
     def _add_child(self, parent, child):
         """
@@ -55,6 +72,7 @@ class RDParserA7(RDParser):
         Prog -> procedure idt Args is DeclarativePart Procedures begin SeqOfStatements end idt;
         
         Enhanced to check that the procedure identifier at the end matches the one at the beginning.
+        Also calculates and tracks memory offsets for parameters and local variables.
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Prog")
@@ -77,19 +95,45 @@ class RDParserA7(RDParser):
         # Match the identifier and continue parsing
         self.match_leaf(self.defs.TokenType.ID, node)
         
+        # Create procedure symbol for current depth to track sizes
+        proc_symbol = None
+        if start_id_token:
+            try:
+                proc_symbol = self.symbol_table.lookup(start_id_token.lexeme)
+            except Exception:
+                self.logger.debug(f"Could not find procedure symbol for {start_id_token.lexeme}")
+        
+        # Initialize offset tracking for parameters (starting at +4)
+        self.current_param_offset = 4
+        
         # Parse the rest of the procedure declaration
         child = self.parseArgs()
         if self.build_parse_tree and node is not None and child:
             self._add_child(node, child)
+        
+        # Store total parameter size on procedure symbol
+        if proc_symbol:
+            param_size = self.current_param_offset - 4  # Calculate total bytes used
+            proc_symbol.param_size = param_size
+            self.logger.debug(f"Set procedure {procedure_name} param_size to {param_size}")
         
         self.match_leaf(self.defs.TokenType.IS, node)
         
         # Enter new scope for procedure body
         if self.symbol_table: self.symbol_table.enter_scope()
         
+        # Initialize offset tracking for local variables (starting at -2)
+        self.current_local_offset = -2
+        
         child = self.parseDeclarativePart()
         if self.build_parse_tree and node is not None and child:
             self._add_child(node, child)
+        
+        # Store total local variable size on procedure symbol
+        if proc_symbol:
+            local_size = abs(self.current_local_offset) - 2  # Calculate total bytes used by locals
+            proc_symbol.local_size = local_size
+            self.logger.debug(f"Set procedure {procedure_name} local_size to {local_size}")
         
         child = self.parseProcedures()
         if self.build_parse_tree and node is not None and child:
@@ -565,11 +609,245 @@ class RDParserA7(RDParser):
         if self.build_parse_tree:
             self.parse_tree_root = root
         return len(self.errors) == 0
+        
+    def parseArgs(self):
+        """
+        Override Args production to add offset calculation for parameters.
+        Args -> ( ArgList ) | ε
+        
+        Parses function/procedure parameters and calculates memory offsets.
+        Parameters start at +4 (right after the BP), and grow upward.
+        Parameters are processed in reverse order for offset assignment.
+        """
+        self.logger.debug("Parsing Args with offset calculation")
+        
+        # Storage for collected parameter info to be processed in reverse later
+        collected_params = []
+        
+        if self.build_parse_tree:
+            node = ParseTreeNode("Args")
+            # Check for parameters
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.match_leaf(self.defs.TokenType.LPAREN, node)
+                # Parse the parameter list - collect parameters
+                params_info = self.parseArgList(collected_params)
+                if params_info:
+                    node.add_child(params_info)
+                self.match_leaf(self.defs.TokenType.RPAREN, node)
+            else:
+                # Add an ε leaf for empty parameter list
+                node.add_child(ParseTreeNode("ε"))
+                
+            # Now process collected parameters in REVERSE order to assign offsets
+            self.processParameterOffsets(collected_params)
+                
+            return node
+        else:
+            # Non-tree building version
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.match(self.defs.TokenType.LPAREN)
+                # Parse the parameter list - collect parameters
+                self.parseArgList(collected_params)
+                self.match(self.defs.TokenType.RPAREN)
+            
+            # Now process collected parameters in REVERSE order to assign offsets
+            self.processParameterOffsets(collected_params)
+            
+            return None
+            
+    def parseArgList(self, collected_params=None):
+        """
+        Override ArgList production to collect parameter information.
+        ArgList -> Mode IdentifierList : TypeMark MoreArgs
+        
+        Collects parameter information during parsing.
+        """
+        if collected_params is None:
+            collected_params = []
+            
+        self.logger.debug("Parsing ArgList with parameter collection")
+        
+        if self.build_parse_tree:
+            node = ParseTreeNode("ArgList")
+            
+            # Parse mode
+            mode_node = self.parseMode()
+            if mode_node:
+                node.add_child(mode_node)
+                # Determine parameter mode - default to IN if not specified
+                param_mode = ParameterMode.IN
+                if mode_node.name == "Mode" and mode_node.children:
+                    mode_child = mode_node.children[0]
+                    if mode_child.name == "OUT":
+                        param_mode = ParameterMode.OUT
+                    elif mode_child.name == "INOUT":
+                        param_mode = ParameterMode.INOUT
+            else:
+                param_mode = ParameterMode.IN
+            
+            # Parse identifiers
+            id_list_node = self.parseIdentifierList()
+            node.add_child(id_list_node)
+            
+            # Insert parameter symbols and collect tokens for later offset calculation
+            for id_leaf in id_list_node.find_children_by_name("ID"):
+                if id_leaf.token:
+                    # Create and insert parameter symbol
+                    sym = Symbol(
+                        id_leaf.token.lexeme,
+                        id_leaf.token,
+                        EntryType.PARAMETER,
+                        self.symbol_table.current_depth
+                    )
+                    try:
+                        self.symbol_table.insert(sym)
+                        # Collect for offset calculation (token, mode)
+                        collected_params.append((id_leaf.token, param_mode))
+                    except DuplicateSymbolError as e:
+                        self.report_semantic_error(
+                            f"Duplicate parameter declaration: '{e.name}' at depth {e.depth}",
+                            getattr(id_leaf.token, 'line_number', -1),
+                            getattr(id_leaf.token, 'column_number', -1)
+                        )
+            
+            # Parse type mark
+            self.match_leaf(self.defs.TokenType.COLON, node)
+            var_type = self.parseTypeMark()
+            node.add_child(ParseTreeNode("TypeMark", var_type=var_type))
+            
+            # Update the collected parameter information with the type
+            for i in range(len(collected_params)):
+                if i >= len(collected_params) - len(id_list_node.find_children_by_name("ID")):
+                    collected_params[i] = (collected_params[i][0], collected_params[i][1], var_type)
+            
+            # Parse more arguments
+            more_args = self.parseMoreArgs(collected_params)
+            if more_args:
+                node.add_child(more_args)
+                
+            return node
+        else:
+            # Non-tree building version
+            # Parse mode
+            mode_node = self.parseMode()
+            param_mode = ParameterMode.IN  # Default
+            if mode_node and mode_node.name == "Mode" and mode_node.children:
+                mode_child = mode_node.children[0]
+                if mode_child.name == "OUT":
+                    param_mode = ParameterMode.OUT
+                elif mode_child.name == "INOUT":
+                    param_mode = ParameterMode.INOUT
+            
+            # Parse identifiers
+            id_list_node = self.parseIdentifierList()
+            
+            # Insert parameter symbols and collect tokens for later offset calculation
+            for id_leaf in id_list_node.find_children_by_name("ID"):
+                if id_leaf.token:
+                    # Create and insert parameter symbol
+                    sym = Symbol(
+                        id_leaf.token.lexeme,
+                        id_leaf.token,
+                        EntryType.PARAMETER,
+                        self.symbol_table.current_depth
+                    )
+                    try:
+                        self.symbol_table.insert(sym)
+                        # Collect for offset calculation (token, mode)
+                        collected_params.append((id_leaf.token, param_mode))
+                    except DuplicateSymbolError as e:
+                        self.report_semantic_error(
+                            f"Duplicate parameter declaration: '{e.name}' at depth {e.depth}",
+                            getattr(id_leaf.token, 'line_number', -1),
+                            getattr(id_leaf.token, 'column_number', -1)
+                        )
+            
+            # Parse type mark
+            self.match(self.defs.TokenType.COLON)
+            var_type = self.parseTypeMark()
+            
+            # Update the collected parameter information with the type
+            for i in range(len(collected_params)):
+                if i >= len(collected_params) - len(id_list_node.find_children_by_name("ID")):
+                    collected_params[i] = (collected_params[i][0], collected_params[i][1], var_type)
+            
+            # Parse more arguments
+            self.parseMoreArgs(collected_params)
+            
+            return None
+            
+    def parseMoreArgs(self, collected_params=None):
+        """
+        Override MoreArgs production to continue collecting parameter information.
+        MoreArgs -> ; ArgList | ε
+        """
+        if collected_params is None:
+            collected_params = []
+            
+        self.logger.debug("Parsing MoreArgs with parameter collection")
+        
+        if self.build_parse_tree:
+            node = ParseTreeNode("MoreArgs")
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.SEMICOLON:
+                self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+                arg_list = self.parseArgList(collected_params)
+                if arg_list:
+                    node.add_child(arg_list)
+                return node
+            else:
+                node.add_child(ParseTreeNode("ε"))
+                return node
+        else:
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.SEMICOLON:
+                self.match(self.defs.TokenType.SEMICOLON)
+                self.parseArgList(collected_params)
+            return None
+            
+    def processParameterOffsets(self, collected_params):
+        """
+        Process the collected parameters in reverse order to assign memory offsets.
+        
+        Args:
+            collected_params: List of (token, mode, var_type) tuples
+        """
+        # Process in reverse order since parameters are pushed onto stack right to left
+        for token, mode, var_type in reversed(collected_params):
+            try:
+                # Look up the symbol
+                symbol = self.symbol_table.lookup(token.lexeme, lookup_current_scope_only=True)
+                
+                # Set the parameter mode
+                symbol.param_mode = mode
+                
+                # Set the variable type
+                symbol.var_type = var_type
+                
+                # Get the size for this type
+                if var_type not in TYPE_SIZES:
+                    self.report_semantic_error(
+                        f"Unknown parameter type: {var_type}",
+                        getattr(token, 'line_number', -1),
+                        getattr(token, 'column_number', -1)
+                    )
+                    size = 1  # Default to 1 byte on error
+                else:
+                    size = TYPE_SIZES[var_type]
+                
+                # Set size and offset
+                symbol.size = size
+                symbol.offset = self.current_param_offset
+                self.logger.debug(f"Assigned parameter {symbol.name}: mode={mode}, type={var_type}, size={size}, offset={self.current_param_offset}")
+                
+                # Increment the parameter offset for the next parameter
+                self.current_param_offset += size
+                
+            except Exception as e:
+                self.logger.error(f"Error setting parameter attributes: {e}")
 
     def parseDeclarativePart(self):
         """
         DeclarativePart -> IdentifierList : TypeMark ; DeclarativePart | ε
-        Also insert each declared identifier into the symbol table.
+        Also insert each declared identifier into the symbol table and calculate memory offsets.
         """
         self.logger.debug("Parsing DeclarativePart (Extended)")
         # Build tree branch
@@ -600,14 +878,46 @@ class RDParserA7(RDParser):
                             )
                 # Type and semicolon
                 self.match_leaf(self.defs.TokenType.COLON, node)
-                type_mark_node = self.parseTypeMark()
-                assert type_mark_node is not None
+                var_type = self.parseTypeMark()
+                assert var_type is not None
                 self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+                
+                # After parsing the TypeMark, look up each variable again to set type, size, and offset
+                for id_leaf in id_list_node.find_children_by_name("ID"):
+                    if id_leaf.token:
+                        try:
+                            # Look up the symbol that was already inserted
+                            symbol = self.symbol_table.lookup(id_leaf.token.lexeme, lookup_current_scope_only=True)
+                            # Determine type and size
+                            symbol.var_type = var_type  # Use the var_type returned by parseTypeMark
+                            
+                            # Get the size for this type
+                            if var_type not in TYPE_SIZES:
+                                self.report_semantic_error(
+                                    f"Unknown variable type: {var_type}",
+                                    getattr(id_leaf.token, 'line_number', -1),
+                                    getattr(id_leaf.token, 'column_number', -1)
+                                )
+                                size = 1  # Default to 1 byte on error
+                            else:
+                                size = TYPE_SIZES[var_type]
+                            
+                            # Set size and offset
+                            symbol.size = size
+                            symbol.offset = self.current_local_offset
+                            self.logger.debug(f"Assigned local var {symbol.name}: type={var_type}, size={size}, offset={self.current_local_offset}")
+                            
+                            # Decrement the local offset for the next variable
+                            self.current_local_offset -= size
+                            
+                        except Exception as e:
+                            self.logger.error(f"Error setting variable attributes: {e}")
+                
                 # Recursively parse further declarations
                 next_node = self.parseDeclarativePart()
                 # Attach children
                 node.add_child(id_list_node)
-                node.add_child(type_mark_node)
+                node.add_child(ParseTreeNode("TypeMark", var_type=var_type))  # Store type in node
                 if next_node:
                     node.add_child(next_node)
             else:
@@ -619,6 +929,7 @@ class RDParserA7(RDParser):
             id_list_node = self.parseIdentifierList()
             assert id_list_node is not None
             # Insert declarations
+            id_tokens = []  # Keep track of inserted identifiers
             for id_leaf in id_list_node.find_children_by_name("ID"):
                 if id_leaf.token:
                     sym = Symbol(
@@ -629,6 +940,7 @@ class RDParserA7(RDParser):
                     )
                     try:
                         self.symbol_table.insert(sym)
+                        id_tokens.append(id_leaf.token)  # Track successfully inserted IDs
                     except DuplicateSymbolError as e:
                         # report duplicate declaration but continue parsing
                         self.report_semantic_error(
@@ -636,9 +948,41 @@ class RDParserA7(RDParser):
                             getattr(id_leaf.token, 'line_number', -1),
                             getattr(id_leaf.token, 'column_number', -1)
                         )
+            
             self.match(self.defs.TokenType.COLON)
-            self.parseTypeMark()
+            var_type = self.parseTypeMark()  # Get the variable type
             self.match(self.defs.TokenType.SEMICOLON)
+            
+            # After parsing the TypeMark, look up each variable again to set type, size, and offset
+            for token in id_tokens:
+                try:
+                    # Look up the symbol that was already inserted
+                    symbol = self.symbol_table.lookup(token.lexeme, lookup_current_scope_only=True)
+                    # Determine type and size
+                    symbol.var_type = var_type  # Use the var_type returned by parseTypeMark
+                    
+                    # Get the size for this type
+                    if var_type not in TYPE_SIZES:
+                        self.report_semantic_error(
+                            f"Unknown variable type: {var_type}",
+                            getattr(token, 'line_number', -1),
+                            getattr(token, 'column_number', -1)
+                        )
+                        size = 1  # Default to 1 byte on error
+                    else:
+                        size = TYPE_SIZES[var_type]
+                    
+                    # Set size and offset
+                    symbol.size = size
+                    symbol.offset = self.current_local_offset
+                    self.logger.debug(f"Assigned local var {symbol.name}: type={var_type}, size={size}, offset={self.current_local_offset}")
+                    
+                    # Decrement the local offset for the next variable
+                    self.current_local_offset -= size
+                    
+                except Exception as e:
+                    self.logger.error(f"Error setting variable attributes: {e}")
+            
             # Further declarations
             self.parseDeclarativePart()
         return None
