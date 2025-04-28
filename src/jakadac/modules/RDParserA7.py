@@ -639,12 +639,12 @@ class RDParserA7(RDParser):
     
     def parseArgs(self):
         """
-        Override Args production to add offset calculation for parameters.
+        Override Args production to collect and process parameter offsets.
         Args -> ( ArgList ) | ε
         
-        Parses function/procedure parameters and calculates memory offsets.
-        Parameters start at +4 (right after the BP), and grow upward.
-        Parameters are processed in reverse order for offset assignment.
+        The parameter offset calculation is done in two phases:
+        1. Collection phase: gather all parameter information
+        2. Processing phase: calculate offsets in reverse declaration order
         """
         self.logger.debug("Parsing Args with offset calculation")
         
@@ -656,29 +656,49 @@ class RDParserA7(RDParser):
             # Check for parameters
             if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
                 self.match_leaf(self.defs.TokenType.LPAREN, node)
+                
+                # Enter a new scope for parameters
+                self.symbol_table.enter_scope()
+                self.logger.debug(f"Entered scope depth {self.symbol_table.current_depth} for parameters")
+                
                 # Parse the parameter list - collect parameters
                 params_info = self.parseArgList(collected_params)
                 if params_info:
                     node.add_child(params_info)
                 self.match_leaf(self.defs.TokenType.RPAREN, node)
+                
+                # Now process collected parameters in REVERSE order to assign offsets
+                self.logger.debug(f"Processing {len(collected_params)} parameters in reverse order")
+                self.processParameterOffsets(collected_params)
+                
+                # Exit parameter scope
+                self.symbol_table.exit_scope()
+                self.logger.debug(f"Exited parameter scope, back to depth {self.symbol_table.current_depth}")
             else:
                 # Add an ε leaf for empty parameter list
                 node.add_child(ParseTreeNode("ε"))
-                
-            # Now process collected parameters in REVERSE order to assign offsets
-            self.processParameterOffsets(collected_params)
                 
             return node
         else:
             # Non-tree building version
             if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
                 self.match(self.defs.TokenType.LPAREN)
+                
+                # Enter a new scope for parameters
+                self.symbol_table.enter_scope()
+                self.logger.debug(f"Entered scope depth {self.symbol_table.current_depth} for parameters")
+                
                 # Parse the parameter list - collect parameters
                 self.parseArgList(collected_params)
                 self.match(self.defs.TokenType.RPAREN)
             
-            # Now process collected parameters in REVERSE order to assign offsets
-            self.processParameterOffsets(collected_params)
+                # Now process collected parameters in REVERSE order to assign offsets
+                self.logger.debug(f"Processing {len(collected_params)} parameters in reverse order")
+                self.processParameterOffsets(collected_params)
+                
+                # Exit parameter scope
+                self.symbol_table.exit_scope()
+                self.logger.debug(f"Exited parameter scope, back to depth {self.symbol_table.current_depth}")
             
             return None
             
@@ -712,12 +732,17 @@ class RDParserA7(RDParser):
             else:
                 param_mode = ParameterMode.IN
             
+            self.logger.debug(f"Parameter mode: {param_mode}")
+            
             # Parse identifiers
             id_list_node = self.parseIdentifierList()
             node.add_child(id_list_node)
             
             # Insert parameter symbols and collect tokens for later offset calculation
-            for id_leaf in id_list_node.find_children_by_name("ID"):
+            id_tokens = id_list_node.find_children_by_name("ID")
+            self.logger.debug(f"Found {len(id_tokens)} parameters in identifier list")
+            
+            for id_leaf in id_tokens:
                 if id_leaf.token:
                     # Create and insert parameter symbol
                     sym = Symbol(
@@ -728,6 +753,7 @@ class RDParserA7(RDParser):
                     )
                     try:
                         self.symbol_table.insert(sym)
+                        self.logger.debug(f"Added parameter symbol {sym.name} at depth {self.symbol_table.current_depth}")
                         # Collect for offset calculation (token, mode)
                         collected_params.append((id_leaf.token, param_mode))
                     except DuplicateSymbolError as e:
@@ -740,12 +766,16 @@ class RDParserA7(RDParser):
             # Parse type mark
             self.match_leaf(self.defs.TokenType.COLON, node)
             var_type = self.parseTypeMark()
+            self.logger.debug(f"Parameter type: {var_type}")
+            
             type_mark_node = super().parseTypeMark()  # Get the parse tree node using parent method
             node.add_child(type_mark_node)  # Add the type mark node without extra parameters       
+            
             # Update the collected parameter information with the type
-            for i in range(len(collected_params)):
-                if i >= len(collected_params) - len(id_list_node.find_children_by_name("ID")):
-                    collected_params[i] = (collected_params[i][0], collected_params[i][1], var_type)
+            current_param_count = len(id_tokens)
+            for i in range(len(collected_params) - current_param_count, len(collected_params)):
+                collected_params[i] = (collected_params[i][0], collected_params[i][1], var_type)
+                self.logger.debug(f"Updated parameter {collected_params[i][0].lexeme} with type {var_type}")
             
             # Parse more arguments
             more_args = self.parseMoreArgs(collected_params)
@@ -838,11 +868,30 @@ class RDParserA7(RDParser):
         Args:
             collected_params: List of (token, mode, var_type) tuples
         """
+        if not collected_params:
+            self.logger.debug("No parameters to process")
+            return
+            
+        self.logger.debug(f"Processing {len(collected_params)} parameters")
+        
+        # First, log all collected parameters
+        for i, (token, mode, var_type) in enumerate(collected_params):
+            self.logger.debug(f"Collected parameter {i+1}: {token.lexeme}, mode={mode}, type={var_type}")
+        
+        # Reset parameter offset to starting position
+        self.current_param_offset = 4  # Start at BP+4
+        
         # Process in reverse order since parameters are pushed onto stack right to left
         for token, mode, var_type in reversed(collected_params):
             try:
                 # Look up the symbol
-                symbol = self.symbol_table.lookup(token.lexeme, lookup_current_scope_only=True)
+                symbol = self.symbol_table.lookup(token.lexeme)
+                
+                if not symbol:
+                    self.logger.error(f"Parameter symbol not found: {token.lexeme}")
+                    continue
+                    
+                self.logger.debug(f"Found parameter symbol: {symbol.name} at depth {symbol.depth}")
                 
                 # Set the parameter mode
                 symbol.param_mode = mode
@@ -870,7 +919,8 @@ class RDParserA7(RDParser):
                 self.current_param_offset += size
                 
             except Exception as e:
-                self.logger.error(f"Error setting parameter attributes: {e}")
+                self.logger.error(f"Error setting parameter attributes: {str(e)}")
+                self.logger.exception(e)  # Log the full exception traceback
 
     def parseDeclarativePart(self):
         """
