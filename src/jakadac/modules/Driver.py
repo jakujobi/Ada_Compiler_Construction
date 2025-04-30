@@ -42,7 +42,8 @@ class BaseDriver:
         use_extended_parser: bool = False,
         use_tac_parser: bool = False,
         use_tac_generator: bool = False,
-        tac_output_filename: Optional[str] = None
+        tac_output_filename: Optional[str] = None,
+        symbol_table: Optional[SymbolTable] = None
     ):
         """
         Initialize the base driver.
@@ -56,6 +57,7 @@ class BaseDriver:
             use_tac_parser: Whether to use RDParserExtExt (A7-style TAC generation). Takes precedence.
             use_tac_generator: Whether to enable TAC generator logic (implies use_tac_parser often).
             tac_output_filename: Optional path for the TAC output file (defaults to <input>.tac)
+            symbol_table: Optional SymbolTable instance to use.
         """
         # Use provided logger or create a new one
         self.logger = logger if logger is not None else Logger(log_level_console=logging.INFO)
@@ -92,8 +94,8 @@ class BaseDriver:
         self.use_extended_parser = use_extended_parser and not use_tac_parser # Only use if tac_parser isn't requested
         # Initialize parser attribute to None - type hint allows any valid parser
         self.parser: Optional[Union[RDParser, RDParserExtended, RDParserExtExt]] = None
-        # Symbol Table - needed for extended parsers, must be set by subclasses if required
-        self.symbol_table: Optional[SymbolTable] = None
+        # Symbol Table - use provided instance or None
+        self.symbol_table = symbol_table
         # Initialize TAC Generator (conditionally)
         self.use_tac_generator = use_tac_generator
         self.tac_generator: Optional[TACGenerator] = None
