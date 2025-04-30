@@ -49,7 +49,8 @@ from .rd_parser_mixins_statements import StatementsMixin
 from .rd_parser_mixins_expressions import ExpressionsMixin
 # --- End Import Mixins ---
 
-class RDParserExtExt(RDParser, DeclarationsMixin, StatementsMixin, ExpressionsMixin):
+# CORRECTED Inheritance Order: Mixins first, then base class RDParser
+class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDParser):
     """
     Extended Recursive Descent Parser with grammar rules for statements and expressions,
     and integrated TAC generation.

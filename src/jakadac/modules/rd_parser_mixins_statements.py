@@ -33,6 +33,7 @@ class StatementsMixin:
     symbol_table: Optional[SymbolTable]
     defs: Definitions
     current_index: int # Used for lookahead save/restore
+    tokens: List[Token] # ADDED: Explicitly declare tokens attribute for linter
     
     # Base/Core methods expected on self (signatures inferred via TYPE_CHECKING)
     advance: Callable[[], None]
@@ -188,7 +189,9 @@ class StatementsMixin:
             return None
 
         id_token = self.current_token
-        next_token = self._peek(1)
+        # Check if there's a next token and if it's LPAREN
+        next_token_index = self.current_index + 1
+        next_token = self.tokens[next_token_index] if next_token_index < len(self.tokens) else None
         is_proc_call = next_token and next_token.token_type == self.defs.TokenType.LPAREN
 
         if self.build_parse_tree:
@@ -254,11 +257,23 @@ class StatementsMixin:
                 # Parse Expression
                 source_place = self.parseExpr() # Returns str
                 if isinstance(source_place, str) and dest_place != "ERROR_PLACE" and self.tac_gen:
-                    self.logger.debug(f" Emitting TAC: {dest_place} = {source_place}")
-                    self.tac_gen.emitAssignment(dest_place, source_place)
+                    # Check if source_place is a literal (basic check, might need refinement for floats/etc.)
+                    is_literal = source_place.isdigit() or (source_place.startswith('-') and source_place[1:].isdigit())
+                    if is_literal:
+                        # Assign literal to temporary first
+                        temp_place = self.tac_gen.newTemp()
+                        self.logger.debug(f" Emitting TAC: {temp_place} = {source_place}")
+                        self.tac_gen.emitAssignment(temp_place, source_place)
+                        # Assign temporary to destination
+                        self.logger.debug(f" Emitting TAC: {dest_place} = {temp_place}")
+                        self.tac_gen.emitAssignment(dest_place, temp_place)
+                    else:
+                        # Assign non-literal (variable or temp) directly
+                        self.logger.debug(f" Emitting TAC: {dest_place} = {source_place}")
+                        self.tac_gen.emitAssignment(dest_place, source_place)
                 else:
                      self.logger.warning(f" Could not emit assignment TAC for '{id_token.lexeme}' due to missing place(s) or generator.")
-            result_node = None # No node returned in TAC mode
+                result_node = None # No node returned in TAC mode
             # --- End TAC Generation ---
         else:
             # --- Non-Tree, Non-TAC --- 

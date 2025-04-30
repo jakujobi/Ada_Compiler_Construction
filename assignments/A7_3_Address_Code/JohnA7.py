@@ -55,10 +55,10 @@ class JohnA7(BaseDriver):
         """
         # Instantiate SymbolTable *before* calling super().__init__
         # so it's available if BaseDriver needs it during init (it doesn't currently, but good practice)
-        self.symbol_table = SymbolTable()
+        local_symbol_table = SymbolTable()
         self.logger = logger if logger is not None else Logger(log_level_console=logging.INFO) # Temp logger for init message
 
-        # Call super().__init__, setting the appropriate flags
+        # Call super().__init__, setting the appropriate flags and passing the symbol table
         super().__init__(
             input_file_name=input_file_name,
             output_file_name=output_file_name, # Not typically used in A7
@@ -67,11 +67,9 @@ class JohnA7(BaseDriver):
             use_extended_parser=False, # Not needed, use_tac_parser takes precedence
             use_tac_parser=True,       # Explicitly select RDParserExtExt
             use_tac_generator=True,    # Enable TAC generator logic and instantiation
-            tac_output_filename=tac_output_filename
+            tac_output_filename=tac_output_filename,
+            symbol_table=local_symbol_table # Pass the created symbol table
         )
-        # Crucially, assign the symbol table created here to the instance variable
-        # that BaseDriver._create_parser will use.
-        self.symbol_table = self.symbol_table # Assign the one created earlier
 
         self.logger.info("JohnA7Driver initialized (RDParserExtExt selected, TAC Gen Enabled, SymbolTable created).")
 
