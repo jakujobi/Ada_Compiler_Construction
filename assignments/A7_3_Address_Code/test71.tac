@@ -6,4 +6,4 @@ b = _t2
 _t3 = a ADD b
 c = _t3
 endp one
-start proc one
+START	PROC	one

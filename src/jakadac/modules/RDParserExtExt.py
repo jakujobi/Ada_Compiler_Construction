@@ -132,6 +132,7 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
 
         # --- Insert Procedure Symbol into CURRENT scope --- 
         proc_sym: Optional[Symbol] = None
+        is_outermost_procedure = self.symbol_table.current_depth == 0 # Check depth BEFORE inserting/entering scope
         if self.symbol_table and procedure_name != "<unknown>":
              try:
                  # Create symbol at the current depth
@@ -156,10 +157,20 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         # --- Emit TAC Proc Start (If generating TAC) --- 
         if self.tac_gen:
             self.logger.debug(f" Setting current_procedure_name = '{procedure_name}'")
+            # Store the current procedure context (name and symbol)
+            # This might be better handled with a stack if recursion becomes complex
             self.current_procedure_name = procedure_name
-            self.current_procedure_symbol = proc_sym # Store the symbol we just created/inserted
+            self.current_procedure_symbol = proc_sym 
             self.logger.debug(f" Emitting TAC: proc {procedure_name}")
             self.tac_gen.emitProcStart(procedure_name)
+            
+            # *** FIX 1: Only call emitProgramStart for the outermost procedure ***
+            if is_outermost_procedure:
+                 self.logger.info(f" Procedure '{procedure_name}' identified as outermost (depth 0). Recording for START PROC.")
+                 self.tac_gen.emitProgramStart(procedure_name)
+            else:
+                 self.logger.debug(f" Procedure '{procedure_name}' is nested (depth {self.symbol_table.current_depth}). Not setting as program start.")
+
             # Initialize offsets for THIS procedure's scope
             self.current_local_offset = -2 
             self.current_param_offset = 4  
@@ -198,34 +209,36 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         self.match_leaf(self.defs.TokenType.SEMICOLON, node)
 
         # --- Emit TAC Proc End --- 
-        if self.tac_gen and self.current_procedure_name:
-             # ... (emit endp logic) ...
-             self.tac_gen.emitProcEnd(self.current_procedure_name)
-             # --- Emit Start for Outermost --- 
-             # Check depth *before* exiting scope
-             current_depth_before_exit = self.symbol_table.current_depth if self.symbol_table else -1 # Get depth safely
-             self.logger.debug(f" Checking for outermost procedure '{self.current_procedure_name}'. Current depth BEFORE exit: {current_depth_before_exit}")
-             outermost = (self.symbol_table and current_depth_before_exit == 1) 
-             if outermost:
-                 self.logger.info(f" Outermost procedure. Emitting TAC: start proc {self.current_procedure_name}")
-                 self.tac_gen.emitProgramStart(self.current_procedure_name)
+        # *** FIX 2: Use the procedure_name captured at the start ***
+        if self.tac_gen and procedure_name != "<unknown>": # Use local var procedure_name
+             self.logger.info(f" Emitting TAC: endp {procedure_name}") # Use local var
+             self.tac_gen.emitProcEnd(procedure_name) # Use local var
+             # --- Reset context? ---
+             # Consider if self.current_procedure_name needs resetting here,
+             # For now, assume the next call to parseProg will overwrite it correctly.
 
         # --- Exit Scope --- 
         if self.symbol_table:
-             self.logger.debug(f"Exiting scope for procedure '{procedure_name}'.")
-             self.symbol_table.exit_scope()
-             
-        # --- Reset Parser State --- 
-        # Reset state related to the procedure just finished
-        # This is important for subsequent sibling procedures or if called recursively
-        self.current_procedure_name = None 
-        self.current_procedure_symbol = None
-        self.current_local_offset = 0 # Reset offsets
-        self.current_param_offset = 0
+            self.logger.debug(f" Checking for outermost procedure '{procedure_name}'. Current depth BEFORE exit: {self.symbol_table.current_depth}")
+            # if self.symbol_table.current_depth == 1: # Exiting the scope of the outermost procedure
+            #     self.logger.info(f" Outermost procedure '{procedure_name}' finished.")
+            #     # Any final actions needed after the main procedure?
+
+            self.logger.debug(f"Exiting scope for procedure '{procedure_name}'.")
+            self.symbol_table.exit_scope()
+
+        # Reset parser state if needed (though maybe handled by caller or implicitly)
+        # If this was the top-level call, state should be clean. If recursive, caller manages.
         self.logger.debug(f"Reset parser state after finishing '{procedure_name}'.")
-        
-        self.logger.info(f"Finished parsing procedure: {procedure_name}")
-        return node
+        # self.current_procedure_name = None # Maybe? Or managed by caller context?
+        # self.current_procedure_symbol = None
+    
+        self.logger.info(f"Finished parsing procedure: {procedure_name}") # Use local var
+
+        if self.build_parse_tree:
+            return node
+        else:
+            return None # Or some indicator of success/failure
     
     def report_semantic_error(self, message, line=0, column=0):
         """
