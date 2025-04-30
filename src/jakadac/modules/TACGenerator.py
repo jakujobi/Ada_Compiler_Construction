@@ -80,17 +80,19 @@ class TACGenerator:
         """  
         return self._newTempName()  
       
-    def getPlace(self, symbol_or_value) -> str:  
+    def getPlace(self, symbol_or_value, current_proc_depth: Optional[int] = None) -> str:  
         """  
         Get the place string for a symbol or value for use in TAC.  
+        Uses current_proc_depth to differentiate between local and outer-scope variables.  
           
         Args:  
             symbol_or_value: Symbol object, literal value, or temporary name (str)  
+            current_proc_depth: The depth of the procedure currently being parsed.  
               
         Returns:  
             String representation for TAC operand/result (e.g., 'x', '5', '_t1', '_BP+4').  
         """  
-        self.logger.debug(f"Getting place for: {symbol_or_value} (Type: {type(symbol_or_value)})")  
+        self.logger.debug(f"Getting place for: {symbol_or_value} (Type: {type(symbol_or_value)}), Current Proc Depth: {current_proc_depth}")  
   
         place_str = "ERROR_UNKNOWN_PLACE"  # Default error value  
   
@@ -117,27 +119,43 @@ class TACGenerator:
             # If depth 0 is global, it might need a different addressing scheme (e.g., labels)  
   
             # --- MODIFIED for A7 expected output: Use name for locals/params ---
-            elif symbol.depth > 0 and symbol.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
-                place_str = symbol.name
-                self.logger.debug(f"Place for Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) is name: {place_str}")
-            # --- END MODIFICATION ---
+            # --- REVERTED: Now using BP Offset logic ---
+            # elif symbol.depth > 0 and symbol.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
+            #     place_str = symbol.name
+            #     self.logger.debug(f"Place for Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) is name: {place_str}")
+            # --- END REVERTED MODIFICATION ---
   
-            # Handle globals (depth 0) or others with offsets if needed differently
-            # Example: Fallback to offset if name not desired for specific types/depths
-            elif symbol.offset is not None: 
-                 # Original logic for offset-based addressing (if needed for other cases)
-                 if symbol.entry_type == EntryType.PARAMETER:
-                     place_str = f"_BP+{symbol.offset}"
-                 elif symbol.entry_type == EntryType.VARIABLE:
-                     place_str = f"_BP-{abs(symbol.offset)}"
-                 else: # Other types with offset? Fallback to name?
-                     self.logger.warning(f"Symbol '{symbol.name}' (Type: {symbol.entry_type}) has offset but is not PARAMETER/VARIABLE/Depth>0. Using offset: _BP?{symbol.offset}")
-                     # Decide how to represent these: maybe use name or a specific format
-                     place_str = f"_BP?{symbol.offset}" # Or symbol.name
+            # Handle locals/parameters using BP offset OR name based on depth
+            elif symbol.offset is not None and symbol.depth > 0:
+                 # --- REFINED LOGIC based on test75.tac --- 
+                 if symbol.depth == 1:
+                     # Outermost procedure scope (like 'five'): Use Name
+                     place_str = symbol.name
+                     self.logger.debug(f"Place for OUTERMOST Symbol '{symbol.name}' (Depth {symbol.depth}) is name: {place_str}")
+                 elif current_proc_depth is not None and symbol.depth == current_proc_depth:
+                     # LOCAL to current *nested* procedure (depth > 1): Use BP Offset
+                     if symbol.entry_type == EntryType.PARAMETER:
+                         place_str = f"_BP+{symbol.offset}"
+                         self.logger.debug(f"Place for NESTED LOCAL PARAMETER '{symbol.name}' (Depth {symbol.depth}) is BP offset: {place_str}")
+                     elif symbol.entry_type == EntryType.VARIABLE:
+                         offset_val = abs(symbol.offset) if symbol.offset > 0 else symbol.offset
+                         place_str = f"_BP{offset_val}" 
+                         self.logger.debug(f"Place for NESTED LOCAL VARIABLE '{symbol.name}' (Depth {symbol.depth}) is BP offset: {place_str}")
+                     else:
+                         self.logger.warning(f"Unhandled NESTED LOCAL Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) with offset. Using offset: _BP?{symbol.offset}")
+                         place_str = f"_BP?{symbol.offset}" 
+                 else: # symbol.depth < current_proc_depth (and symbol.depth > 1 implied)
+                     # Symbol is from an OUTER scope relative to current nested procedure: Use name
+                     place_str = symbol.name
+                     self.logger.debug(f"Place for NESTED OUTER SCOPE Symbol '{symbol.name}' (Depth {symbol.depth}) is name: {place_str}")
+                 # --- END REFINED LOGIC ---
 
-                 self.logger.debug(f"Place for Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) using fallback offset logic: {place_str}")
+            # Handle globals (depth 0) - assuming name based access
+            elif symbol.depth == 0 and symbol.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER, EntryType.PROCEDURE, EntryType.FUNCTION):
+                 place_str = symbol.name # Use name for globals
+                 self.logger.debug(f"Place for GLOBAL Symbol '{symbol.name}' (Depth {symbol.depth}) is name: {place_str}")
   
-            # Fallback for symbols without offsets or unhandled cases  
+            # Handle other unexpected types  
             else:  
                 if symbol.offset is None:  
                     self.logger.error(f"Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) has no offset defined. Using name as place.")  
