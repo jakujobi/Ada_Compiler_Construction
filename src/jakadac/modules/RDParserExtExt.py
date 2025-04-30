@@ -48,8 +48,6 @@ from .rd_parser_mixins_declarations import DeclarationsMixin
 from .rd_parser_mixins_statements import StatementsMixin
 from .rd_parser_mixins_expressions import ExpressionsMixin
 # --- End Import Mixins ---
-
-# CORRECTED Inheritance Order: Mixins first, then base class RDParser
 class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDParser):
     """
     Extended Recursive Descent Parser with grammar rules for statements and expressions,
@@ -205,7 +203,9 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
              self.tac_gen.emitProcEnd(self.current_procedure_name)
              # --- Emit Start for Outermost --- 
              # Check depth *before* exiting scope
-             outermost = (self.symbol_table and self.symbol_table.current_depth == 1)
+             current_depth_before_exit = self.symbol_table.current_depth if self.symbol_table else -1 # Get depth safely
+             self.logger.debug(f" Checking for outermost procedure '{self.current_procedure_name}'. Current depth BEFORE exit: {current_depth_before_exit}")
+             outermost = (self.symbol_table and current_depth_before_exit == 1) 
              if outermost:
                  self.logger.info(f" Outermost procedure. Emitting TAC: start proc {self.current_procedure_name}")
                  self.tac_gen.emitProgramStart(self.current_procedure_name)

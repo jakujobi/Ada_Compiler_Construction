@@ -28,7 +28,7 @@ else:
     # This helps avoid runtime circular dependency errors while aiding static analysis.
     SelfType = object
 
-class StatementsMixin(SelfType): # Hint self type for linter
+class StatementsMixin: 
     """Mixin class containing statement parsing methods for RDParserExtExt."""
 
     # --- Type hints for attributes/methods accessed from self --- 
