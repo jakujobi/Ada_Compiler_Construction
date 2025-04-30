@@ -180,13 +180,15 @@ class DeclarationsMixin:
                     
                     success = False
                     if is_constant:
-                        if var_type is not None:
+                        # Add specific check for None type before setting constant info
+                        if var_type is None:
+                             self.logger.error(f"Cannot declare constant '{idt_name}' without a determinable type.")
+                             self.report_semantic_error(f"Could not determine type for constant '{idt_name}'", id_token.line_number, id_token.column_number)
+                             # success remains False, skip insertion
+                        else:
                              self.logger.info(f" Declaring CONSTANT: {idt_name} : {var_type} = {initial_value_for_symbol}")
                              sym.set_constant_info(const_type=var_type, value=initial_value_for_symbol)
                              success = True
-                        else:
-                            self.logger.error(f"Cannot declare constant '{idt_name}' without a determinable type.")
-                            self.report_semantic_error(f"Could not determine type for constant '{idt_name}'", id_token.line_number, id_token.column_number)
                     else: # Variable
                          if var_type is not None:
                             self.logger.info(f" Declaring VARIABLE: {idt_name} : {var_type}")

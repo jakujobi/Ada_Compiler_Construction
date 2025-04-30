@@ -157,8 +157,17 @@ class RDParserExtExt(RDParser, DeclarationsMixin, StatementsMixin, ExpressionsMi
                                 pass # Should not happen due to lookup check
                         finally:
                             self.symbol_table.exit_scope() # Exit temporary scope 1
+                    except DuplicateSymbolError as dse:
+                         self.logger.error(f"Critical Error during preliminary procedure symbol insertion: {dse}")
+                         # Clean up scope if needed
+                         if self.symbol_table and self.symbol_table.current_depth != 0:
+                             self.logger.warning("Correcting symbol table depth after critical error.")
+                             while self.symbol_table.current_depth > 0:
+                                 self.symbol_table.exit_scope()
+                         raise dse # Re-raise critical error to potentially halt compilation
                     except Exception as e:
-                        self.logger.error(f"Error during preliminary procedure symbol insertion: {e}")
+                        self.logger.error(f"Non-critical error during preliminary procedure symbol insertion: {e}")
+                        # Clean up scope but don't re-raise other exceptions
                         if self.symbol_table and self.symbol_table.current_depth != 0:
                              self.logger.warning("Correcting symbol table depth after error.")
                              while self.symbol_table.current_depth > 0:

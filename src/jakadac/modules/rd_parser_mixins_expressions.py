@@ -122,23 +122,54 @@ class ExpressionsMixin:
         elif self.tac_gen:
             # --- TAC Generation ---
             self.logger.debug("Parsing Relation (TAC)")
-            # Delegate to parseSimpleExpr and return the place
-            place = self.parseSimpleExpr() # Returns str
-            if not isinstance(place, str):
-                 self.logger.error(f"Type mismatch: Expected str place from parseSimpleExpr in TAC mode, got {type(place)}")
+            left_place = self.parseSimpleExpr() # Returns str
+            if not isinstance(left_place, str):
+                 self.logger.error(f"Type mismatch: Expected str place from parseSimpleExpr in TAC mode, got {type(left_place)}")
                  return "ERROR_PLACE"
-            # TODO: Add TAC generation for relational operators if needed
-            # Example:
-            # if self.current_token and self.current_token.token_type == self.defs.TokenType.RELOP:
-            #     op_token = self.current_token
-            #     self.advance()
-            #     right_place = self.parseSimpleExpr()
-            #     result_place = self.tac_gen.newTemp()
-            #     # emit conditional jump or boolean result based on op_token.lexeme
-            #     # e.g., self.tac_gen.emitIfFalseJump(place op right_place, label)
-            #     # or self.tac_gen.emitBinaryOp(map_relop(op_token.lexeme), result_place, place, right_place)
-            #     place = result_place # update place to the result of relation
-            return place
+
+            # --- Handle Optional Relational Operator --- 
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.RELOP:
+                 op_token = self.current_token
+                 op_lexeme = op_token.lexeme # e.g., '=', '/=', '<', '>', '<=', '>='
+                 self.logger.debug(f" Found relational operator: {op_lexeme}")
+                 self.advance() # Consume operator
+
+                 right_place = self.parseSimpleExpr() # Parse right operand
+                 if not isinstance(right_place, str):
+                      self.logger.error(f"Type mismatch: Expected str place for right operand of relation in TAC mode, got {type(right_place)}")
+                      return "ERROR_PLACE"
+
+                 # Ensure tac_gen exists
+                 if not self.tac_gen:
+                      self.logger.error("TAC Generator not available for Relation TAC emission.")
+                      return "ERROR_PLACE"
+                 
+                 # Create temporary for the boolean result
+                 result_place = self.tac_gen.newTemp()
+                 
+                 # Map Ada op to TAC comparison operator
+                 # Assuming map_ada_op_to_tac handles relational ops or we map here
+                 # Let's assume specific TAC ops: EQ, NE, LT, GT, LE, GE
+                 tac_comp_op = {
+                      '=': 'EQ',
+                      '/=': 'NE',
+                      '<': 'LT',
+                      '>': 'GT',
+                      '<=': 'LE',
+                      '>=': 'GE'
+                 }.get(op_lexeme)
+
+                 if tac_comp_op:
+                      self.logger.debug(f" Emitting TAC: {result_place} = {left_place} {tac_comp_op} {right_place}")
+                      # Assuming emitBinaryOp can handle comparison ops that produce boolean
+                      self.tac_gen.emitBinaryOp(tac_comp_op, result_place, left_place, right_place)
+                      left_place = result_place # The result of the relation is now in the temporary
+                 else:
+                      self.logger.error(f"Unknown or unsupported relational operator '{op_lexeme}' for TAC generation.")
+                      return "ERROR_PLACE" # Return error if operator cannot be handled
+            # --- End Handle Relational Operator --- 
+
+            return left_place # Return final place (original SimpleExpr or result temporary)
             # --- End TAC Generation ---
         else:
              # --- Non-Tree, Non-TAC ---
