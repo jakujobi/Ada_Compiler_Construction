@@ -116,21 +116,26 @@ class TACGenerator:
             # For A7, focus might be on locals/params with offsets.  
             # If depth 0 is global, it might need a different addressing scheme (e.g., labels)  
   
-            # Use Base Pointer (BP) relative addressing for parameters and locals (Depth > 0)  
-            elif symbol.depth > 0 and symbol.offset is not None:  
-                # Parameters typically have positive offsets from BP  
-                if symbol.entry_type == EntryType.PARAMETER:  
-                    place_str = f"_BP+{symbol.offset}"  
-                # Local variables typically have negative offsets from BP  
-                elif symbol.entry_type == EntryType.VARIABLE:  
-                    # Ensure offset is negative for locals, take absolute for clarity in TAC  
-                    place_str = f"_BP-{abs(symbol.offset)}"  
-                else:  
-                    # Other symbol types might not have standard BP offsets (e.g., TYPE)  
-                    self.logger.warning(f"Symbol '{symbol.name}' (Type: {symbol.entry_type}) has offset but is not PARAMETER or VARIABLE. Using name as place.")  
-                    place_str = symbol.name  # Fallback to name  
+            # --- MODIFIED for A7 expected output: Use name for locals/params ---
+            elif symbol.depth > 0 and symbol.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
+                place_str = symbol.name
+                self.logger.debug(f"Place for Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) is name: {place_str}")
+            # --- END MODIFICATION ---
   
-                self.logger.debug(f"Place for Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) is offset: {place_str}")  
+            # Handle globals (depth 0) or others with offsets if needed differently
+            # Example: Fallback to offset if name not desired for specific types/depths
+            elif symbol.offset is not None: 
+                 # Original logic for offset-based addressing (if needed for other cases)
+                 if symbol.entry_type == EntryType.PARAMETER:
+                     place_str = f"_BP+{symbol.offset}"
+                 elif symbol.entry_type == EntryType.VARIABLE:
+                     place_str = f"_BP-{abs(symbol.offset)}"
+                 else: # Other types with offset? Fallback to name?
+                     self.logger.warning(f"Symbol '{symbol.name}' (Type: {symbol.entry_type}) has offset but is not PARAMETER/VARIABLE/Depth>0. Using offset: _BP?{symbol.offset}")
+                     # Decide how to represent these: maybe use name or a specific format
+                     place_str = f"_BP?{symbol.offset}" # Or symbol.name
+
+                 self.logger.debug(f"Place for Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) using fallback offset logic: {place_str}")
   
             # Fallback for symbols without offsets or unhandled cases  
             else:  
@@ -293,7 +298,7 @@ class TACGenerator:
   
                 # Write START directive as the last line, if recorded  
                 if self.start_proc_name:  
-                    start_instruction = f"start {self.start_proc_name}"  
+                    start_instruction = f"start proc {self.start_proc_name}"  
                     f.write(f"{start_instruction}\n")  
                     self.logger.debug(f"Wrote Start Directive: {start_instruction}")  
                 else:  
