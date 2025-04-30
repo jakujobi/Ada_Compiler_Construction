@@ -52,9 +52,8 @@ class DeclarationsMixin:
 
     def parseDeclarativePart(self):
         """
-        DeclarativePart -> ObjectDeclaration | ε
-        (Simplified based on earlier implementation, handles object decls iteratively)
-        Refactored to handle different modes more clearly.
+        DeclarativePart -> ObjectDeclaration | ProcedureDeclaration | ε
+        (Handles object decls and nested procedures iteratively)
         """
         node = None 
         if self.build_parse_tree:
@@ -62,13 +61,23 @@ class DeclarationsMixin:
 
         self.logger.debug("Entering parseDeclarativePart")
         declarations_found = False
-        while self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+        # Loop while we see an ID (for object decl) or PROCEDURE keyword
+        while self.current_token and self.current_token.token_type in {self.defs.TokenType.ID, self.defs.TokenType.PROCEDURE}:
             declarations_found = True
-            self.logger.debug("Parsing Object Declaration")
-            # Call parseObjectDeclaration which handles modes internally
-            obj_decl_node = self.parseObjectDeclaration()
-            if self.build_parse_tree and node and isinstance(obj_decl_node, ParseTreeNode):
-                 self._add_child(node, obj_decl_node)
+            child_node: Optional[ParseTreeNode] = None # Node for the parsed item
+            
+            if self.current_token.token_type == self.defs.TokenType.ID:
+                self.logger.debug("Parsing Object Declaration")
+                # Call parseObjectDeclaration which handles modes internally
+                child_node = self.parseObjectDeclaration() # type: ignore[misc]
+            elif self.current_token.token_type == self.defs.TokenType.PROCEDURE:
+                 self.logger.debug("Parsing Nested Procedure Declaration")
+                 # Call parseProg recursively to handle the nested procedure
+                 child_node = self.parseProg() # type: ignore[misc]
+            
+            # Add the parsed node (object decl or prog) to the tree if building
+            if self.build_parse_tree and node and isinstance(child_node, ParseTreeNode):
+                 self._add_child(node, child_node)
         
         # Handle epsilon case for tree building
         if not declarations_found and self.build_parse_tree and node:

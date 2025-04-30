@@ -1,5 +1,5 @@
 PROC	fun
-		_t1		=	_bp+6	*	_bp+4	-- Temp for param_a * param_b
+		_t1		=	_bp+4*	_bp+2	-- Temp for param_a * param_b
 		_bp-2	=	_t1 				-- Assign result to local_c (offset -2)
 ENDP	fun 
 PROC	five
