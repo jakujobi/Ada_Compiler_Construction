@@ -39,7 +39,7 @@ from .RDParser import RDParser, ParseTreeNode
 from .Token import Token
 from .Definitions import Definitions
 from .Logger import Logger
-from .SymTable import SymbolTable, Symbol, EntryType, DuplicateSymbolError, SymbolNotFoundError, ParameterMode
+from .SymTable import SymbolTable, Symbol, EntryType, DuplicateSymbolError, SymbolNotFoundError, ParameterMode, VarType
 from .TACGenerator import TACGenerator
 from .TypeUtils import TypeUtils
 
@@ -687,41 +687,66 @@ class RDParserExtended(RDParser):
             self.logger.debug("Parsing DeclarativePart (Declaration)")
 
             if self.build_parse_tree and node:
-                 # Tree building mode: Use existing logic but add offset info if tac_gen active
-                id_list_node = self.parseIdentifierList() # Original parseIdentifierList builds nodes
+                 # Tree building mode
+                id_list_node = self.parseIdentifierList()
                 assert id_list_node is not None
-                node.add_child(id_list_node) # Add child to DeclarativePart node
+                node.add_child(id_list_node)
 
                 self.match_leaf(self.defs.TokenType.COLON, node)
-                type_mark_node = self.parseTypeMark() # Original parseTypeMark builds nodes
+                type_mark_node = self.parseTypeMark()
                 assert type_mark_node is not None
-                node.add_child(type_mark_node) # Add child
+                node.add_child(type_mark_node)
                 self.match_leaf(self.defs.TokenType.SEMICOLON, node)
 
-                # Semantic Action: Insert symbols with offsets (if tac_gen)
+                # Semantic Action
                 if self.symbol_table:
-                     # Determine type and const value from type_mark_node
-                     # This requires inspecting the type_mark_node's children/token
-                     # For simplicity, let's assume TypeUtils can help or re-parse info needed
-                     # Example: Infer type (this logic might need refinement based on parseTypeMark structure)
-                     var_type_node = type_mark_node.find_child_by_token_type(self.defs.TokenType.INTEGERT) # etc.
-                     var_type = None
-                     if var_type_node: var_type = VarType.INT # Simplified mapping
+                     # Simplified: Infer type from the first child of TypeMark if it's a type keyword token
+                     var_type: Optional[VarType] = None
+                     const_value: Optional[Any] = None
+                     type_token_node = None
+                     if type_mark_node.children:
+                        type_token_node = type_mark_node.children[0] # Assuming structure like TypeMark -> INTEGERT
 
-                     for id_leaf in id_list_node.find_children_by_name("ID"): # Find ID leaves in the list node
+                     if type_token_node and type_token_node.token:
+                         type_lexeme = type_token_node.token.lexeme.upper()
+                         if type_lexeme == 'INTEGER': var_type = VarType.INT
+                         elif type_lexeme in ['REAL', 'FLOAT']: var_type = VarType.FLOAT
+                         elif type_lexeme == 'CHAR': var_type = VarType.CHAR
+                         # Add constant handling if parseTypeMark structure allows easy detection
+                         # ...
+
+                     entry_kind = EntryType.VARIABLE # Assume variable unless constant detected
+
+
+                     for id_leaf in id_list_node.find_children_by_name("ID"):
                          if id_leaf.token:
                             sym = Symbol(
                                 id_leaf.token.lexeme,
                                 id_leaf.token,
-                                EntryType.VARIABLE, # Assuming variable for now, TypeMark handles CONSTANT
+                                entry_kind, # Update if constant detected
                                 self.symbol_table.current_depth
                             )
-                            # --- Add Offset Calculation for TAC ---
-                            if self.tac_gen:
-                                var_size = TypeUtils.get_type_size(var_type) if var_type else 2 # Default size
-                                sym.set_variable_info(var_type, self.current_local_offset, var_size)
-                                self.current_local_offset -= var_size # Decrement for next local
-                            # --- End Offset Calculation ---
+                            if self.tac_gen and entry_kind == EntryType.VARIABLE:
+                                # Ensure var_type is not None before using it
+                                if var_type is not None:
+                                     var_size = TypeUtils.get_type_size(var_type)
+                                     sym.set_variable_info(var_type, self.current_local_offset, var_size)
+                                     self.current_local_offset -= var_size
+                                else:
+                                     # Handle case where type is unknown - use default? report error?
+                                     self.logger.warning(f"Unknown variable type for {id_leaf.token.lexeme}, using default size/offset.")
+                                     var_size = 2 # Default size
+                                     # Cannot call set_variable_info without a valid VarType
+                                     # Maybe store raw offset/size or skip TAC info?
+                                     # sym.offset = self.current_local_offset # Example direct storage
+                                     # sym.size = var_size
+                                     # self.current_local_offset -= var_size
+                                     pass # Skip TAC info if type unknown for now
+                            # Add constant info setting here if applicable
+                            # elif self.tac_gen and entry_kind == EntryType.CONSTANT:
+                            #    if var_type is not None:
+                            #        sym.set_constant_info(var_type, const_value)
+
                             try:
                                 self.symbol_table.insert(sym)
                             except DuplicateSymbolError as e:
@@ -733,14 +758,14 @@ class RDParserExtended(RDParser):
 
                  # Recursively parse further declarations
                 next_node = self.parseDeclarativePart()
-                if next_node and node: # Add recursive result if it's not just epsilon
+                if next_node and node:
                     if not (len(next_node.children) == 1 and next_node.children[0].name == "ε"):
                          node.add_child(next_node)
 
             elif self.tac_gen:
                  # TAC generation mode (not building tree)
                  id_tokens = self._parseIdentifierListTokens()
-                 self.match(self.defs.TokenType.COLON) # Use non-leaf match
+                 self.match(self.defs.TokenType.COLON)
                  var_type, const_value = self._parseTypeMarkInfo() # Get type info
                  self.match(self.defs.TokenType.SEMICOLON)
 
@@ -755,13 +780,25 @@ class RDParserExtended(RDParser):
                             self.symbol_table.current_depth
                          )
                          if entry_kind == EntryType.VARIABLE:
-                            var_size = TypeUtils.get_type_size(var_type) if var_type else 2
-                            sym.set_variable_info(var_type, self.current_local_offset, var_size)
-                            self.current_local_offset -= var_size # Decrement for next local
+                            # Ensure var_type is valid before calling set_variable_info
+                            if var_type is not None:
+                                var_size = TypeUtils.get_type_size(var_type)
+                                sym.set_variable_info(var_type, self.current_local_offset, var_size)
+                                self.current_local_offset -= var_size
+                            else:
+                                # Handle unknown type case for TAC gen
+                                self.logger.warning(f"Unknown variable type for {id_token.lexeme} in TAC gen mode.")
+                                pass # Skip setting offset/size info for TAC
+
                          elif entry_kind == EntryType.CONSTANT:
-                            sym.set_constant_info(var_type, const_value)
-                            # Constants don't usually take stack space/offset in same way
-                         
+                            # Ensure const_type (var_type) is valid before calling set_constant_info
+                            if var_type is not None:
+                                sym.set_constant_info(var_type, const_value)
+                            else:
+                                # Handle unknown type case for constant
+                                self.logger.warning(f"Unknown constant type for {id_token.lexeme} in TAC gen mode.")
+                                pass # Skip setting const info? or use raw value?
+
                          try:
                             self.symbol_table.insert(sym)
                          except DuplicateSymbolError as e:
@@ -775,17 +812,16 @@ class RDParserExtended(RDParser):
 
             else:
                  # Non-tree, non-TAC mode: Just parse without actions
-                 self._parseIdentifierListTokens() # Consume tokens
+                 self._parseIdentifierListTokens()
                  self.match(self.defs.TokenType.COLON)
-                 self._parseTypeMarkInfo() # Consume tokens
+                 self._parseTypeMarkInfo()
                  self.match(self.defs.TokenType.SEMICOLON)
                  self.parseDeclarativePart()
 
         else:
-            # Epsilon case (no declaration)
+            # Epsilon case
             self.logger.debug("Parsing DeclarativePart (ε)")
             if self.build_parse_tree and node:
-                 # Add epsilon node only if building tree
                 node.add_child(ParseTreeNode("ε"))
 
         return node if self.build_parse_tree else None
@@ -809,10 +845,10 @@ class RDParserExtended(RDParser):
         return tokens
 
     # Helper to parse TypeMark returning type info (VarType or None for constant)
-    # Returns tuple: (VarType | None, const_value | None)
-    def _parseTypeMarkInfo(self) -> tuple[Optional[Any], Optional[Any]]:
-         var_type = None
-         const_value = None
+    # Returns tuple: (Optional[VarType], Optional[Any])
+    def _parseTypeMarkInfo(self) -> tuple[Optional[VarType], Optional[Any]]:
+         var_type: Optional[VarType] = None # Explicitly type hint
+         const_value: Optional[Any] = None
          if self.current_token and self.current_token.token_type in {
              self.defs.TokenType.INTEGERT,
              self.defs.TokenType.REALT,
@@ -846,3 +882,182 @@ class RDParserExtended(RDParser):
          else:
              self.report_error("Expected a type (INTEGER, REAL, CHAR, FLOAT) or CONSTANT declaration.")
          return var_type, const_value
+
+    def parseArgs(self):
+        """
+        Args -> ( ArgList ) | ε
+        Enhanced to calculate and store offsets for parameters during TAC generation.
+        """
+        node = None
+        if self.build_parse_tree:
+            node = ParseTreeNode("Args")
+            # --- Tree Building Logic ---
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.match_leaf(self.defs.TokenType.LPAREN, node)
+                child = self.parseArgList() # Original ArgList parser
+                if child and node:
+                    node.add_child(child)
+                self.match_leaf(self.defs.TokenType.RPAREN, node)
+            else:
+                # Epsilon case for tree
+                if node:
+                    node.add_child(ParseTreeNode("ε"))
+            # --- End Tree Building ---
+
+        elif self.tac_gen:
+            # --- TAC Generation Logic ---
+            self.logger.debug("Parsing Args (TAC)")
+            param_info_list = [] # To store [(name, token, type, mode), ...]
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.advance() # Consume LPAREN
+                # Parse using the helper that returns info
+                param_info_list = self._parseArgListInfo()
+                if not self.current_token or self.current_token.token_type != self.defs.TokenType.RPAREN:
+                    self.report_error("Expected ')' after parameter list")
+                else:
+                    self.advance() # Consume RPAREN
+
+                # --- Semantic Action: Insert Parameter Symbols with Offsets ---
+                if self.symbol_table and self.current_procedure_name:
+                    try:
+                         # Retrieve the procedure symbol (should exist from parseProg)
+                         # It's in the outer scope (depth - 1), but args/locals go in current scope
+                         # We need to update the symbol in the outer scope? No, parameters belong to inner scope.
+                         # Let's lookup in the current scope (procedure's scope)
+                         # If preliminary symbol was added, it needs updating?
+                         # Let's assume we insert params into the current scope (proc scope)
+                         # And we update the proc symbol's param_list/modes later if needed
+
+                         # Use the param offset tracker initialized in parseProg
+                         current_param_offset = self.current_param_offset
+
+                         # Process parameters (consider stack push order - often right-to-left)
+                         # Let's calculate offsets left-to-right based on declaration order first.
+                         # The CALLER (parseProcCall) will handle push order.
+                         proc_symbol_params = []
+                         proc_symbol_modes = {}
+
+                         for param_name, param_token, param_type, param_mode in param_info_list:
+                             if param_type is None:
+                                 # Skip symbol creation if type unknown? Or create with placeholder?
+                                 self.logger.error(f"Skipping parameter '{param_name}' due to unknown type.")
+                                 continue
+
+                             param_size = TypeUtils.get_type_size(param_type)
+
+                             param_symbol = Symbol(
+                                 param_name,
+                                 param_token,
+                                 EntryType.PARAMETER,
+                                 self.symbol_table.current_depth # Params are in the proc's scope
+                             )
+
+                             # Assign offset and update next offset
+                             param_symbol.set_variable_info(param_type, current_param_offset, param_size)
+                             current_param_offset += param_size
+
+                             # Add to lists for potentially updating the main proc symbol later
+                             proc_symbol_params.append(param_symbol)
+                             proc_symbol_modes[param_name] = param_mode
+
+                             # Insert into symbol table (current scope)
+                             try:
+                                 self.symbol_table.insert(param_symbol)
+                             except DuplicateSymbolError as e:
+                                 self.report_semantic_error(
+                                     f"Duplicate parameter name: '{e.name}'",
+                                     getattr(param_token, 'line_number', -1),
+                                     getattr(param_token, 'column_number', -1)
+                                 )
+
+                         # Update the main procedure symbol (if needed and exists) with param info
+                         # This might be complex if proc symbol is in outer scope.
+                         # Alternative: Store param info separately associated with proc name.
+                         # For now, let's assume Symbol Table handles relationships or
+                         # we update the proc symbol later if necessary.
+
+                         # Update the parser's offset tracker state
+                         self.current_param_offset = current_param_offset
+
+                    except SymbolNotFoundError:
+                         self.logger.error(f"Procedure symbol '{self.current_procedure_name}' not found for parameter processing.")
+                    except Exception as e:
+                         self.logger.error(f"Error processing parameters for TAC: {e}")
+                # --- End Semantic Action ---
+            else:
+                # Epsilon case for TAC gen (no parentheses)
+                self.logger.debug("Parsing Args (ε TAC)")
+            # --- End TAC Generation ---
+
+        else:
+            # --- Non-Tree, Non-TAC Parsing ---
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.match(self.defs.TokenType.LPAREN)
+                self.parseArgList() # Original parser consumes tokens
+                self.match(self.defs.TokenType.RPAREN)
+            # Epsilon case requires no action
+            # --- End Non-Tree, Non-TAC ---
+
+
+        return node # Return node only if building tree
+
+    # Helper to parse Mode returning ParameterMode enum
+    def _parseModeInfo(self) -> ParameterMode:
+        mode = ParameterMode.IN # Default mode is IN
+        if self.current_token:
+            if self.current_token.token_type == self.defs.TokenType.IN:
+                mode = ParameterMode.IN
+                self.advance()
+            elif self.current_token.token_type == self.defs.TokenType.OUT:
+                mode = ParameterMode.OUT
+                self.advance()
+            elif self.current_token.token_type == self.defs.TokenType.INOUT:
+                mode = ParameterMode.INOUT
+                self.advance()
+            # Else: Epsilon case, mode remains IN
+        return mode
+
+    # Helper to parse one argument spec: Mode IdentifierList : TypeMark
+    # Returns: List of tuples: [(name: str, token: Token, type: VarType, mode: ParameterMode)]
+    def _parseOneArgSpecInfo(self) -> List[tuple[str, Token, Optional[VarType], ParameterMode]]:
+        arg_info_list = []
+        mode = self._parseModeInfo()
+        id_tokens = self._parseIdentifierListTokens()
+        if not self.current_token or self.current_token.token_type != self.defs.TokenType.COLON:
+            self.report_error("Expected ':' after identifier list in parameter specification")
+            return arg_info_list # Return empty on error
+        self.advance() # Consume COLON
+
+        var_type, const_value = self._parseTypeMarkInfo() # TypeMark determines type
+        if const_value is not None:
+            self.report_error("Constant declaration not allowed in parameter specification")
+            # Continue processing with the inferred type if available
+
+        for id_token in id_tokens:
+             if var_type is None:
+                 # Report error if type couldn't be determined
+                 self.report_error(f"Could not determine type for parameter '{id_token.lexeme}'")
+             # Add tuple even if type is None, handle downstream
+             arg_info_list.append((id_token.lexeme, id_token, var_type, mode))
+
+        return arg_info_list
+
+    # Helper to parse ArgList returning combined info
+    def _parseArgListInfo(self) -> List[tuple[str, Token, Optional[VarType], ParameterMode]]:
+        all_args_info = []
+        # Parse first spec
+        all_args_info.extend(self._parseOneArgSpecInfo())
+        # Parse MoreArgs ( ; ArgList )
+        while self.current_token and self.current_token.token_type == self.defs.TokenType.SEMICOLON:
+            self.advance() # Consume SEMICOLON
+            # Check if another spec follows or if it's just a trailing semicolon before RPAREN
+            if self.current_token and self.current_token.token_type != self.defs.TokenType.RPAREN:
+                 all_args_info.extend(self._parseOneArgSpecInfo())
+            else:
+                 # Trailing semicolon is technically allowed by some interpretations,
+                 # but often considered an error or indicates an empty spec.
+                 # Ada grammar usually expects a spec after ';'. Let's report potential issue.
+                 if self.current_token and self.current_token.token_type != self.defs.TokenType.RPAREN:
+                      self.report_error("Expected parameter specification after ';'")
+                 break # Exit loop if no more specs expected
+        return all_args_info
