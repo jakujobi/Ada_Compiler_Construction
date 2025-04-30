@@ -44,7 +44,7 @@ from .TACGenerator import TACGenerator
 from .TypeUtils import TypeUtils
 
 
-class RDParserExtended(RDParser):
+class RDParserExtExt(RDParser):
     """
     Extended Recursive Descent Parser with grammar rules for statements and expressions,
     and integrated TAC generation.
