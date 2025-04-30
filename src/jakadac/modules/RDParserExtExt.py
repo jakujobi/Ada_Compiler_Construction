@@ -39,7 +39,7 @@ from .RDParser import RDParser, ParseTreeNode
 from .Token import Token
 from .Definitions import Definitions
 from .Logger import Logger
-from .SymTable import SymbolTable, Symbol, EntryType, DuplicateSymbolError, ParameterMode
+from .SymTable import SymbolTable, Symbol, EntryType, DuplicateSymbolError, SymbolNotFoundError, ParameterMode
 from .TACGenerator import TACGenerator
 from .TypeUtils import TypeUtils
 
@@ -90,130 +90,146 @@ class RDParserExtended(RDParser):
         """
         if self.build_parse_tree:
             node = ParseTreeNode("Prog")
-            # Save the procedure identifier (first occurrence)
-            procedure_name = "unknown" # Default
-            start_id_token = self.current_token
-            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
-                procedure_name = self.current_token.lexeme
-                
-                # --- TAC Generation Start ---
-                if self.tac_gen:
-                    # Store current procedure name for use in other methods
-                    self.current_procedure_name = procedure_name
-                    self.tac_gen.emitProcStart(procedure_name)
-                    # Initialize offsets for this procedure's scope
-                    self.current_local_offset = -2 # Locals start at BP-2
-                    self.current_param_offset = 4  # Params start at BP+4
-                    
-                    # Insert preliminary procedure symbol if needed (e.g., for forward calls or arg processing)
-                    # Assuming global scope is 0, procedure scope is 1
-                    if self.symbol_table and self.symbol_table.current_depth == 0:
-                        # Check if already declared (e.g., forward declaration)
+        else:
+            node = None # Initialize node to None for non-tree branch
+
+        self.logger.debug("Parsing Prog")
+
+        # Match procedure keyword
+        self.match_leaf(self.defs.TokenType.PROCEDURE, node)
+
+        # Save the procedure identifier (first occurrence)
+        procedure_name = "unknown" # Default
+        start_id_token = self.current_token # Potentially None if at end of stream
+
+        if start_id_token and start_id_token.token_type == self.defs.TokenType.ID:
+            procedure_name = start_id_token.lexeme
+
+            # --- TAC Generation Start ---
+            if self.tac_gen:
+                # Store current procedure name for use in other methods
+                self.current_procedure_name = procedure_name
+                self.tac_gen.emitProcStart(procedure_name)
+                # Initialize offsets for this procedure's scope
+                self.current_local_offset = -2 # Locals start at BP-2
+                self.current_param_offset = 4  # Params start at BP+4
+
+                # Insert preliminary procedure symbol if needed
+                if self.symbol_table and self.symbol_table.current_depth == 0:
+                    try:
+                        # Check if already declared in the target scope (scope 1)
+                        # Need to temporarily enter scope to check/insert
+                        self.symbol_table.enter_scope()
                         try:
-                            self.symbol_table.lookup(procedure_name, lookup_current_scope_only=True)
+                             self.symbol_table.lookup(procedure_name, lookup_current_scope_only=True)
+                             # Already exists, potentially from forward declaration
                         except SymbolNotFoundError:
+                             # Does not exist, create and insert
                             proc_sym = Symbol(
                                 procedure_name,
-                                start_id_token,
+                                start_id_token, # Known to be non-None here
                                 EntryType.PROCEDURE,
-                                self.symbol_table.current_depth + 1 # Declared in the scope we are about to enter
+                                self.symbol_table.current_depth # Now in scope 1
                             )
-                            proc_sym.param_list = [] # Initialize
-                            proc_sym.param_modes = {} # Initialize
-                            # Insert into the *parent* scope (global scope) before entering proc scope
-                            # This allows recursive calls within the same scope level
-                            # We will fully populate it later in parseArgs/parseDeclarativePart
+                            proc_sym.param_list = []
+                            proc_sym.param_modes = {}
                             try:
-                                 # Temporarily enter scope 1 to add procedure symbol
-                                 self.symbol_table.enter_scope()
-                                 self.symbol_table.insert(proc_sym)
-                                 self.symbol_table.exit_scope() # Go back to global scope before parsing args/declarations
+                                self.symbol_table.insert(proc_sym)
                             except DuplicateSymbolError:
-                                 # It might already exist from a previous pass or forward declaration
-                                 pass # We'll update it later
-                # --- TAC Generation End ---
-                
-            else:
-                # If not an ID, report error but keep a placeholder token
-                 start_id_token = Token(self.defs.TokenType.ID, "unknown",
-                                       self.current_token.line_number if self.current_token else -1,
-                                       self.current_token.column_number if self.current_token else -1)
-                 self.report_error("Expected procedure identifier")
+                                # Should not happen due to lookup check, but handle defensively
+                                pass
+                        finally:
+                             # Ensure we exit the temporary scope entry
+                            self.symbol_table.exit_scope()
+                    except Exception as e:
+                        # Catch potential errors during symbol table operations
+                        self.logger.error(f"Error during preliminary procedure symbol insertion: {e}")
+                        # Ensure scope consistency if an error occurred during enter/exit
+                        if self.symbol_table.current_depth != 0:
+                             self.logger.warning("Correcting symbol table depth after error.")
+                             while self.symbol_table.current_depth > 0:
+                                 self.symbol_table.exit_scope()
 
 
-            # Match the identifier and continue parsing
-            self.match_leaf(self.defs.TokenType.ID, node)
-            
-            # Enter new scope for procedure body *before* parsing Args and Declarations
-            # This ensures parameters and locals are in the correct scope (depth 1 relative to global 0)
-            if self.symbol_table: self.symbol_table.enter_scope()
-            
-            # Parse the rest of the procedure declaration
-            child = self.parseArgs() # Args need to be processed in the new scope
-            if self.build_parse_tree and node is not None and child:
-                self._add_child(node, child)
-            
-            self.match_leaf(self.defs.TokenType.IS, node)
-                    
-            child = self.parseDeclarativePart() # Declarations in the new scope
-            if self.build_parse_tree and node is not None and child:
-                self._add_child(node, child)
-            
-            # Nested Procedures (Optional - Requires recursive call handling)
-            # child = self.parseProcedures() 
-            # if self.build_parse_tree and node is not None and child:
-            #     self._add_child(node, child)
-            
-            self.match_leaf(self.defs.TokenType.BEGIN, node)
-            
-            child = self.parseSeqOfStatements()
-            if self.build_parse_tree and node is not None and child:
-                self._add_child(node, child)
-            
-            self.match_leaf(self.defs.TokenType.END, node)
-            
-            # Save the procedure identifier (second occurrence)
-            end_id_token = self.current_token
-            
-            # Match the identifier and continue parsing
-            self.match_leaf(self.defs.TokenType.ID, node)
-            
-            # Check if the procedure identifiers match
-            if end_id_token and start_id_token and end_id_token.lexeme != start_id_token.lexeme:
-                error_msg = (
-                    f"Procedure name mismatch: procedure '{start_id_token.lexeme}' ends with '{end_id_token.lexeme}'"
-                )
-                self.report_error(error_msg)
-                line = getattr(end_id_token, 'line_number', -1)
-                col  = getattr(end_id_token, 'column_number', -1)
-                self.report_semantic_error(error_msg, line, col)
-            
-            self.match_leaf(self.defs.TokenType.SEMICOLON, node)
-            
-            # --- TAC Generation Start ---
-            if self.tac_gen and self.current_procedure_name:
-                 # Check depth before emitting start - only for the outermost procedure
-                 outermost = (self.symbol_table and self.symbol_table.current_depth == 1) # Depth 1 is the first procedure level
-                 
-                 # Emit endp first
-                 self.tac_gen.emitProcEnd(self.current_procedure_name)
-                 
-                 # If this was the outermost procedure, emit start
-                 if outermost:
-                     self.tac_gen.emitProgramStart(self.current_procedure_name)
-                 
-                 # Reset current procedure name after processing
-                 # self.current_procedure_name = None # Keep it until scope exit? Check interaction with nested procs if added.
             # --- TAC Generation End ---
-            
-            # Exit procedure scope before returning
-            if self.symbol_table: self.symbol_table.exit_scope()
-            
-            # Reset procedure name context after exiting scope
-            # If supporting nested procedures, need stack-based context management
-            self.current_procedure_name = None 
-            
-            return node
+
+        elif start_id_token: # Token exists but is not an ID
+            # Report error but keep a placeholder token
+            start_id_token = Token(self.defs.TokenType.ID, "unknown",
+                                   start_id_token.line_number,
+                                   start_id_token.column_number)
+            self.report_error("Expected procedure identifier")
+        else: # No token left
+             start_id_token = Token(self.defs.TokenType.ID, "unknown", -1, -1) # Dummy token
+             self.report_error("Expected procedure identifier, found end of input")
+
+
+        # Match the identifier and continue parsing
+        self.match_leaf(self.defs.TokenType.ID, node)
+
+        # Enter new scope for procedure body *before* parsing Args and Declarations
+        if self.symbol_table: self.symbol_table.enter_scope()
+
+        # Parse the rest of the procedure declaration
+        child = self.parseArgs()
+        if self.build_parse_tree and node is not None and child:
+            self._add_child(node, child)
+
+        self.match_leaf(self.defs.TokenType.IS, node)
+
+        child = self.parseDeclarativePart()
+        if self.build_parse_tree and node is not None and child:
+            self._add_child(node, child)
+
+        # child = self.parseProcedures() # Optional nested procedures
+        # if self.build_parse_tree and node is not None and child:
+        #     self._add_child(node, child)
+
+        self.match_leaf(self.defs.TokenType.BEGIN, node)
+
+        child = self.parseSeqOfStatements()
+        if self.build_parse_tree and node is not None and child:
+            self._add_child(node, child)
+
+        self.match_leaf(self.defs.TokenType.END, node)
+
+        # Save the procedure identifier (second occurrence)
+        end_id_token = self.current_token # Potentially None
+
+        # Match the identifier and continue parsing
+        self.match_leaf(self.defs.TokenType.ID, node)
+
+        # Check if the procedure identifiers match
+        # Ensure both tokens exist before comparing lexemes
+        if end_id_token and start_id_token and start_id_token.lexeme != "unknown" and end_id_token.lexeme != start_id_token.lexeme:
+            error_msg = (
+                f"Procedure name mismatch: procedure '{start_id_token.lexeme}' ends with '{end_id_token.lexeme}'"
+            )
+            self.report_error(error_msg)
+            line = getattr(end_id_token, 'line_number', -1)
+            col  = getattr(end_id_token, 'column_number', -1)
+            self.report_semantic_error(error_msg, line, col)
+
+        self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+
+        # --- TAC Generation Start ---
+        if self.tac_gen and self.current_procedure_name:
+             outermost = (self.symbol_table and self.symbol_table.current_depth == 1)
+
+             self.tac_gen.emitProcEnd(self.current_procedure_name)
+
+             if outermost:
+                 self.tac_gen.emitProgramStart(self.current_procedure_name)
+
+        # --- TAC Generation End ---
+
+        # Exit procedure scope before returning
+        if self.symbol_table: self.symbol_table.exit_scope()
+
+        # Reset procedure name context after exiting scope
+        self.current_procedure_name = None
+
+        return node
     
     def parseSeqOfStatements(self):
         """
