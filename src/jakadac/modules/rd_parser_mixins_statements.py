@@ -40,7 +40,7 @@ class StatementsMixin:
     match_leaf: Callable[[Any, Optional[ParseTreeNode]], Optional[ParseTreeNode]]
     match: Callable[[Any], None] # Used in non-tree mode
     report_error: Callable[[str], None]
-    panic_mode_recover: Callable[[set], None] # Used in error handling
+    panic_recovery: Callable[[set], None] # CORRECTED: Use panic_recovery, not panic_mode_recover
     _add_child: Callable[[ParseTreeNode, Optional[ParseTreeNode]], None]
     _peek: Callable[[int], Optional[Token]] # Used for lookahead
     report_semantic_error: Callable[[str, int, int], None]
@@ -158,7 +158,7 @@ class StatementsMixin:
                      self.match(self.defs.TokenType.NULL) # Just consume
             else:
                 self.report_error(f"Expected statement (Identifier, GET, PUT, NULL), found {self.current_token.lexeme}")
-                self.panic_mode_recover({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
+                self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
                 child_node = None
             
             # Add child only if tree building is active and child exists
@@ -185,7 +185,7 @@ class StatementsMixin:
         # Peek ahead to decide the path without consuming ID yet
         if not self.current_token or self.current_token.token_type != self.defs.TokenType.ID:
             self.report_error(f"Expected identifier at start of assignment/procedure call, found {self.current_token}")
-            self.panic_mode_recover({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
+            self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
             return None
 
         id_token = self.current_token
@@ -514,7 +514,7 @@ class StatementsMixin:
                       self.report_error(f"Expected '(' after procedure name '{proc_name}'")
                       # Attempt recovery? For now, assume error stops TAC gen for this call.
                       # We might need to consume until RPAREN or SEMICOLON here
-                      self.panic_mode_recover({self.defs.TokenType.RPAREN, self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
+                      self.panic_recovery({self.defs.TokenType.RPAREN, self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
                       return None # Return None as call is invalid
                  self.advance() # Consume LPAREN
                  
@@ -603,7 +603,7 @@ class StatementsMixin:
             # This case should be caught by parseStatement or parseAssignStat before calling parseProcCall
             # If called directly, handle error.
             self.report_error(f"Expected procedure identifier, found {self.current_token}")
-            self.panic_mode_recover({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
+            self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
             result_node = None
             
         self.logger.debug("Exiting parseProcCall")
