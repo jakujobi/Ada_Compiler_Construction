@@ -1,0 +1,502 @@
+# rd_parser_mixins_expressions.py
+
+# Imports (will likely need adjustment)
+import sys
+from typing import List, Optional, Any, Dict, Union, TYPE_CHECKING, Callable
+from .RDParser import ParseTreeNode # Assuming RDParser has ParseTreeNode
+from .Token import Token
+# from .Definitions import Definitions # Definitions likely accessed via self.defs
+from .Logger import Logger # Assuming logger is passed or inherited
+from .SymTable import Symbol, EntryType, SymbolTable, SymbolNotFoundError # Assuming access via self.symbol_table
+# from .TACGenerator import TACGenerator # Assuming access via self.tac_gen
+
+# Use TYPE_CHECKING to avoid circular imports at runtime if necessary
+# if TYPE_CHECKING:
+#     from .Definitions import Definitions
+#     from .TACGenerator import TACGenerator
+
+# Assuming these modules exist in the same directory
+from .Definitions import Definitions 
+from .TACGenerator import TACGenerator
+
+# Use TYPE_CHECKING to provide context for self attributes/methods
+if TYPE_CHECKING:
+    from .RDParser import RDParser
+    # If methods unique to RDParserExtExt are called, import it too
+    # from .RDParserExtExt import RDParserExtExt 
+
+class ExpressionsMixin:
+    """Mixin class containing expression parsing methods for RDParserExtExt."""
+
+    # Need to declare types for attributes accessed from self
+    # These might be inherited from RDParser or set in RDParserExtExt.__init__
+    # Add type hints for attributes accessed via self used in these methods
+    logger: Logger
+    build_parse_tree: bool
+    tac_gen: Optional[TACGenerator]
+    current_token: Optional[Token]
+    symbol_table: Optional[SymbolTable]
+    defs: Definitions
+    current_procedure_symbol: Optional[Symbol]
+
+    # Methods from base class assumed to exist:
+    # advance: () -> None
+    # match_leaf: (Any, Optional[ParseTreeNode]) -> Optional[ParseTreeNode]
+    # report_error: (str) -> None
+    # _add_child: (ParseTreeNode, Optional[ParseTreeNode]) -> None
+    # report_semantic_error: (str, int, int) -> None # Added this
+
+    # Explicitly declare expected methods from base/core class using Callable
+    advance: Callable[[], None]
+    match_leaf: Callable[[Any, Optional[ParseTreeNode]], Optional[ParseTreeNode]]
+    report_error: Callable[[str], None]
+    _add_child: Callable[[ParseTreeNode, Optional[ParseTreeNode]], None]
+    report_semantic_error: Callable[[str, int, int], None]
+    # These are defined within this mixin, hint for clarity
+    # Removing Callable hints for recursive calls as they seem to confuse the linter
+    # parseExpr: Callable[[], Union[ParseTreeNode, str, None]]
+    # parseRelation: Callable[[], Union[ParseTreeNode, str, None]]
+    # parseSimpleExpr: Callable[[], Union[ParseTreeNode, str, None]]
+    # parseTerm: Callable[[], Union[ParseTreeNode, str, None]]
+    # parseFactor: Callable[[], Union[ParseTreeNode, str, None]]
+
+    def parseExpr(self) -> Union[ParseTreeNode, str, None]:
+        """
+        Expr -> Relation
+        Enhanced to generate TAC and return the place where the result is stored.
+        """
+        if self.build_parse_tree:
+            # --- Tree Building ---
+            node = ParseTreeNode("Expr")
+            self.logger.debug("Parsing Expr (tree)")
+            child = self.parseRelation() # Should return ParseTreeNode
+            # Ensure child is a ParseTreeNode before adding
+            if isinstance(child, ParseTreeNode):
+                self._add_child(node, child)
+            else:
+                 # Log if child is None or unexpected type
+                 if child is None:
+                     self.logger.warning("parseRelation returned None in tree mode, expected ParseTreeNode.")
+                 else:
+                     self.logger.error(f"Type mismatch: Expected ParseTreeNode from parseRelation in tree mode, got {type(child)}.")
+            return node
+            # --- End Tree Building ---
+        elif self.tac_gen:
+            # --- TAC Generation ---
+            self.logger.debug("Parsing Expr (TAC)")
+            # Delegate to parseRelation and return the place (string)
+            place = self.parseRelation() # Should return str
+            if not isinstance(place, str):
+                 self.logger.error(f"Type mismatch: Expected str place from parseRelation in TAC mode, got {type(place)}")
+                 return "ERROR_PLACE" # Return error placeholder
+            return place
+            # --- End TAC Generation ---
+        else:
+            # --- Non-Tree, Non-TAC ---
+            self.logger.debug("Parsing Expr (non-tree)")
+            self.parseRelation() # Just parse
+            return None # Explicitly return None
+            # --- End Non-Tree, Non-TAC ---
+    
+    def parseRelation(self) -> Union[ParseTreeNode, str, None]:
+        """
+        Relation -> SimpleExpr [ relop SimpleExpr ]
+        Enhanced for TAC generation (currently only handles SimpleExpr).
+        NOTE: Relational operators are not handled in the provided TAC snippets.
+              This implementation only handles the SimpleExpr part.
+        """
+        if self.build_parse_tree:
+            # --- Tree Building ---
+            node = ParseTreeNode("Relation")
+            self.logger.debug("Parsing Relation (tree)")
+            child = self.parseSimpleExpr() # Returns ParseTreeNode
+            if isinstance(child, ParseTreeNode):
+                self._add_child(node, child)
+            else: # Log if None or wrong type
+                 if child is None:
+                     self.logger.warning("parseSimpleExpr returned None in tree mode, expected ParseTreeNode.")
+                 else:
+                    self.logger.error(f"Type mismatch: Expected ParseTreeNode from parseSimpleExpr in tree mode, got {type(child)}.")
+            # TODO: Add parsing for optional relop SimpleExpr part if needed
+            return node
+            # --- End Tree Building ---
+        elif self.tac_gen:
+            # --- TAC Generation ---
+            self.logger.debug("Parsing Relation (TAC)")
+            # Delegate to parseSimpleExpr and return the place
+            place = self.parseSimpleExpr() # Returns str
+            if not isinstance(place, str):
+                 self.logger.error(f"Type mismatch: Expected str place from parseSimpleExpr in TAC mode, got {type(place)}")
+                 return "ERROR_PLACE"
+            # TODO: Add TAC generation for relational operators if needed
+            # Example:
+            # if self.current_token and self.current_token.token_type == self.defs.TokenType.RELOP:
+            #     op_token = self.current_token
+            #     self.advance()
+            #     right_place = self.parseSimpleExpr()
+            #     result_place = self.tac_gen.newTemp()
+            #     # emit conditional jump or boolean result based on op_token.lexeme
+            #     # e.g., self.tac_gen.emitIfFalseJump(place op right_place, label)
+            #     # or self.tac_gen.emitBinaryOp(map_relop(op_token.lexeme), result_place, place, right_place)
+            #     place = result_place # update place to the result of relation
+            return place
+            # --- End TAC Generation ---
+        else:
+             # --- Non-Tree, Non-TAC ---
+            self.logger.debug("Parsing Relation (non-tree)")
+            self.parseSimpleExpr()
+            # TODO: Parse optional relop SimpleExpr part
+            return None # Explicitly return None
+             # --- End Non-Tree, Non-TAC ---
+    
+
+    def parseSimpleExpr(self) -> Union[ParseTreeNode, str, None]:
+        """
+        SimpleExpr -> Term { addopt Term }*
+        Enhanced to generate TAC and return the place where the result is stored.
+        """
+        node = None # Initialize node
+        if self.build_parse_tree:
+            # --- Tree Building ---
+            node = ParseTreeNode("SimpleExpr")
+            self.logger.debug("Parsing SimpleExpr (tree)")
+            t = self.parseTerm() # Returns ParseTreeNode
+            if isinstance(t, ParseTreeNode):
+                 self._add_child(node, t) # Add first term
+            else: # Log if None or wrong type
+                if t is None:
+                    self.logger.warning("parseTerm returned None in tree mode, expected ParseTreeNode for first term.")
+                else:
+                    self.logger.error(f"Type mismatch: Expected ParseTreeNode for first term in tree mode, got {type(t)}.")
+            
+            # Handling MoreTerm equivalent iteratively for tree
+            while self.current_token and self.is_addopt(self.current_token.token_type):
+                 op_node = ParseTreeNode(self.current_token.lexeme, self.current_token)
+                 self._add_child(node, op_node)
+                 self.advance() # Consume operator
+                 next_t = self.parseTerm() # Returns ParseTreeNode
+                 if isinstance(next_t, ParseTreeNode):
+                      self._add_child(node, next_t)
+                 else:
+                      self.logger.error("Expected ParseTreeNode for term after addopt.")
+                      break 
+            return node
+            # --- End Tree Building ---
+
+        elif self.tac_gen:
+            # --- TAC Generation ---
+            self.logger.debug("Parsing SimpleExpr (TAC)")
+            left_place = self.parseTerm() # Returns str
+            if not isinstance(left_place, str):
+                 self.logger.error(f"Type mismatch: Expected str place from parseTerm in TAC mode, got {type(left_place)}")
+                 return "ERROR_PLACE"
+
+            # Parse additional terms if they exist
+            while self.current_token and self.is_addopt(self.current_token.token_type):
+                op_token = self.current_token
+                op = op_token.lexeme
+                self.advance()
+                right_place = self.parseTerm() # Returns str
+                if not isinstance(right_place, str):
+                     self.logger.error(f"Type mismatch: Expected str place from parseTerm (right operand) in TAC mode, got {type(right_place)}")
+                     return "ERROR_PLACE"
+                
+                # Ensure tac_gen exists before using it
+                if not self.tac_gen:
+                     self.logger.error("TAC Generator not available for SimpleExpr TAC emission.")
+                     return "ERROR_PLACE"
+                
+                result_place = self.tac_gen.newTemp()
+                tac_op = self.tac_gen.map_ada_op_to_tac(op)
+                self.tac_gen.emitBinaryOp(tac_op, result_place, left_place, right_place)
+                left_place = result_place
+
+            return left_place # Return the final place
+            # --- End TAC Generation ---
+
+        else:
+            # --- Non-Tree, Non-TAC ---
+            self.logger.debug("Parsing SimpleExpr (non-tree)")
+            self.parseTerm() # Consume Term
+            while self.current_token and self.is_addopt(self.current_token.token_type):
+                 self.advance() # Consume operator
+                 self.parseTerm() # Consume next Term
+            return None # Explicitly return None
+            # --- End Non-Tree, Non-TAC ---
+    
+    def parseTerm(self) -> Union[ParseTreeNode, str, None]:
+        """
+        Term -> Factor { mulopt Factor }*
+        Enhanced to generate TAC and return the place where the result is stored.
+        """
+        node = None # Initialize node
+        if self.build_parse_tree:
+            # --- Tree Building ---
+            node = ParseTreeNode("Term")
+            self.logger.debug("Parsing Term (tree)")
+            f = self.parseFactor() # Returns ParseTreeNode
+            if isinstance(f, ParseTreeNode):
+                 self._add_child(node, f) # Add first factor
+            else: # Log if None or wrong type
+                if f is None:
+                    self.logger.warning("parseFactor returned None in tree mode, expected ParseTreeNode for first factor.")
+                else:
+                    self.logger.error(f"Type mismatch: Expected ParseTreeNode for first factor in tree mode, got {type(f)}.")
+
+            # Handling MoreFactor equivalent iteratively for tree
+            while self.current_token and self.is_mulopt(self.current_token.token_type):
+                 op_node = ParseTreeNode(self.current_token.lexeme, self.current_token)
+                 self._add_child(node, op_node)
+                 self.advance() # Consume operator
+                 next_f = self.parseFactor() # Returns ParseTreeNode
+                 if isinstance(next_f, ParseTreeNode):
+                      self._add_child(node, next_f)
+                 else:
+                      self.logger.error("Expected ParseTreeNode for factor after mulopt.")
+                      break 
+            return node
+            # --- End Tree Building ---
+
+        elif self.tac_gen:
+             # --- TAC Generation ---
+            self.logger.debug("Parsing Term (TAC)")
+            left_place = self.parseFactor() # Returns str
+            if not isinstance(left_place, str):
+                 self.logger.error(f"Type mismatch: Expected str place from parseFactor in TAC mode, got {type(left_place)}")
+                 return "ERROR_PLACE"
+
+            # Parse additional factors if they exist
+            while self.current_token and self.is_mulopt(self.current_token.token_type):
+                op_token = self.current_token
+                op = op_token.lexeme
+                self.advance()
+                right_place = self.parseFactor() # Returns str
+                if not isinstance(right_place, str):
+                     self.logger.error(f"Type mismatch: Expected str place from parseFactor (right operand) in TAC mode, got {type(right_place)}")
+                     return "ERROR_PLACE"
+
+                # Ensure tac_gen exists before using it
+                if not self.tac_gen:
+                     self.logger.error("TAC Generator not available for Term TAC emission.")
+                     return "ERROR_PLACE"
+                     
+                result_place = self.tac_gen.newTemp()
+                tac_op = self.tac_gen.map_ada_op_to_tac(op)
+                self.tac_gen.emitBinaryOp(tac_op, result_place, left_place, right_place)
+                left_place = result_place
+
+            return left_place # Return the final place
+             # --- End TAC Generation ---
+        else:
+            # --- Non-Tree, Non-TAC ---
+            self.logger.debug("Parsing Term (non-tree)")
+            self.parseFactor() # Consume Factor
+            while self.current_token and self.is_mulopt(self.current_token.token_type): # Consume MoreFactor equivalent
+                 self.advance() # Consume operator
+                 self.parseFactor() # Consume next Factor
+            return None # Explicitly return None
+            # --- End Non-Tree, Non-TAC ---
+    
+        
+    def parseFactor(self) -> Union[ParseTreeNode, str, None]:
+        """
+        Factor -> idt | numt | ( Expr ) | not Factor | signopt Factor
+        Enhanced to generate TAC and return the place where the result is stored.
+        Also performs semantic checking for undeclared variables.
+        """
+        node = None # Initialize
+        place = "ERROR_PLACE" # Default place for TAC
+
+        if self.build_parse_tree:
+            # --- Tree Building ---
+            node = ParseTreeNode("Factor")
+            self.logger.debug("Parsing Factor (tree)")
+            
+            if not self.current_token:
+                self.report_error("Unexpected end of input in Factor")
+                return node # Return empty Factor node
+                
+            token_type = self.current_token.token_type
+            
+            if token_type == self.defs.TokenType.ID:
+                id_token = self.current_token
+                self.match_leaf(self.defs.TokenType.ID, node)
+                if self.symbol_table:
+                    try: 
+                        self.symbol_table.lookup(id_token.lexeme)
+                    except SymbolNotFoundError:
+                        # Ensure proper indentation for the except block content
+                        msg = f"Undeclared variable '{id_token.lexeme}' used in expression"
+                        self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
+            
+            elif token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
+                self.match_leaf(token_type, node)
+            
+            elif token_type == self.defs.TokenType.LPAREN:
+                self.match_leaf(self.defs.TokenType.LPAREN, node)
+                child = self.parseExpr() 
+                if isinstance(child, ParseTreeNode): self._add_child(node, child)
+                self.match_leaf(self.defs.TokenType.RPAREN, node)
+            
+            elif token_type == self.defs.TokenType.NOT:
+                self.match_leaf(self.defs.TokenType.NOT, node)
+                child = self.parseFactor() 
+                if isinstance(child, ParseTreeNode): self._add_child(node, child)
+            
+            elif self.is_signopt(token_type):
+                self.match_leaf(token_type, node)
+                child = self.parseFactor()
+                if isinstance(child, ParseTreeNode): self._add_child(node, child)
+            
+            else:
+                self.report_error(f"Expected an identifier, number, '(', 'not', or sign, found {self.current_token.lexeme if self.current_token else 'EOF'}")
+            return node
+            # --- End Tree Building ---
+
+        elif self.tac_gen:
+            # --- TAC Generation ---
+            self.logger.debug("Parsing Factor (TAC)")
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+                id_token = self.current_token
+                self.advance() # Consume identifier
+                if self.symbol_table:
+                    try:
+                        symbol = self.symbol_table.lookup(id_token.lexeme)
+                        # --- TAC Place Calculation ---
+                        if self.tac_gen:
+                            # Determine current procedure depth for context
+                            current_proc_depth = self.current_procedure_symbol.depth if self.current_procedure_symbol else 0
+                            # Pass current depth to getPlace
+                            place = self.tac_gen.getPlace(symbol, current_proc_depth=current_proc_depth) 
+                        # --- End TAC Place Calculation ---
+                        else:
+                            place = id_token.lexeme # Fallback if no TAC generator
+                    except SymbolNotFoundError:
+                        msg = f"Undeclared variable '{id_token.lexeme}' used in expression"
+                        self.report_semantic_error(msg, id_token.line_number, id_token.column_number)
+                        place = id_token.lexeme # Use lexeme as placeholder place on error
+                else:
+                    # No symbol table, assume lexeme is the place (for basic testing)
+                    place = id_token.lexeme
+                return place # Return place string
+            # --- End TAC Generation ---
+
+            elif self.current_token and self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
+                place = self.current_token.lexeme # Literals are their own place
+                self.advance()
+
+            elif self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.advance() # Consume LPAREN
+                place = self.parseExpr() # Returns str (place)
+                if not self.current_token or self.current_token.token_type != self.defs.TokenType.RPAREN:
+                     self.report_error("Expected ')'")
+                else:
+                     self.advance() # Consume RPAREN
+
+            elif self.current_token and self.current_token.token_type == self.defs.TokenType.NOT:
+                self.advance() # Consume NOT
+                operand_place = self.parseFactor() # Returns str
+                if isinstance(operand_place, str):
+                     result_place = self.tac_gen.newTemp()
+                     self.tac_gen.emitUnaryOp("NOT", result_place, operand_place)
+                     place = result_place
+                else:
+                     place = "ERROR_PLACE" # Error in operand
+
+            elif self.current_token and self.is_signopt(self.current_token.token_type):
+                sign = self.current_token.lexeme
+                self.advance() # Consume sign
+                operand_place = self.parseFactor() # Returns str
+
+                if isinstance(operand_place, str):
+                     if sign == '+':
+                         # Check if operand is numeric literal to avoid TAC like _t1 = + 5
+                         try:
+                             _ = float(operand_place) # Check if it looks like a number
+                             place = operand_place # If literal, unary plus is identity
+                         except ValueError:
+                             # If not a literal (var/temp), emit UPLUS for clarity or specific backend needs
+                             result_place = self.tac_gen.newTemp()
+                             self.tac_gen.emitUnaryOp("UPLUS", result_place, operand_place)
+                             place = result_place
+                     else: # Unary minus
+                        result_place = self.tac_gen.newTemp()
+                        self.tac_gen.emitUnaryOp("UMINUS", result_place, operand_place)
+                        place = result_place
+                else:
+                     place = "ERROR_PLACE" # Error in operand
+
+            else:
+                self.report_error(f"Expected an identifier, number, '(', 'not', or sign")
+                # place remains "ERROR_PLACE"
+
+            return place # Return the place string
+            # --- End TAC Generation ---
+        else:
+            # --- Non-Tree, Non-TAC ---
+            self.logger.debug("Parsing Factor (non-tree)")
+            # Keep original non-tree logic (just consume tokens)
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+                 id_token = self.current_token # Save for semantic check
+                 self.advance() # Use advance in non-tree mode
+                 if self.symbol_table: # Optional semantic check
+                     try: self.symbol_table.lookup(id_token.lexeme)
+                     except SymbolNotFoundError:
+                         msg = f"Undeclared variable '{id_token.lexeme}' used in expression"
+                         self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
+
+            elif self.current_token and self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
+                self.advance()
+            
+            elif self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+                self.advance()
+                self.parseExpr() # Recursive call returns None here
+                if self.current_token and self.current_token.token_type == self.defs.TokenType.RPAREN:
+                     self.advance()
+                else:
+                     self.report_error("Expected ')'")
+            
+            elif self.current_token and self.current_token.token_type == self.defs.TokenType.NOT:
+                self.advance()
+                self.parseFactor() # Recursive call returns None
+            
+            elif self.current_token and self.is_signopt(self.current_token.token_type):
+                self.advance()
+                self.parseFactor() # Recursive call returns None
+            
+            else:
+                 self.report_error(f"Expected an identifier, number, '(', 'not', or sign")
+            
+            return None # Return None for non-tree, non-TAC branch
+            # --- End Non-Tree, Non-TAC ---
+    
+    def is_addopt(self, token_type):
+        """
+        Check if a token type is an addopt operator (+ | - | or)
+        """
+        # Lexical ADDOP covers + and -, reserved OR covers 'or'
+        return token_type in {
+            self.defs.TokenType.ADDOP,
+            self.defs.TokenType.OR
+        }
+    
+    def is_mulopt(self, token_type):
+        """
+        Check if a token type is a mulopt operator (* | / | mod | rem | and)
+        """
+        # Lexical MULOP covers *, /; specific types for mod, rem; reserved AND for 'and'
+        return token_type in {
+            self.defs.TokenType.MULOP,
+            self.defs.TokenType.MOD,
+            self.defs.TokenType.REM,
+            self.defs.TokenType.AND
+        }
+    
+    def is_signopt(self, token_type):
+        """
+        Check if a token type is a signopt operator (+ | -)
+        """
+        # Sign operators are lexed as ADDOP
+        return token_type == self.defs.TokenType.ADDOP
+    
+# --- End of Expression Parsing Methods --- 
