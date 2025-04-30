@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any, TextIO, Union  
 from enum import Enum, auto  
   
-from .Logger import logger  
+from .Logger import Logger, logger  
 from .SymTable import Symbol, EntryType, ParameterMode  
 from .TypeUtils import TypeUtils  
   
@@ -45,7 +45,7 @@ class TACGenerator:
         self.tac_lines = []    # List of TAC instructions  
         self.start_proc_name = None  # Store the outermost procedure name  
         self.logger = logger  
-        self.logger.info(f"TAC Generator initialized. Output file: '{output_filename}'")  
+        self.logger.info(f"TAC Generator initialized. Output Target: '{self.output_filename}'")  
       
     def emit(self, instruction_str: str):  
         """  
@@ -55,7 +55,7 @@ class TACGenerator:
             instruction_str: The instruction string to emit  
         """  
         self.tac_lines.append(instruction_str)  
-        self.logger.debug(f"Emitted TAC: {instruction_str}")  
+        self.logger.debug(f"Emit TAC: {instruction_str}")  
       
     def _newTempName(self) -> str:  
         """  
@@ -80,65 +80,70 @@ class TACGenerator:
       
     def getPlace(self, symbol_or_value) -> str:  
         """  
-        Get the place string for a symbol or value.  
+        Get the place string for a symbol or value for use in TAC.  
           
         Args:  
-            symbol_or_value: Symbol object, literal value, or temporary  
+            symbol_or_value: Symbol object, literal value, or temporary name (str)  
               
         Returns:  
-            String representation for TAC operand/result  
+            String representation for TAC operand/result (e.g., 'x', '5', '_t1', '_BP+4').  
         """  
-        place_str = "ERROR_UNKNOWN_PLACE"  # Default  
-        self.logger.debug(f"Getting place for: {symbol_or_value} (type: {type(symbol_or_value)})")  
+        self.logger.debug(f"Getting place for: {symbol_or_value} (Type: {type(symbol_or_value)})")  
   
-        # Handle literals (strings or numbers)  
-        if isinstance(symbol_or_value, (int, float)):  
+        place_str = "ERROR_UNKNOWN_PLACE"  # Default error value  
+  
+        # Handle temporary variables (already strings like '_t1')  
+        if isinstance(symbol_or_value, str) and symbol_or_value.startswith("_t"):  
+            place_str = symbol_or_value  
+  
+        # Handle literals (numbers, potentially strings if supported later)  
+        elif isinstance(symbol_or_value, (int, float)):  
             place_str = str(symbol_or_value)  
-            self.logger.debug(f" -> Literal Number Place: {place_str}")  
-        elif isinstance(symbol_or_value, str):  
-            if symbol_or_value.startswith("_t"):  
-                # It's a temporary variable, return as is  
-                place_str = symbol_or_value  
-                self.logger.debug(f" -> Temporary Place: {place_str}")  
-            else:  
-                # It's likely a string literal or potentially an error/lexeme  
-                # Assuming string literals aren't directly handled yet, treat as identifier/error?  
-                # For now, let's assume it could be an undeclared identifier's lexeme  
-                place_str = symbol_or_value  # Keep original string if not temp  
-                self.logger.debug(f" -> String/Lexeme Place: {place_str}")  
   
-        # Handle symbols from symbol table  
+        # Handle Symbols from symbol table  
         elif isinstance(symbol_or_value, Symbol):  
             symbol = symbol_or_value  
-            self.logger.debug(f" -> Symbol Place for '{symbol.name}' (Type: {symbol.entry_type.name}, Depth: {symbol.depth}, Offset: {symbol.offset})")  
   
             # Handle constants - use their value directly  
             if symbol.entry_type == EntryType.CONSTANT and symbol.const_value is not None:  
                 place_str = str(symbol.const_value)  
-                self.logger.debug(f"  -> Constant Value Place: {place_str}")  
-            # Global variables (assuming depth 0 or 1 based on your convention) use names  
-            # Adjust depth check based on your specific convention (0 or 1 for globals)  
-            elif symbol.depth <= 1:  # Assuming depth 0/1 are global/outermost procedure vars  
-                place_str = symbol.name  
-                self.logger.debug(f"  -> Global/Outer Variable Place: {place_str}")  
-            # Depth > 1 variables and parameters use BP-relative addressing  
-            elif symbol.offset is not None:  
+                self.logger.debug(f"Place for CONSTANT '{symbol.name}' is value: {place_str}")  
+  
+            # Depth 0 (Global) variables/procedures might use their actual names (implementation dependent)  
+            # Assuming globals are not directly handled by BP offsets here. Adjust if needed.  
+            # For A7, focus might be on locals/params with offsets.  
+            # If depth 0 is global, it might need a different addressing scheme (e.g., labels)  
+  
+            # Use Base Pointer (BP) relative addressing for parameters and locals (Depth > 0)  
+            elif symbol.depth > 0 and symbol.offset is not None:  
+                # Parameters typically have positive offsets from BP  
                 if symbol.entry_type == EntryType.PARAMETER:  
                     place_str = f"_BP+{symbol.offset}"  
-                    self.logger.debug(f"  -> Parameter Place (BP Relative): {place_str}")  
-                else:  # Local variable  
+                # Local variables typically have negative offsets from BP  
+                elif symbol.entry_type == EntryType.VARIABLE:  
+                    # Ensure offset is negative for locals, take absolute for clarity in TAC  
                     place_str = f"_BP-{abs(symbol.offset)}"  
-                    self.logger.debug(f"  -> Local Variable Place (BP Relative): {place_str}")  
+                else:  
+                    # Other symbol types might not have standard BP offsets (e.g., TYPE)  
+                    self.logger.warning(f"Symbol '{symbol.name}' (Type: {symbol.entry_type}) has offset but is not PARAMETER or VARIABLE. Using name as place.")  
+                    place_str = symbol.name  # Fallback to name  
+  
+                self.logger.debug(f"Place for Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) is offset: {place_str}")  
+  
+            # Fallback for symbols without offsets or unhandled cases  
             else:  
-                # Shouldn't get here if symbol table is properly populated  
-                self.logger.error(f"Symbol '{symbol.name}' has no offset defined, cannot determine place.")  
-                place_str = f"ERROR_NO_OFFSET_{symbol.name}"  
+                if symbol.offset is None:  
+                    self.logger.error(f"Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}) has no offset defined. Using name as place.")  
+                else:  
+                    self.logger.warning(f"Unhandled case for Symbol '{symbol.name}' (Depth {symbol.depth}, Type {symbol.entry_type}). Using name as place.")  
+                place_str = symbol.name  # Fallback to the symbol's name  
   
-        # Default case for unknown types  
+        # Handle other unexpected types  
         else:  
-            self.logger.warning(f"Unknown type encountered in getPlace: {type(symbol_or_value)}. Using string representation.")  
-            place_str = str(symbol_or_value)  
+            self.logger.warning(f"Unknown type encountered in getPlace: {type(symbol_or_value)}. Converting to string: '{str(symbol_or_value)}'")  
+            place_str = str(symbol_or_value)  # Fallback: string representation  
   
+        self.logger.debug(f"Calculated place: '{place_str}'")  
         return place_str  
       
     def emitBinaryOp(self, op: str, dest_place: str, left_place: str, right_place: str):  
@@ -188,11 +193,11 @@ class TACGenerator:
             proc_name: The name of the procedure  
         """  
         instruction = f"proc {proc_name}"  
-        self.logger.info(f"Emitting Procedure Start: {instruction}")  # Info level for procedure boundaries  
+        self.logger.info(f"Emitting Procedure Start: {instruction}")  
         self.emit(instruction)  
-        # Reset temporary counter for this procedure  
+        # Reset temporary counter for this procedure's scope  
         self.temp_counter = 0  
-        self.logger.debug("Reset temporary counter for new procedure.")  
+        self.logger.debug(f"Temporary counter reset for procedure '{proc_name}'")  
       
     def emitProcEnd(self, proc_name: str):  
         """  
@@ -202,7 +207,7 @@ class TACGenerator:
             proc_name: The name of the procedure  
         """  
         instruction = f"endp {proc_name}"  
-        self.logger.info(f"Emitting Procedure End: {instruction}")  # Info level  
+        self.logger.info(f"Emitting Procedure End: {instruction}")  
         self.emit(instruction)  
       
     def emitPush(self, place: str, mode: ParameterMode):  
@@ -210,21 +215,17 @@ class TACGenerator:
         Emit a push instruction for procedure calls.  
           
         Args:  
-            place: The place to push  
+            place: The place to push (value or address source)  
             mode: The parameter mode (IN, OUT, INOUT)  
         """  
-        push_operand = ""  
-        log_detail = ""  
         # For OUT or INOUT parameters, push the address (pass by reference)  
         if mode in (ParameterMode.OUT, ParameterMode.INOUT):  
-            push_operand = f"@{place}"  # Assuming '@' denotes address-of  
-            log_detail = f"(Pass by Reference for {mode.name})"  
-        else:  # IN parameters  
-            push_operand = place  
-            log_detail = f"(Pass by Value for {mode.name})"  
-  
-        instruction = f"push {push_operand}"  
-        self.logger.debug(f"Emitting Push: {instruction} {log_detail}")  
+            instruction = f"push @{place}"  # Indicate address push  
+            self.logger.debug(f"Emitting Push Address ({mode.name}): {instruction}")  
+        else:  
+            # For IN parameters, push the value (pass by value)  
+            instruction = f"push {place}"  
+            self.logger.debug(f"Emitting Push Value ({mode.name}): {instruction}")  
         self.emit(instruction)  
       
     def emitCall(self, proc_name: str):  
@@ -240,12 +241,12 @@ class TACGenerator:
       
     def emitProgramStart(self, main_proc_name: str):  
         """  
-        Store the outermost procedure name for the start directive.  
+        Record the outermost procedure name for the final 'start' directive.  
           
         Args:  
             main_proc_name: The name of the main procedure  
         """  
-        self.logger.info(f"Setting program start procedure: {main_proc_name}")  
+        self.logger.info(f"Recording program start procedure: '{main_proc_name}'")  
         self.start_proc_name = main_proc_name  
       
     def writeOutput(self) -> bool:  
@@ -255,67 +256,71 @@ class TACGenerator:
         Returns:  
             True if successful, False otherwise  
         """  
-        self.logger.info(f"Attempting to write {len(self.tac_lines)} TAC lines to {self.output_filename}")  
-        # Check if start procedure was set before writing  
-        if self.start_proc_name is None:  
-            self.logger.error("Cannot write TAC output: Start procedure name was never set.")  
-            # Optionally raise an error to signal failure more strongly  
-            raise RuntimeError("Start procedure name not set before writing TAC output.")  
-            # return False # Or just return false if raising is too harsh  
-  
+        self.logger.info(f"Attempting to write {len(self.tac_lines)} TAC instructions to '{self.output_filename}'...")  
         try:  
+            # Ensure the output directory exists  
             output_path = Path(self.output_filename)  
-            # Ensure the directory exists  
             output_path.parent.mkdir(parents=True, exist_ok=True)  
-            self.logger.debug(f"Writing TAC to: {output_path.resolve()}")  
   
-            with open(output_path, 'w') as f:  
-                self.logger.debug("Writing main TAC instructions...")  
-                for i, line in enumerate(self.tac_lines):  
+            with open(output_path, 'w', encoding='utf-8') as f:  
+                # Write all collected TAC instructions  
+                for line in self.tac_lines:  
                     f.write(f"{line}\n")  
-                    self.logger.debug(f" -> Wrote line {i+1}: {line}")  
   
-                # Write START directive as the last line  
-                start_instruction = f"start {self.start_proc_name}"  
-                self.logger.debug(f"Writing start directive: {start_instruction}")  
-                f.write(f"{start_instruction}\n")  
+                # Write START directive as the last line, if recorded  
+                if self.start_proc_name:  
+                    start_instruction = f"start {self.start_proc_name}"  
+                    f.write(f"{start_instruction}\n")  
+                    self.logger.debug(f"Wrote Start Directive: {start_instruction}")  
+                else:  
+                    # This should ideally be caught earlier by the driver or parser logic  
+                    self.logger.error("No start procedure name was recorded. TAC output may be incomplete.")  
+                    # Optionally raise an error or return False here? For now, just log error.  
   
-            self.logger.info(f"TAC output successfully written to {self.output_filename}")  
+            self.logger.info(f"TAC output successfully written to '{self.output_filename}'")  
             return True  
-        except IOError as e:  # Catch specific file errors  
-            self.logger.error(f"Error writing TAC output file '{self.output_filename}': {e}")  
+        except IOError as e:  # Catch specific IO errors  
+            self.logger.error(f"IOError writing TAC output to '{self.output_filename}': {e}")  
             return False  
         except Exception as e:  # Catch any other unexpected errors  
-            self.logger.error(f"An unexpected error occurred during TAC writing: {e}")  
-            import traceback  
-            self.logger.debug(f"Traceback:\n{traceback.format_exc()}")  # Add traceback on debug  
+            self.logger.error(f"Unexpected error writing TAC output to '{self.output_filename}': {e}")  
+            # Optionally log traceback for unexpected errors  
+            # import traceback  
+            # self.logger.error(traceback.format_exc())  
             return False  
       
     def map_ada_op_to_tac(self, ada_op: str) -> str:  
         """  
-        Map Ada operators to TAC operators.  
+        Map Ada operators (lexemes) to TAC operator strings.  
           
         Args:  
-            ada_op: The Ada operator  
+            ada_op: The Ada operator lexeme (e.g., '+', 'mod', 'and')  
               
         Returns:  
-            The corresponding TAC operator  
+            The corresponding TAC operator string (e.g., 'ADD', 'MOD', 'AND').  
+            Returns the original operator if no mapping is found.  
         """  
+        ada_op_lower = ada_op.lower()  # Ensure case-insensitivity for keywords  
         mapping = {  
             '+': 'ADD',  
             '-': 'SUB',  
             '*': 'MUL',  
-            '/': 'DIV',  # Use DIV for float division? Or separate IDIV? Assuming general DIV for now.  
-            # 'div': 'IDIV', # Integer division if needed  
+            '/': 'DIV',    # Floating point or integer division? Assumed context-dependent for now.  
+            'div': 'IDIV', # Explicit integer division if lexer distinguishes  
             'mod': 'MOD',  
             'rem': 'REM',  
             'and': 'AND',  
             'or': 'OR',  
             'not': 'NOT',  
-            # Add relational ops if needed by parser later  
-            # '=': 'EQ', '/=': 'NE', '<': 'LT', '<=': 'LE', '>': 'GT', '>=': 'GE'  
+            # Relational operators might map differently (e.g., to conditional jumps)  
+            # For direct boolean result TAC:  
+            '=': 'EQ',  
+            '/=': 'NE',  
+            '<': 'LT',  
+            '<=': 'LE',  
+            '>': 'GT',  
+            '>=': 'GE'  
         }  
-        original_op = ada_op  # Keep original for logging  
-        tac_op = mapping.get(original_op.lower(), original_op)  # Map lowercase, default to original if no map  
-        self.logger.debug(f"Mapped Ada operator '{original_op}' to TAC operator '{tac_op}'")  
+        tac_op = mapping.get(ada_op_lower, ada_op)  # Default to original if no map  
+        self.logger.debug(f"Mapped Ada op '{ada_op}' to TAC op '{tac_op}'")  
         return tac_op
