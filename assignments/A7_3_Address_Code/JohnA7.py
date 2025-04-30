@@ -149,7 +149,7 @@ def main():
     logger = Logger(log_level_console=log_level)
 
     # Instantiate and run the driver
-    driver = JohnA7Driver(
+    driver = JohnA7(
         input_file_name=args.input_file,
         tac_output_filename=args.output, # Pass the specific TAC output filename if provided
         debug=args.debug,
