@@ -338,38 +338,34 @@ class BaseDriver:
             self.logger.error("Cannot create parser: No tokens available.")
             return None
 
-        # Choose parser based on flags (use_tac_parser takes precedence)
+        # Determine which parser to create based on driver flags
         if self.use_tac_parser:
             self.logger.info("Creating RDParserExtExt (A7 TAC Parser) for syntax analysis.")
-            # RDParserExtExt requires symbol_table and tac_generator
-            if self.symbol_table is None:
-                 self.logger.error("Cannot create RDParserExtExt: SymbolTable not initialized in driver.")
-                 # Add specific error for tracking
-                 self.syntax_errors.append({"message": "Driver Configuration Error: SymbolTable required for TAC Parser but not initialized.", "line": -1, "column": -1})
-                 return None
-            # Check if TAC generator was also enabled - if not, enable it but log error
-            if not self.use_tac_generator:
-                 self.logger.error("Configuration Error: use_tac_parser=True requires use_tac_generator=True.")
-                 # Add specific error for tracking
-                 self.syntax_errors.append({"message": "Driver Configuration Error: use_tac_parser=True requires use_tac_generator=True.", "line": -1, "column": -1})
-                 # Optionally force stop? For now, proceed as if user intended TAC.
-                 # It will likely fail below if tac_generator is None anyway.
+            # Create RDParserExtExt, passing symbol table and TAC generator
+            # Ensure arguments match RDParserExtExt.__init__ positional order first, then keywords
+            if not self.symbol_table:
+                self.logger.warning("_create_parser: Symbol table not initialized for RDParserExtExt. Creating a new one.")
+                self.symbol_table = SymbolTable()
+            if not self.tac_generator:
+                # This case should be prevented by logic in BaseDriver.__init__
+                self.logger.error("_create_parser: TAC Generator not initialized but use_tac_parser is True. This indicates a setup error.")
+                self.syntax_errors.append({"message": "Internal configuration error: TAC Generator not ready.", "line": 0, "column": 0})
+                return None # Cannot proceed
 
-            if self.tac_generator is None:
-                 self.logger.error("Cannot create RDParserExtExt: TACGenerator not initialized in driver (ensure use_tac_generator=True).")
-                 # Add specific error for tracking
-                 self.syntax_errors.append({"message": "Driver Configuration Error: TACGenerator required for TAC Parser but not initialized.", "line": -1, "column": -1})
-                 return None
-
-            return RDParserExtExt(
+            self.parser = RDParserExtExt(
                 tokens=self.tokens,
                 defs=self.lexical_analyzer.defs,
-                symbol_table=self.symbol_table,        # Pass instance from driver
-                tac_generator=self.tac_generator,    # Pass instance from driver
-                stop_on_error=stop_on_error,
-                panic_mode_recover=panic_mode_recover,
-                build_parse_tree=build_parse_tree
+                symbol_table=self.symbol_table,   # Pass the driver's symbol table (positional)
+                tac_generator=self.tac_generator, # Pass the driver's tac generator (positional)
+                stop_on_error=stop_on_error,      # Keyword
+                panic_mode_recover=panic_mode_recover, # Keyword
+                build_parse_tree=build_parse_tree  # Keyword
             )
+            self.logger.info(f"RDParserExtExt Initialized. Mode: build_parse_tree={build_parse_tree}, tac_gen=True")
+            self.logger.debug(f" Symbol Table received: {bool(self.symbol_table)}")
+            self.logger.debug(f" TAC Generator received: {bool(self.tac_generator)}")
+            return self.parser # ADDED: Return the created parser
+
         elif self.use_extended_parser:
             self.logger.info("Creating RDParserExtended (A6 Parser) for syntax analysis.")
             # RDParserExtended requires symbol_table
@@ -447,42 +443,38 @@ class BaseDriver:
 
     def run_tac_write(self) -> bool:
         """
-        Run the TAC writing phase.
-        This assumes the parser has already driven the TACGenerator to emit instructions.
-        Returns True if writing succeeded without errors, False otherwise.
+        Write the collected Three Address Code (TAC) to the specified output file.
+
+        Returns:
+            True if TAC generation was enabled and writing succeeded (or if TAC was disabled),
+            False if TAC generation was enabled but writing failed.
         """
-        if not self.use_tac_generator or self.tac_generator is None:
-            self.logger.info("TAC generation was not enabled, skipping TAC write phase.")
-            return True # Not an error if TAC wasn't requested
-
-        if not self.ran_syntax:
-            self.logger.error("Cannot write TAC output: Syntax analysis phase did not run or failed.")
-            # Optionally add an error to tac_errors or rely on syntax_errors
-            return False
-
-        if self.syntax_errors:
-             self.logger.warning(f"Skipping TAC write due to {len(self.syntax_errors)} syntax errors.")
-             return False
-
         self.logger.info(f"Starting TAC write phase to {self.tac_output_filename}.")
-        self.ran_tac_write = True # Mark phase as attempted
-        try:
-            # The parser should have called emitProgramStart during parsing.
-            # We just need to call writeOutput here.
-            self.tac_generator.writeOutput()
+        self.ran_tac_write = True # Mark as run
+
+        if not self.use_tac_generator or not self.tac_generator:
+            self.logger.info("TAC generation was not enabled. Skipping TAC write.")
+            return True # Considered successful as nothing needed to be done
+
+        # --- ADDED DEBUG LOG --- 
+        self.logger.debug(f"Before calling writeOutput, tac_lines length = {len(self.tac_generator.tac_lines)}, start_proc_name = '{self.tac_generator.start_proc_name}'")
+
+        success = self.tac_generator.writeOutput()
+
+        if success:
             self.logger.info("TAC write phase completed successfully.")
-            return True
-        except RuntimeError as e:
-            # Likely caused by start_proc_name not being set by parser
-            self.logger.error(f"TAC write failed: {e}")
-            self.tac_errors.append({"message": str(e), "type": "RuntimeError"})
-            return False
-        except IOError as e:
-            self.logger.error(f"TAC write failed due to file I/O error: {e}")
-            self.tac_errors.append({"message": str(e), "type": "IOError"})
-            return False
-        except Exception as e:
-            # Catch any other unexpected errors during write
-            self.logger.error(f"An unexpected error occurred during TAC write: {e}")
-            self.tac_errors.append({"message": str(e), "type": "UnexpectedError"})
-            return False 
+        else:
+            self.logger.error("TAC write phase failed.")
+            # Collect a generic error - specific error logged by TACGenerator
+            self.tac_errors.append({"message": f"Failed to write TAC to {self.tac_output_filename}"})
+        
+        return success
+
+    # --- Main Pipeline Method (example, subclasses override) ---
+    def run_pipeline(self) -> None:
+        """Base method to run the full compilation pipeline. Subclasses should override."""
+        self.run_lexical()
+        self.run_syntax()
+        self.run_semantic()
+        self.run_tac_write()
+        self.print_compilation_summary() 

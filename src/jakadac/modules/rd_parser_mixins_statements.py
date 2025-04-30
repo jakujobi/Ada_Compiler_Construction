@@ -28,7 +28,7 @@ else:
     # This helps avoid runtime circular dependency errors while aiding static analysis.
     SelfType = object
 
-class StatementsMixin(SelfType): # Hint self type for linter
+class StatementsMixin: 
     """Mixin class containing statement parsing methods for RDParserExtExt."""
 
     # --- Type hints for attributes/methods accessed from self --- 
@@ -76,7 +76,7 @@ class StatementsMixin(SelfType): # Hint self type for linter
         while self.current_token and self.current_token.token_type != self.defs.TokenType.END:
             count += 1
             self.logger.debug(f" Parsing statement #{count}")
-            stmt_node = self.parseStatement()
+            stmt_node = self.parseStatement() # type: ignore[misc]
             if self.build_parse_tree and node is not None:
                  # Ensure stmt_node is a ParseTreeNode before adding
                  if isinstance(stmt_node, ParseTreeNode):
@@ -111,7 +111,7 @@ class StatementsMixin(SelfType): # Hint self type for linter
         # Simple check: if not END or EOF, assume a statement follows
         if self.current_token and self.current_token.token_type not in {self.defs.TokenType.END, self.defs.TokenType.EOF}:
             # Parse the statement
-            child = self.parseStatement()
+            child = self.parseStatement() # type: ignore[misc]
             if self.build_parse_tree and node and isinstance(child, ParseTreeNode):
                 self._add_child(node, child)
             
@@ -149,11 +149,11 @@ class StatementsMixin(SelfType): # Hint self type for linter
             if token_type == self.defs.TokenType.ID:
                 # Could be AssignStat (assignment or procedure call)
                 self.logger.debug(f" Statement starts with ID ('{self.current_token.lexeme}'), parsing as AssignStat/ProcCall")
-                child_node = self.parseAssignStat()
+                child_node = self.parseAssignStat() # type: ignore[misc]
             elif token_type == self.defs.TokenType.GET or token_type == self.defs.TokenType.PUT:
                 # IOStat
                 self.logger.debug(f" Statement starts with '{self.current_token.lexeme}', parsing as IOStat")
-                child_node = self.parseIOStat()
+                child_node = self.parseIOStat() # type: ignore[misc]
             elif token_type == self.defs.TokenType.NULL:
                 # Explicit NULL statement
                 self.logger.debug(" Statement is NULL")
@@ -181,128 +181,117 @@ class StatementsMixin(SelfType): # Hint self type for linter
         """
         AssignStat -> idt := Expr | ProcCall
         Handles tree building (simplified) or TAC generation.
-        Distinguishes assignment from procedure call by looking ahead for '('.
+        Distinguishes assignment from procedure call by looking ahead for '(', ';', or ':='.
         Returns a ParseTreeNode ('AssignStat' or 'ProcCall') if building tree, else None.
         """
         self.logger.debug("Entering parseAssignStat")
         node: Optional[ParseTreeNode] = None
         result_node: Optional[ParseTreeNode] = None # What the function finally returns
 
-        # Peek ahead to decide the path without consuming ID yet
         if not self.current_token or self.current_token.token_type != self.defs.TokenType.ID:
             self.report_error(f"Expected identifier at start of assignment/procedure call, found {self.current_token}")
             self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
             return None
 
         id_token = self.current_token
-        # Check if there's a next token and if it's LPAREN
-        next_token_index = self.current_index + 1
-        next_token = self.tokens[next_token_index] if next_token_index < len(self.tokens) else None
-        is_proc_call = next_token and next_token.token_type == self.defs.TokenType.LPAREN
-
-        if self.build_parse_tree:
-            # --- Tree Building --- 
-            if is_proc_call:
-                self.logger.info(f" Building parse tree for Procedure Call: {id_token.lexeme}")
-                result_node = self.parseProcCall() # parseProcCall should handle tree building
-            else:
-                self.logger.info(f" Building parse tree for Assignment: {id_token.lexeme}")
-                node = ParseTreeNode("AssignStat")
-                self.match_leaf(self.defs.TokenType.ID, node) # Consumes ID
-                # Optional Semantic check for tree mode
-                if self.symbol_table:
-                    try: 
-                         # Make sure symbol_table is not None before lookup
-                         if self.symbol_table:
-                              self.symbol_table.lookup(id_token.lexeme)
-                    except SymbolNotFoundError:
-                        msg = f"Undeclared variable '{id_token.lexeme}' used in assignment"
-                        self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
-                
-                self.match_leaf(self.defs.TokenType.ASSIGN, node) # Consumes :=
-                expr_node = self.parseExpr() # Returns ParseTreeNode
-                if isinstance(expr_node, ParseTreeNode):
-                     self._add_child(node, expr_node)
-                result_node = node
-            # --- End Tree Building ---
-
-        elif self.tac_gen:
-            # --- TAC Generation --- 
-            if is_proc_call:
-                self.logger.info(f" Parsing as Procedure Call (TAC): {id_token.lexeme}")
-                _ = self.parseProcCall() # Returns None in TAC mode
-            else:
-                self.logger.info(f" Parsing as Assignment (TAC) to: {id_token.lexeme}")
-                self.advance() # Consume ID (we know it's an ID)
-                dest_place = "ERROR_PLACE"
-                if self.symbol_table:
-                    try:
-                        symbol = self.symbol_table.lookup(id_token.lexeme)
-                        if symbol.entry_type == EntryType.CONSTANT:
-                            msg = f"Cannot assign to constant '{id_token.lexeme}'"
-                            self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
-                        elif symbol.entry_type in (EntryType.PROCEDURE, EntryType.FUNCTION):
-                             msg = f"Cannot assign to procedure/function '{id_token.lexeme}'"
-                             self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
-                        else:
-                             if self.tac_gen: # Check tac_gen exists
-                                 dest_place = self.tac_gen.getPlace(symbol)
-                    except SymbolNotFoundError:
-                        msg = f"Undeclared variable '{id_token.lexeme}' used in assignment"
-                        self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
-                        dest_place = id_token.lexeme
-                else:
-                    dest_place = id_token.lexeme
-
-                # Match := 
-                if self.current_token and self.current_token.token_type == self.defs.TokenType.ASSIGN:
-                     self.advance()
-                else:
-                     self.report_error("Expected ':=' for assignment statement")
-
-                # Parse Expression
-                source_place = self.parseExpr() # Returns str
-                if isinstance(source_place, str) and dest_place != "ERROR_PLACE" and self.tac_gen:
-                    # Check if source_place is a literal (basic check, might need refinement for floats/etc.)
-                    is_literal = source_place.isdigit() or (source_place.startswith('-') and source_place[1:].isdigit())
-                    if is_literal:
-                        # Assign literal to temporary first
-                        temp_place = self.tac_gen.newTemp()
-                        self.logger.debug(f" Emitting TAC: {temp_place} = {source_place}")
-                        self.tac_gen.emitAssignment(temp_place, source_place)
-                        # Assign temporary to destination
-                        self.logger.debug(f" Emitting TAC: {dest_place} = {temp_place}")
-                        self.tac_gen.emitAssignment(dest_place, temp_place)
-                    else:
-                        # Assign non-literal (variable or temp) directly
-                        self.logger.debug(f" Emitting TAC: {dest_place} = {source_place}")
-                        self.tac_gen.emitAssignment(dest_place, source_place)
-                else:
-                     self.logger.warning(f" Could not emit assignment TAC for '{id_token.lexeme}' due to missing place(s) or generator.")
-                result_node = None # No node returned in TAC mode
-            # --- End TAC Generation ---
-        else:
-            # --- Non-Tree, Non-TAC --- 
-            # Consume based on lookahead
-            if is_proc_call:
-                 self.logger.debug(f"Parsing ProcCall (non-tree): {id_token.lexeme}")
-                 _ = self.parseProcCall() # Consumes tokens
-            else:
-                 self.logger.debug(f"Parsing AssignStat (non-tree): {id_token.lexeme}")
-                 self.match(self.defs.TokenType.ID)
-                 if self.symbol_table: # Optional semantic check
-                     try: 
-                          # Make sure symbol_table is not None
-                          if self.symbol_table:
-                               self.symbol_table.lookup(id_token.lexeme)
-                     except SymbolNotFoundError:
-                         msg = f"Undeclared variable '{id_token.lexeme}' used in assignment"
-                         self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
-                 self.match(self.defs.TokenType.ASSIGN)
-                 _ = self.parseExpr() # Consumes expression tokens
-            result_node = None
-            # --- End Non-Tree, Non-TAC ---
         
+        # Peek ahead to decide the path without consuming ID yet
+        next_token_index = self.current_index + 1
+        token_after_id = self.tokens[next_token_index] if next_token_index < len(self.tokens) else None
+
+        is_assignment = False
+        is_proc_call = False
+
+        if token_after_id:
+            if token_after_id.token_type == self.defs.TokenType.ASSIGN:
+                 is_assignment = True
+                 self.logger.debug(f" Lookahead indicates assignment for '{id_token.lexeme}' (found ':=')")
+            elif token_after_id.token_type == self.defs.TokenType.LPAREN or token_after_id.token_type == self.defs.TokenType.SEMICOLON:
+                 is_proc_call = True
+                 self.logger.debug(f" Lookahead indicates procedure call for '{id_token.lexeme}' (found '{token_after_id.lexeme}')")
+            # Else: Could be an error (e.g., ID followed by END), handled below
+        else:
+            # If ID is the last token, it's likely an error, but treat as non-assignment/non-call for now
+            self.logger.warning(f" Identifier '{id_token.lexeme}' is last token, cannot be assignment or standard call.")
+
+        # --- Dispatch based on lookahead --- 
+        if is_assignment:
+            # --- Handle Assignment --- 
+            self.logger.info(f" Parsing as Assignment to: {id_token.lexeme}")
+            self.advance() # Consume ID
+            # Semantic check (can we assign to this?) - Check before consuming ':=
+            target_symbol: Optional[Symbol] = None
+            if self.symbol_table:
+                try:
+                    target_symbol = self.symbol_table.lookup(id_token.lexeme)
+                    if target_symbol.entry_type == EntryType.CONSTANT:
+                         msg = f"Cannot assign to constant '{id_token.lexeme}'"
+                         self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
+                         target_symbol = None # Prevent TAC emission
+                    elif target_symbol.entry_type in (EntryType.PROCEDURE, EntryType.FUNCTION):
+                         msg = f"Cannot assign to procedure/function '{id_token.lexeme}'"
+                         self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
+                         target_symbol = None # Prevent TAC emission
+                except SymbolNotFoundError:
+                    msg = f"Undeclared variable '{id_token.lexeme}' used in assignment"
+                    self.report_semantic_error(msg, getattr(id_token,'line_number',-1), getattr(id_token,'column_number',-1))
+                    target_symbol = None # Prevent TAC emission
+            
+            # Match ':=
+            self.match(self.defs.TokenType.ASSIGN) # Use match/match_leaf based on mode? Assume match.
+            
+            # Parse Expression (returns Node or Place)
+            expr_result = self.parseExpr() # type: ignore[misc]
+            
+            # Build Tree or Emit TAC
+            if self.build_parse_tree:
+                node = ParseTreeNode("AssignStat")
+                self._add_child(node, ParseTreeNode(f"ID: {id_token.lexeme}", token=id_token))
+                self._add_child(node, ParseTreeNode(":="))
+                if isinstance(expr_result, ParseTreeNode):
+                     self._add_child(node, expr_result)
+                result_node = node
+            elif self.tac_gen and target_symbol and isinstance(expr_result, str):
+                 dest_place = self.tac_gen.getPlace(target_symbol)
+                 source_place = expr_result
+                 # Handle literal assignment via temporary
+                 is_literal = source_place.isdigit() or (source_place.startswith('-') and source_place[1:].isdigit())
+                 if is_literal:
+                     temp_place = self.tac_gen.newTemp()
+                     self.logger.debug(f" Emitting TAC: {temp_place} = {source_place}")
+                     self.tac_gen.emitAssignment(temp_place, source_place)
+                     self.logger.debug(f" Emitting TAC: {dest_place} = {temp_place}")
+                     self.tac_gen.emitAssignment(dest_place, temp_place)
+                 else:
+                     self.logger.debug(f" Emitting TAC: {dest_place} = {source_place}")
+                     self.tac_gen.emitAssignment(dest_place, source_place)
+                 result_node = None # No node in TAC mode
+            else:
+                 # Log warning if TAC couldn't be generated
+                 if self.tac_gen:
+                      self.logger.warning(f" Could not emit assignment TAC for '{id_token.lexeme}' (target_symbol={target_symbol}, expr_result type={type(expr_result)}). ")
+                 result_node = None
+            # --- End Handle Assignment --- 
+        
+        elif is_proc_call:
+            # --- Handle Procedure Call --- 
+            self.logger.info(f" Parsing as Procedure Call: {id_token.lexeme}")
+            # DO NOT consume ID here, let parseProcCall do it.
+            result_node = self.parseProcCall() # type: ignore[misc]
+            # --- End Handle Procedure Call ---
+        
+        else:
+            # --- Handle Error --- 
+            # Expected :=, (, or ; after ID but found something else or EOF
+            expected = "':=', '(', or ';'" 
+            found = f"'{token_after_id.lexeme}'" if token_after_id else "end of input"
+            self.report_error(f"Expected {expected} after identifier '{id_token.lexeme}', found {found}")
+            # Consume the ID and attempt recovery
+            self.advance()
+            self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
+            result_node = None
+            # --- End Handle Error ---
+
         self.logger.debug("Exiting parseAssignStat")
         return result_node
 
@@ -474,166 +463,135 @@ class StatementsMixin(SelfType): # Hint self type for linter
 
     def parseProcCall(self) -> Optional[ParseTreeNode]:
         """
-        ProcCall -> idt ( Params )
-        Implementation of procedure call parsing with TAC generation or Parse Tree building.
+        ProcCall -> idt [ ( Params ) ]
+        Handles procedure calls, including zero-argument calls (e.g., `proc;`)
+        and calls with parameters (e.g., `proc(a, b);`).
+        Handles tree building or TAC generation.
         """
         self.logger.debug("Entering parseProcCall")
-        proc_name = "<unknown>"
-        result_node: Optional[ParseTreeNode] = None # Initialize result_node
+        result_node: Optional[ParseTreeNode] = None # Final node returned
         node: Optional[ParseTreeNode] = None # Node for tree building
         proc_name_token: Optional[Token] = None # Store matched ID token
+        proc_name = "<unknown>"
 
+        # 1. Match the Procedure Identifier
         if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
-             proc_name_token = self.current_token # Store the token
+             proc_name_token = self.current_token
              proc_name = proc_name_token.lexeme
              self.logger.debug(f" Procedure call target: {proc_name}")
-
-             # --- Branch based on mode (Tree or TAC or Other) ---
+             # Match ID - Use match_leaf for tree mode, advance otherwise
              if self.build_parse_tree:
-                  # --- Parse Tree Mode --- 
-                 node = ParseTreeNode("ProcCall")
-                 # Match ID and add leaf to this node
+                 node = ParseTreeNode("ProcCall") # Create node for tree mode
                  self.match_leaf(self.defs.TokenType.ID, node)
-                 
-                 # Match LPAREN
-                 self.match_leaf(self.defs.TokenType.LPAREN, node)
-                 
-                 # Parse Params (should return ParseTreeNode)
-                 params_node = self.parseParams()
-                 if isinstance(params_node, ParseTreeNode):
-                      self._add_child(node, params_node)
-                 else: # Handle error or unexpected return from parseParams
-                      self.logger.warning("parseParams did not return a ParseTreeNode in tree mode.")
-                      self._add_child(node, ParseTreeNode("Params_Error"))
-                 
-                 # Match RPAREN
-                 self.match_leaf(self.defs.TokenType.RPAREN, node)
-                 result_node = node # Set result_node to the built tree
-                 # --- End Parse Tree Mode ---
-
-             elif self.tac_gen:
-                 # --- TAC Generation --- 
-                 self.advance() # Consume ID (already captured in proc_name_token)
-                 
-                 # Check and Consume LPAREN
-                 if not self.current_token or self.current_token.token_type != self.defs.TokenType.LPAREN:
-                      self.report_error(f"Expected '(' after procedure name '{proc_name}'")
-                      # Attempt recovery? For now, assume error stops TAC gen for this call.
-                      # We might need to consume until RPAREN or SEMICOLON here
-                      self.panic_recovery({self.defs.TokenType.RPAREN, self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
-                      return None # Return None as call is invalid
-                 self.advance() # Consume LPAREN
-                 
-                 # Look up procedure symbol
-                 proc_sym: Optional[Symbol] = None
-                 try:
-                     if not self.symbol_table:
-                          raise SymbolNotFoundError("Symbol table not available.")
-                     proc_sym = self.symbol_table.lookup(proc_name)
-                     if proc_sym.entry_type != EntryType.PROCEDURE:
-                         raise SymbolNotFoundError(f"'{proc_name}' is not a procedure.")
-                     
-                     self.logger.debug(f" Found procedure symbol: {proc_sym}")
-                     
-                     # Parse actual parameters and get their places
-                     parsed_params = self.parseParams() # Returns List[str] in TAC mode
-                     # Type check result rigorously
-                     if not isinstance(parsed_params, list):
-                          self.logger.error("parseParams did not return List[str] in TAC mode!")
-                          actual_param_places = [] # Use empty list on error
-                     else:
-                          actual_param_places: List[str] = parsed_params
-                     self.logger.debug(f" Actual parameter places: {actual_param_places}")
-                     
-                     # Check parameter count
-                     formal_param_list = proc_sym.param_list if proc_sym.param_list else []
-                     formal_param_modes = proc_sym.param_modes if proc_sym.param_modes else {}
-                     expected_params = len(formal_param_list)
-                     actual_params = len(actual_param_places)
-                     
-                     self.logger.debug(f" Parameter count check: Expected={expected_params}, Actual={actual_params}")
-                     if expected_params != actual_params:
-                         mismatch_msg = f"Parameter count mismatch for procedure '{proc_name}'. Expected {expected_params}, got {actual_params}."
-                         self.logger.error(mismatch_msg)
-                         if proc_name_token: # Check token exists
-                              self.report_semantic_error(mismatch_msg, proc_name_token.line_number, proc_name_token.column_number)
-                     # Removed the 'else:' here - push/call should happen even if count mismatches, 
-                     # allowing semantic error to be reported but attempting TAC generation.
-                     # This matches behavior for undeclared variables etc.
-                     
-                     # Prepare for TAC emission: Push parameters
-                     if self.tac_gen and proc_sym and actual_param_places:
-                         self.logger.info(f" Emitting TAC for procedure call: {proc_sym.name}")
-                         # Iterate through ACTUAL parameters parsed (actual_param_places) 
-                         # and corresponding FORMAL parameter symbols (formal_param_list - already checked for None)
-                         if len(actual_param_places) == len(formal_param_list): # Check against known-good list
-                             for i, actual_place in enumerate(actual_param_places):
-                                 formal_param_symbol = formal_param_list[i] # Safe to index
-                                 # Use formal_param_modes (known-good dict) and corrected default
-                                 param_mode = formal_param_modes.get(formal_param_symbol.name, ParameterMode.IN) 
-                                 
-                                 # --- MODIFIED PUSH LOGIC --- 
-                                 push_operand = actual_place # Default
-                                 if self.symbol_table and isinstance(actual_place, str): # Check if actual_place is a string first
-                                      try:
-                                           source_symbol = self.symbol_table.lookup(actual_place)
-                                           if source_symbol.depth == 1: 
-                                                push_operand = source_symbol.name
-                                                self.logger.debug(f" Push operand is outermost variable: {push_operand}")
-                                      except SymbolNotFoundError:
-                                           pass # It's a literal or temporary
-                                      # Removed AttributeError handler as we checked isinstance(actual_place, str)
-                                          
-                                 # Emit push/param instruction
-                                 self.logger.info(f" Emitting Param Push: {push_operand} (mode: {param_mode})")
-                                 # Use 'push' instead of 'param' based on exp_test75.tac
-                                 self.tac_gen.emitPush(push_operand, param_mode) 
-                                 # --- END MODIFIED PUSH LOGIC ---
-                         else:
-                             # Log internal error if lengths still mismatch despite earlier check (shouldn't happen)
-                             self.logger.error("Internal error: Mismatch between actual and formal param count during TAC push.")
-
-                         # Emit call instruction - Corrected signature
-                         self.tac_gen.emitCall(proc_sym.name)
-                         # --- End TAC Generation ---
-                         
-                 except SymbolNotFoundError as e:
-                     self.logger.error(f"Procedure call error: {e}")
-                     if proc_name_token: # Check token exists for error reporting context
-                          self.report_semantic_error(str(e), proc_name_token.line_number, proc_name_token.column_number)
-                     # Consume remaining params even if proc not found
-                     _ = self.parseParams()
-                 except AttributeError as ae:
-                      # Catch errors accessing tac_gen or symbol_table if None
-                      self.logger.error(f"Attribute error during TAC generation for proc call: {ae}")
-                      _ = self.parseParams() # Consume params
-
-                 # Consume RPAREN
-                 if self.current_token and self.current_token.token_type == self.defs.TokenType.RPAREN:
-                      self.advance()
-                 else:
-                      self.report_error(f"Expected ')' after parameters for procedure call '{proc_name}'")
-                 result_node = None # No node in TAC mode
-                 # --- End TAC Generation ---
-
              else:
-                 # --- Non-Tree, Non-TAC Mode --- 
-                 self.logger.warning("parseProcCall invoked without TAC or Tree mode. Consuming tokens.")
-                 self.advance() # Consume ID
-                 self.match(self.defs.TokenType.LPAREN)
-                 # Consume tokens until RPAREN
-                 while self.current_token and self.current_token.token_type not in {self.defs.TokenType.RPAREN, self.defs.TokenType.EOF, self.defs.TokenType.SEMICOLON}:
-                      self.logger.debug(f" Consuming token inside (): {self.current_token.lexeme}")
-                      self.advance()
-                 self.match(self.defs.TokenType.RPAREN)
-                 result_node = None
-                 # --- End Non-Tree, Non-TAC Mode ---
+                 self.advance() # Just consume in non-tree modes
         else:
-            # This case should be caught by parseStatement or parseAssignStat before calling parseProcCall
-            # If called directly, handle error.
             self.report_error(f"Expected procedure identifier, found {self.current_token}")
             self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
-            result_node = None
+            return None # Cannot proceed without identifier
             
+        # --- Semantic Check: Lookup Procedure --- 
+        proc_sym: Optional[Symbol] = None
+        try:
+            if not self.symbol_table:
+                 raise SymbolNotFoundError("Symbol table not available.")
+            proc_sym = self.symbol_table.lookup(proc_name)
+            if proc_sym.entry_type != EntryType.PROCEDURE:
+                raise SymbolNotFoundError(f"'{proc_name}' is not a procedure.")
+            self.logger.debug(f" Found procedure symbol: {proc_sym}")
+        except SymbolNotFoundError as e:
+            self.logger.error(f"Procedure call error: {e}")
+            if proc_name_token: # Report error context if token available
+                 self.report_semantic_error(str(e), proc_name_token.line_number, proc_name_token.column_number)
+            # Even if proc not found, try to parse potential params to maintain syntax
+            proc_sym = None 
+        # --- End Semantic Check ---
+            
+        # 2. Handle Optional Parentheses and Parameters
+        has_parentheses = False
+        parsed_params: Union[List[str], ParseTreeNode, List] = [] # Type depends on mode
+        
+        if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+            has_parentheses = True
+            self.logger.debug(" Found '(', parsing parameters.")
+            # Match LPAREN
+            self.match_leaf(self.defs.TokenType.LPAREN, node) # match_leaf safe if node=None
+            
+            # Parse Parameters
+            parsed_params = self.parseParams() # type: ignore[misc]
+                
+            # Match RPAREN
+            self.match_leaf(self.defs.TokenType.RPAREN, node)
+            
+            # Add Params node to tree if building
+            if self.build_parse_tree and node and isinstance(parsed_params, ParseTreeNode):
+                 self._add_child(node, parsed_params)
+
+        else:
+            # No parentheses found - implies zero-argument call (like `one;`)
+            self.logger.debug(" No '(' found, assuming zero-argument call.")
+            # parsed_params remains empty list
+
+        # --- Semantic Check: Parameter Count/Types --- 
+        formal_param_list = []
+        formal_param_modes = {}
+        if proc_sym: # Only check if procedure was found
+             formal_param_list = proc_sym.param_list if proc_sym.param_list else []
+             formal_param_modes = proc_sym.param_modes if proc_sym.param_modes else {}
+        
+        expected_params = len(formal_param_list)
+        actual_params_count = 0
+        actual_param_places: List[str] = [] # Specifically for TAC
+
+        if self.tac_gen and isinstance(parsed_params, list):
+            actual_param_places = parsed_params # List[str] from parseParams (TAC mode)
+            actual_params_count = len(actual_param_places)
+        elif self.build_parse_tree and isinstance(parsed_params, ParseTreeNode):
+            # Estimate count for tree mode if needed (less critical)
+            actual_params_count = len(parsed_params.children) # Approximation
+        # Else: Non-tree/non-TAC or error in parseParams, count remains 0
+        
+        self.logger.debug(f" Parameter count check: Expected={expected_params}, Actual={actual_params_count}")
+        if proc_sym and expected_params != actual_params_count:
+             mismatch_msg = f"Parameter count mismatch for procedure '{proc_name}'. Expected {expected_params}, got {actual_params_count}."
+             self.logger.error(mismatch_msg)
+             if proc_name_token: # Check token exists for context
+                  self.report_semantic_error(mismatch_msg, proc_name_token.line_number, proc_name_token.column_number)
+        # TODO: Add type checking logic here if required, comparing actual_param_places/nodes with formal_param_list types.
+
+        # --- TAC Generation --- 
+        if self.tac_gen and proc_sym: # Only emit if procedure known
+             try:
+                 # Push parameters (if any)
+                 if actual_params_count > 0 and len(actual_param_places) == len(formal_param_list): # Ensure lists align
+                      self.logger.info(f" Emitting Param Pushes for {proc_sym.name}")
+                      for i, actual_place in enumerate(actual_param_places):
+                          formal_param_symbol = formal_param_list[i] # Safe index
+                          param_mode = formal_param_modes.get(formal_param_symbol.name, ParameterMode.IN) 
+                          
+                          push_operand = actual_place # Default
+                          if self.symbol_table and isinstance(actual_place, str):
+                               try:
+                                   source_symbol = self.symbol_table.lookup(actual_place)
+                                   if source_symbol.depth == 1: # If param is global/outermost
+                                        push_operand = source_symbol.name
+                                        self.logger.debug(f" Push operand is outermost var: {push_operand}")
+                               except SymbolNotFoundError:
+                                   pass # Literal or temporary
+                                   
+                          self.logger.info(f"  Pushing: {push_operand} (Mode: {param_mode})")
+                          self.tac_gen.emitPush(push_operand, param_mode)
+                 elif actual_params_count > 0: # Mismatch case, log warning
+                      self.logger.warning("Skipping param pushes due to count mismatch.")
+                 
+                 # Emit call instruction
+                 self.logger.info(f" Emitting Call: {proc_name}")
+                 self.tac_gen.emitCall(proc_name)
+                 
+             except AttributeError as ae:
+                  self.logger.error(f"Attribute error during TAC generation for proc call: {ae}")
+        # --- End TAC Generation --- 
+
         self.logger.debug("Exiting parseProcCall")
-        return result_node 
+        # Return node if tree building, otherwise None
+        return node if self.build_parse_tree else None 

@@ -296,13 +296,17 @@ class TACGenerator:
       
     def emitProgramStart(self, main_proc_name: str):  
         """  
-        Record the outermost procedure name for the final 'start' directive.  
+        Record the outermost procedure name for the final 'start' directive. # REVERTED
           
         Args:  
             main_proc_name: The name of the main procedure  
         """  
         self.logger.info(f"Recording program start procedure: '{main_proc_name}'")  
-        self.start_proc_name = main_proc_name  
+        self.start_proc_name = main_proc_name # REVERTED 
+        # --- REMOVED: Emit start instruction directly --- 
+        # start_instruction = f"start proc {main_proc_name}"
+        # self.logger.debug(f"Emit TAC: {start_instruction}")
+        # self.emit(start_instruction) 
       
     def writeOutput(self) -> bool:  
         """  
@@ -322,6 +326,8 @@ class TACGenerator:
                 for line in self.tac_lines:  
                     f.write(f"{line}\n")  
   
+                # --- REVERTED: Start directive logic back here --- 
+                self.logger.debug(f"Inside writeOutput: self.start_proc_name = '{self.start_proc_name}'") 
                 # Write START directive as the last line, if recorded  
                 if self.start_proc_name:  
                     start_instruction = f"start proc {self.start_proc_name}"  
@@ -330,7 +336,6 @@ class TACGenerator:
                 else:  
                     # This should ideally be caught earlier by the driver or parser logic  
                     self.logger.error("No start procedure name was recorded. TAC output may be incomplete.")  
-                    # Optionally raise an error or return False here? For now, just log error.  
   
             self.logger.info(f"TAC output successfully written to '{self.output_filename}'")  
             return True  
