@@ -241,6 +241,28 @@ class TACGenerator:
         self.logger.debug(f"Emitting Call: {instruction}")  
         self.emit(instruction)  
       
+    def emitRead(self, place: str):
+        """
+        Emit a read instruction (for GET).
+        
+        Args:
+            place: The destination place for the input
+        """
+        instruction = f"read {place}"
+        self.logger.debug(f"Emitting Read: {instruction}")
+        self.emit(instruction)
+        
+    def emitWrite(self, place: str):
+        """
+        Emit a write instruction (for PUT).
+        
+        Args:
+            place: The source place to output
+        """
+        instruction = f"write {place}"
+        self.logger.debug(f"Emitting Write: {instruction}")
+        self.emit(instruction)
+      
     def emitProgramStart(self, main_proc_name: str):  
         """  
         Record the outermost procedure name for the final 'start' directive.  
