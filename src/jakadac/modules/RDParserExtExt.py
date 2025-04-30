@@ -78,6 +78,7 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         self.semantic_errors = []
         self.tac_gen = tac_generator
         self.current_procedure_name: Optional[str] = None
+        self.current_procedure_symbol: Optional[Symbol] = None
         self.current_local_offset: int = 0 # Typically starts negative for locals below BP
         self.current_param_offset: int = 0 # Typically starts positive for params above BP
 
@@ -154,8 +155,9 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
                             proc_sym.param_modes = {}
                             try:
                                 self.symbol_table.insert(proc_sym)
-                            except DuplicateSymbolError:
-                                pass # Should not happen due to lookup check
+                                self.current_procedure_symbol = proc_sym
+                            except DuplicateSymbolError as dse:
+                                self.report_semantic_error(str(dse), start_id_token.line_number, start_id_token.column_number)
                         finally:
                             self.symbol_table.exit_scope() # Exit temporary scope 1
                     except DuplicateSymbolError as dse:
@@ -248,15 +250,17 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
                  self.logger.debug(" Not outermost procedure, skipping 'start' directive.")
         # --- TAC Generation End --- 
         
-        # Exit procedure scope before returning
+        # Exit scope and reset procedure context *after* matching the final semicolon
         if self.symbol_table:
-            self.logger.debug("Exiting procedure scope.")
-            self.symbol_table.exit_scope()
-        
-        # Reset procedure name context after exiting scope
-        self.logger.debug("Resetting current_procedure_name.")
+             self.logger.debug("Exiting procedure scope.")
+             self.symbol_table.exit_scope()
+             
+        # Reset parser state for the next potential procedure (if any)
         self.current_procedure_name = None
-
+        self.current_procedure_symbol = None
+        self.current_local_offset = 0
+        self.current_param_offset = 0
+        self.logger.debug("Resetting current_procedure_name.")
         self.logger.info(f"Finished parsing procedure: {procedure_name}")
         return node
     

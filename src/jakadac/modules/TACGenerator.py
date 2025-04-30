@@ -238,20 +238,28 @@ class TACGenerator:
     def emitPush(self, place: str, mode: ParameterMode):  
         """  
         Emit a push instruction for procedure calls.  
-          
+        NOTE: Simplified to always emit 'push' based on exp_test75.tac format.
+        The 'mode' argument is kept for potential future use or debugging.
+        
         Args:  
-            place: The place to push (value or address source)  
-            mode: The parameter mode (IN, OUT, INOUT)  
+            place: The place to push (value, address source, or name)  
+            mode: The parameter mode (currently ignored for instruction generation)
         """  
-        # For OUT or INOUT parameters, push the address (pass by reference)  
-        if mode in (ParameterMode.OUT, ParameterMode.INOUT):  
-            instruction = f"push @{place}"  # Indicate address push  
-            self.logger.debug(f"Emitting Push Address ({mode.name}): {instruction}")  
-        else:  
-            # For IN parameters, push the value (pass by value)  
-            instruction = f"push {place}"  
-            self.logger.debug(f"Emitting Push Value ({mode.name}): {instruction}")  
-        self.emit(instruction)  
+        # Always emit 'push' instruction, using the provided place directly
+        instruction = f"push {place}"
+        self.logger.debug(f"Emitting Push (Mode: {mode.name}): {instruction}")  
+        self.emit(instruction)
+        
+        # --- Original logic (commented out) ---
+        # # For OUT or INOUT parameters, push the address (pass by reference)  
+        # if mode in (ParameterMode.OUT, ParameterMode.INOUT):  
+        #     instruction = f"push @{place}"  # Indicate address push  
+        #     self.logger.debug(f"Emitting Push Address ({mode.name}): {instruction}")  
+        # else:  
+        #     # For IN parameters, push the value (pass by value)  
+        #     instruction = f"push {place}"  
+        #     self.logger.debug(f"Emitting Push Value ({mode.name}): {instruction}")  
+        # self.emit(instruction)  
       
     def emitCall(self, proc_name: str):  
         """  

@@ -18,11 +18,17 @@ from .TACGenerator import TACGenerator
 if TYPE_CHECKING:
     from .RDParser import RDParser
     # If methods unique to RDParserExtExt are called, import it too
-    # from .RDParserExtExt import RDParserExtExt 
+    from .RDParserExtExt import RDParserExtExt 
     # Import Expression methods if called directly (e.g., parseExpr)
     from .rd_parser_mixins_expressions import ExpressionsMixin 
+    # Hint the type of self for mixins
+    SelfType = RDParserExtExt
+else:
+    # At runtime, SelfType can be generic object if RDParserExtExt is not fully defined yet
+    # This helps avoid runtime circular dependency errors while aiding static analysis.
+    SelfType = object
 
-class StatementsMixin:
+class StatementsMixin(SelfType): # Hint self type for linter
     """Mixin class containing statement parsing methods for RDParserExtExt."""
 
     # --- Type hints for attributes/methods accessed from self --- 
@@ -551,23 +557,46 @@ class StatementsMixin:
                          self.logger.error(mismatch_msg)
                          if proc_name_token: # Check token exists
                               self.report_semantic_error(mismatch_msg, proc_name_token.line_number, proc_name_token.column_number)
-                     else:
-                         # Emit push for each parameter using mode info
-                         for i, place in enumerate(actual_param_places):
-                             if i < len(formal_param_list):
-                                 param_ref = formal_param_list[i]
-                                 param_key = param_ref.name if isinstance(param_ref, Symbol) else param_ref
-                                 param_mode = formal_param_modes.get(param_key, ParameterMode.IN)
-                                 self.logger.debug(f" Emitting TAC: push param {i+1} ('{param_key}') place '{place}' mode '{param_mode.name}'")
-                                 if self.tac_gen: self.tac_gen.emitPush(place, param_mode)
-                             else:
-                                 self.logger.error(f" Index out of bounds accessing formal parameters for '{proc_name}'.")
-                                 break
-                             
-                     # Emit call
-                     self.logger.debug(f" Emitting TAC: call {proc_name}")
-                     if self.tac_gen: self.tac_gen.emitCall(proc_name)
+                     # Removed the 'else:' here - push/call should happen even if count mismatches, 
+                     # allowing semantic error to be reported but attempting TAC generation.
+                     # This matches behavior for undeclared variables etc.
+                     
+                     # Prepare for TAC emission: Push parameters
+                     if self.tac_gen and proc_sym and actual_param_places:
+                         self.logger.info(f" Emitting TAC for procedure call: {proc_sym.name}")
+                         # Iterate through ACTUAL parameters parsed (actual_param_places) 
+                         # and corresponding FORMAL parameter symbols (formal_param_list - already checked for None)
+                         if len(actual_param_places) == len(formal_param_list): # Check against known-good list
+                             for i, actual_place in enumerate(actual_param_places):
+                                 formal_param_symbol = formal_param_list[i] # Safe to index
+                                 # Use formal_param_modes (known-good dict) and corrected default
+                                 param_mode = formal_param_modes.get(formal_param_symbol.name, ParameterMode.IN) 
+                                 
+                                 # --- MODIFIED PUSH LOGIC --- 
+                                 push_operand = actual_place # Default
+                                 if self.symbol_table and isinstance(actual_place, str): # Check if actual_place is a string first
+                                      try:
+                                           source_symbol = self.symbol_table.lookup(actual_place)
+                                           if source_symbol.depth == 1: 
+                                                push_operand = source_symbol.name
+                                                self.logger.debug(f" Push operand is outermost variable: {push_operand}")
+                                      except SymbolNotFoundError:
+                                           pass # It's a literal or temporary
+                                      # Removed AttributeError handler as we checked isinstance(actual_place, str)
+                                          
+                                 # Emit push/param instruction
+                                 self.logger.info(f" Emitting Param Push: {push_operand} (mode: {param_mode})")
+                                 # Use 'push' instead of 'param' based on exp_test75.tac
+                                 self.tac_gen.emitPush(push_operand, param_mode) 
+                                 # --- END MODIFIED PUSH LOGIC ---
+                         else:
+                             # Log internal error if lengths still mismatch despite earlier check (shouldn't happen)
+                             self.logger.error("Internal error: Mismatch between actual and formal param count during TAC push.")
 
+                         # Emit call instruction - Corrected signature
+                         self.tac_gen.emitCall(proc_sym.name)
+                         # --- End TAC Generation ---
+                         
                  except SymbolNotFoundError as e:
                      self.logger.error(f"Procedure call error: {e}")
                      if proc_name_token: # Check token exists for error reporting context
