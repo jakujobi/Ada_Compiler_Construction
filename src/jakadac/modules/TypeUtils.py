@@ -12,6 +12,7 @@ between different representations of types across the compiler components.
 """
 
 from .SymTable import VarType
+from typing import Optional
 
 class TypeUtils:
     """
@@ -19,7 +20,7 @@ class TypeUtils:
     """
     
     @staticmethod
-    def token_type_to_var_type(token_type: str) -> VarType:
+    def token_type_to_var_type(token_type: str) -> Optional[VarType]:
         """
         Convert a token type to a variable type.
         
@@ -88,17 +89,18 @@ class TypeUtils:
         else:
             return (None, None)
 
-    @staticmethod
-    def map_ada_op_to_tac(ada_op):  
-        # Map Ada operators to TAC operators  
-        op_map = {  
-            "+": "ADD",  
-            "-": "SUB",  
-            "*": "MUL",  
-            "/": "DIV",  
-            "and": "AND",  
-            "or": "OR",  
-            "mod": "MOD",  
-            "rem": "REM"  
-        }  
-        return op_map.get(ada_op, ada_op.upper())  
+    # Removed duplicate map_ada_op_to_tac staticmethod - use TACGenerator's version instead
+    # @staticmethod
+    # def map_ada_op_to_tac(ada_op):  
+    #     # Map Ada operators to TAC operators  
+    #     op_map = {  
+    #         "+": "ADD",  
+    #         "-": "SUB",  
+    #         "*": "MUL",  
+    #         "/": "DIV",  
+    #         "and": "AND",  
+    #         "or": "OR",  
+    #         "mod": "MOD",  
+    #         "rem": "REM"  
+    #     }  
+    #     return op_map.get(ada_op, ada_op.upper())  
