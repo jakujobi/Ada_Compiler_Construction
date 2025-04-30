@@ -342,9 +342,21 @@ class BaseDriver:
             # RDParserExtExt requires symbol_table and tac_generator
             if self.symbol_table is None:
                  self.logger.error("Cannot create RDParserExtExt: SymbolTable not initialized in driver.")
+                 # Add specific error for tracking
+                 self.syntax_errors.append({"message": "Driver Configuration Error: SymbolTable required for TAC Parser but not initialized.", "line": -1, "column": -1})
                  return None
+            # Check if TAC generator was also enabled - if not, enable it but log error
+            if not self.use_tac_generator:
+                 self.logger.error("Configuration Error: use_tac_parser=True requires use_tac_generator=True.")
+                 # Add specific error for tracking
+                 self.syntax_errors.append({"message": "Driver Configuration Error: use_tac_parser=True requires use_tac_generator=True.", "line": -1, "column": -1})
+                 # Optionally force stop? For now, proceed as if user intended TAC.
+                 # It will likely fail below if tac_generator is None anyway.
+
             if self.tac_generator is None:
                  self.logger.error("Cannot create RDParserExtExt: TACGenerator not initialized in driver (ensure use_tac_generator=True).")
+                 # Add specific error for tracking
+                 self.syntax_errors.append({"message": "Driver Configuration Error: TACGenerator required for TAC Parser but not initialized.", "line": -1, "column": -1})
                  return None
 
             return RDParserExtExt(
