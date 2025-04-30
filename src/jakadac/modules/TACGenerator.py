@@ -24,6 +24,8 @@ from enum import Enum, auto
 from .Logger import Logger, logger  
 from .SymTable import Symbol, EntryType, ParameterMode  
 from .TypeUtils import TypeUtils  
+
+# This one passed all the tests of test_tac_generator.py
   
 class TACGenerator:  
     """  
