@@ -11,7 +11,7 @@ This module provides utility functions and mappings for type conversion
 between different representations of types across the compiler components.
 """
 
-from .AdaSymbolTable import VarType
+from .SymTable import VarType
 
 class TypeUtils:
     """
@@ -37,7 +37,8 @@ class TypeUtils:
             "REAL": VarType.FLOAT,
             "FLOAT": VarType.FLOAT,
             "CHART": VarType.CHAR,
-            "CHAR": VarType.CHAR
+            "CHAR": VarType.CHAR,
+            "BOOLEAN": VarType.BOOLEAN
         }
         
         # Case-insensitive lookup
@@ -58,10 +59,13 @@ class TypeUtils:
             VarType.INT: 2,
             VarType.FLOAT: 4,
             VarType.REAL: 4,  # Alias for FLOAT
-            VarType.CHAR: 1
+            VarType.CHAR: 1,
+            VarType.BOOLEAN: 1
         }
         
         return sizes.get(var_type, 0)
+
+
     
     @staticmethod
     def parse_value_from_token(token_type: str, lexeme: str) -> tuple:
@@ -83,3 +87,18 @@ class TypeUtils:
             return (VarType.CHAR, lexeme.strip("'"))
         else:
             return (None, None)
+
+    @staticmethod
+    def map_ada_op_to_tac(ada_op):  
+        # Map Ada operators to TAC operators  
+        op_map = {  
+            "+": "ADD",  
+            "-": "SUB",  
+            "*": "MUL",  
+            "/": "DIV",  
+            "and": "AND",  
+            "or": "OR",  
+            "mod": "MOD",  
+            "rem": "REM"  
+        }  
+        return op_map.get(ada_op, ada_op.upper())  
