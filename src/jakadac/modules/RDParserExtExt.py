@@ -674,76 +674,175 @@ class RDParserExtended(RDParser):
     def parseDeclarativePart(self):
         """
         DeclarativePart -> IdentifierList : TypeMark ; DeclarativePart | ε
-        Also insert each declared identifier into the symbol table.
+        Also insert each declared identifier into the symbol table with offset calculation for TAC.
         """
-        self.logger.debug("Parsing DeclarativePart (Extended)")
-        # Build tree branch
+        node = None # Initialize node
         if self.build_parse_tree:
             node = ParseTreeNode("DeclarativePart")
-            # If there's a declaration
-            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
-                # Identifiers
-                id_list_node = self.parseIdentifierList()
+
+        # Check if there's a declaration (starts with ID)
+        is_declaration = self.current_token and self.current_token.token_type == self.defs.TokenType.ID
+
+        if is_declaration:
+            self.logger.debug("Parsing DeclarativePart (Declaration)")
+
+            if self.build_parse_tree and node:
+                 # Tree building mode: Use existing logic but add offset info if tac_gen active
+                id_list_node = self.parseIdentifierList() # Original parseIdentifierList builds nodes
                 assert id_list_node is not None
-                # Insert declarations
-                for id_leaf in id_list_node.find_children_by_name("ID"):
-                    if id_leaf.token:
-                        sym = Symbol(
-                            id_leaf.token.lexeme,
-                            id_leaf.token,
-                            EntryType.VARIABLE,
+                node.add_child(id_list_node) # Add child to DeclarativePart node
+
+                self.match_leaf(self.defs.TokenType.COLON, node)
+                type_mark_node = self.parseTypeMark() # Original parseTypeMark builds nodes
+                assert type_mark_node is not None
+                node.add_child(type_mark_node) # Add child
+                self.match_leaf(self.defs.TokenType.SEMICOLON, node)
+
+                # Semantic Action: Insert symbols with offsets (if tac_gen)
+                if self.symbol_table:
+                     # Determine type and const value from type_mark_node
+                     # This requires inspecting the type_mark_node's children/token
+                     # For simplicity, let's assume TypeUtils can help or re-parse info needed
+                     # Example: Infer type (this logic might need refinement based on parseTypeMark structure)
+                     var_type_node = type_mark_node.find_child_by_token_type(self.defs.TokenType.INTEGERT) # etc.
+                     var_type = None
+                     if var_type_node: var_type = VarType.INT # Simplified mapping
+
+                     for id_leaf in id_list_node.find_children_by_name("ID"): # Find ID leaves in the list node
+                         if id_leaf.token:
+                            sym = Symbol(
+                                id_leaf.token.lexeme,
+                                id_leaf.token,
+                                EntryType.VARIABLE, # Assuming variable for now, TypeMark handles CONSTANT
+                                self.symbol_table.current_depth
+                            )
+                            # --- Add Offset Calculation for TAC ---
+                            if self.tac_gen:
+                                var_size = TypeUtils.get_type_size(var_type) if var_type else 2 # Default size
+                                sym.set_variable_info(var_type, self.current_local_offset, var_size)
+                                self.current_local_offset -= var_size # Decrement for next local
+                            # --- End Offset Calculation ---
+                            try:
+                                self.symbol_table.insert(sym)
+                            except DuplicateSymbolError as e:
+                                self.report_semantic_error(
+                                    f"Duplicate symbol declaration: '{e.name}' at depth {e.depth}",
+                                    getattr(id_leaf.token, 'line_number', -1),
+                                    getattr(id_leaf.token, 'column_number', -1)
+                                )
+
+                 # Recursively parse further declarations
+                next_node = self.parseDeclarativePart()
+                if next_node and node: # Add recursive result if it's not just epsilon
+                    if not (len(next_node.children) == 1 and next_node.children[0].name == "ε"):
+                         node.add_child(next_node)
+
+            elif self.tac_gen:
+                 # TAC generation mode (not building tree)
+                 id_tokens = self._parseIdentifierListTokens()
+                 self.match(self.defs.TokenType.COLON) # Use non-leaf match
+                 var_type, const_value = self._parseTypeMarkInfo() # Get type info
+                 self.match(self.defs.TokenType.SEMICOLON)
+
+                 if self.symbol_table:
+                    entry_kind = EntryType.CONSTANT if const_value is not None else EntryType.VARIABLE
+
+                    for id_token in id_tokens:
+                         sym = Symbol(
+                            id_token.lexeme,
+                            id_token,
+                            entry_kind,
                             self.symbol_table.current_depth
-                        )
-                        try:
+                         )
+                         if entry_kind == EntryType.VARIABLE:
+                            var_size = TypeUtils.get_type_size(var_type) if var_type else 2
+                            sym.set_variable_info(var_type, self.current_local_offset, var_size)
+                            self.current_local_offset -= var_size # Decrement for next local
+                         elif entry_kind == EntryType.CONSTANT:
+                            sym.set_constant_info(var_type, const_value)
+                            # Constants don't usually take stack space/offset in same way
+                         
+                         try:
                             self.symbol_table.insert(sym)
-                        except DuplicateSymbolError as e:
-                            # report duplicate declaration but continue parsing
+                         except DuplicateSymbolError as e:
                             self.report_semantic_error(
                                 f"Duplicate symbol declaration: '{e.name}' at depth {e.depth}",
-                                getattr(id_leaf.token, 'line_number', -1),
-                                getattr(id_leaf.token, 'column_number', -1)
+                                getattr(id_token, 'line_number', -1),
+                                getattr(id_token, 'column_number', -1)
                             )
-                # Type and semicolon
-                self.match_leaf(self.defs.TokenType.COLON, node)
-                type_mark_node = self.parseTypeMark()
-                assert type_mark_node is not None
-                self.match_leaf(self.defs.TokenType.SEMICOLON, node)
-                # Recursively parse further declarations
-                next_node = self.parseDeclarativePart()
-                # Attach children
-                node.add_child(id_list_node)
-                node.add_child(type_mark_node)
-                if next_node:
-                    node.add_child(next_node)
+                 # Recursively parse
+                 self.parseDeclarativePart()
+
             else:
-                # Epsilon
+                 # Non-tree, non-TAC mode: Just parse without actions
+                 self._parseIdentifierListTokens() # Consume tokens
+                 self.match(self.defs.TokenType.COLON)
+                 self._parseTypeMarkInfo() # Consume tokens
+                 self.match(self.defs.TokenType.SEMICOLON)
+                 self.parseDeclarativePart()
+
+        else:
+            # Epsilon case (no declaration)
+            self.logger.debug("Parsing DeclarativePart (ε)")
+            if self.build_parse_tree and node:
+                 # Add epsilon node only if building tree
                 node.add_child(ParseTreeNode("ε"))
-            return node
-        # Non-tree branch: just parse and insert
+
+        return node if self.build_parse_tree else None
+
+    # Helper to parse IdentifierList returning tokens
+    def _parseIdentifierListTokens(self) -> List[Token]:
+        tokens = []
         if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
-            id_list_node = self.parseIdentifierList()
-            assert id_list_node is not None
-            # Insert declarations
-            for id_leaf in id_list_node.find_children_by_name("ID"):
-                if id_leaf.token:
-                    sym = Symbol(
-                        id_leaf.token.lexeme,
-                        id_leaf.token,
-                        EntryType.VARIABLE,
-                        self.symbol_table.current_depth
-                    )
-                    try:
-                        self.symbol_table.insert(sym)
-                    except DuplicateSymbolError as e:
-                        # report duplicate declaration but continue parsing
-                        self.report_semantic_error(
-                            f"Duplicate symbol declaration: '{e.name}' at depth {e.depth}",
-                            getattr(id_leaf.token, 'line_number', -1),
-                            getattr(id_leaf.token, 'column_number', -1)
-                        )
-            self.match(self.defs.TokenType.COLON)
-            self.parseTypeMark()
-            self.match(self.defs.TokenType.SEMICOLON)
-            # Further declarations
-            self.parseDeclarativePart()
-        return None
+            tokens.append(self.current_token)
+            self.advance() # Use advance as we are not building tree here
+            while self.current_token and self.current_token.token_type == self.defs.TokenType.COMMA:
+                self.advance() # Skip comma
+                if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
+                    tokens.append(self.current_token)
+                    self.advance()
+                else:
+                    self.report_error("Expected identifier after comma in list")
+                    break # Avoid infinite loop on error
+        else:
+             self.report_error("Expected identifier at start of list")
+        return tokens
+
+    # Helper to parse TypeMark returning type info (VarType or None for constant)
+    # Returns tuple: (VarType | None, const_value | None)
+    def _parseTypeMarkInfo(self) -> tuple[Optional[Any], Optional[Any]]:
+         var_type = None
+         const_value = None
+         if self.current_token and self.current_token.token_type in {
+             self.defs.TokenType.INTEGERT,
+             self.defs.TokenType.REALT,
+             self.defs.TokenType.CHART,
+             self.defs.TokenType.FLOAT # Assuming FLOAT maps to VarType.FLOAT/REAL
+         }:
+             # Map token type to VarType
+             type_lexeme = self.current_token.lexeme.upper()
+             if type_lexeme == 'INTEGER': var_type = VarType.INT
+             elif type_lexeme in ['REAL', 'FLOAT']: var_type = VarType.FLOAT # or REAL
+             elif type_lexeme == 'CHAR': var_type = VarType.CHAR
+             # Add mappings for BOOLEAN etc. if needed
+             self.advance()
+         elif self.current_token and self.current_token.token_type == self.defs.TokenType.CONSTANT:
+             self.advance() # Consume CONSTANT
+             if self.current_token and self.current_token.token_type == self.defs.TokenType.ASSIGN:
+                 self.advance() # Consume :=
+                 # Parse value - assuming simple NUM/REAL for now
+                 if self.current_token and self.current_token.token_type == self.defs.TokenType.NUM:
+                     const_value = int(self.current_token.lexeme)
+                     var_type = VarType.INT # Infer type from value
+                     self.advance()
+                 elif self.current_token and self.current_token.token_type == self.defs.TokenType.REAL:
+                     const_value = float(self.current_token.lexeme)
+                     var_type = VarType.FLOAT # Infer type from value
+                     self.advance()
+                 else:
+                      self.report_error("Expected numerical literal after ':=' for constant")
+             else:
+                  self.report_error("Expected ':=' after CONSTANT")
+         else:
+             self.report_error("Expected a type (INTEGER, REAL, CHAR, FLOAT) or CONSTANT declaration.")
+         return var_type, const_value
