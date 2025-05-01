@@ -40,12 +40,25 @@ This folder contains the core compiler components for the Ada compiler project. 
 - **RDParserExtended.py**
   A variant of the parser with additional grammar rules and recovery strategies (extension of `RDParser`).
 
+- **RDParserExtExt.py**
+  Further extension of `RDParserExtended` with integrated TAC generation and parameter validation for procedure calls.
+
+- **rd_parser_mixins_declarations.py**
+  Mixin class that implements the declaration-related grammar rules for the parser.
+
+- **rd_parser_mixins_statements.py**
+  Mixin class that implements the statement-related grammar rules for the parser.
+
+- **rd_parser_mixins_expressions.py**
+  Mixin class that implements the expression-related grammar rules for the parser.
+
 - **TACGenerator.py**
   Implements the `ThreeAddressCodeGenerator` for producing three-address code IR with depth-based addressing and constant substitution.
 
 ## Usage
 
 1. **Lexical Analysis**
+
    ```python
    from jakadac.modules.LexicalAnalyzer import LexicalAnalyzer
    lexer = LexicalAnalyzer()
@@ -53,6 +66,7 @@ This folder contains the core compiler components for the Ada compiler project. 
    ```
 
 2. **Syntax Analysis**
+
    ```python
    from jakadac.modules.RDParser import RDParser
    parser = RDParser(tokens, lexer.defs, build_parse_tree=True)
@@ -61,6 +75,7 @@ This folder contains the core compiler components for the Ada compiler project. 
    ```
 
 3. **Symbol Table & Semantic Analysis**
+
    ```python
    from jakadac.modules.SymTable import SymbolTable
    from jakadac.modules.NewSemanticAnalyzer import NewSemanticAnalyzer
@@ -72,6 +87,7 @@ This folder contains the core compiler components for the Ada compiler project. 
 
 4. **Driver Integration**
    Use `BaseDriver` in `Driver.py` to tie together all phases:
+
    ```python
    from jakadac.modules.Driver import BaseDriver
    class MyDriver(BaseDriver):
@@ -79,10 +95,11 @@ This folder contains the core compiler components for the Ada compiler project. 
    ```
 
 5. **Three-Address Code Generation**
+
    ```python
    from jakadac.modules.TACGenerator import ThreeAddressCodeGenerator
    tacgen = ThreeAddressCodeGenerator(symbol_table, parse_tree_root)
    tac_program = tacgen.generate()
    ```
 
-Refer to individual module docstrings for detailed API documentation and examples. 
+Refer to individual module docstrings for detailed API documentation and examples.

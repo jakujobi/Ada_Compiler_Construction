@@ -7,7 +7,9 @@ b = _t2
 _t3 = 20
 d = _t3
 _t4 = a MUL b
-_t5 = d ADD _t4
+_t5 = _BP-4 ADD _t4
 c = _t5
 endp one
 call one
+endp four
+START	PROC	four
