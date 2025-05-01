@@ -184,7 +184,25 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         # --- Parse Args, IS, Declarations, BEGIN, Body, END --- 
         child = self.parseArgs() 
         self._add_child(node, child)
-        # TODO: Update proc_sym.param_list/modes based on result of parseArgs
+        # Update proc_sym.param_list/modes based on result of parseArgs
+        if self.symbol_table and proc_sym:
+            # Get the current symbol table at the procedure's inner scope
+            current_scope_symbols = self.symbol_table.get_current_scope_symbols()
+            param_symbols = []
+            param_modes = {}
+            
+            # Find all PARAMETER symbols in the current scope
+            for sym_name, sym in current_scope_symbols.items():
+                if sym.entry_type == EntryType.PARAMETER:
+                    param_symbols.append(sym)
+                    # Default to IN mode if not specified
+                    param_modes[sym_name] = getattr(sym, 'mode', ParameterMode.IN)
+            
+            # Update the procedure symbol
+            if param_symbols:  # Only update if we found parameters
+                proc_sym.param_list = param_symbols
+                proc_sym.param_modes = param_modes
+                self.logger.debug(f" Updated procedure '{proc_sym.name}' with {len(param_symbols)} parameters")
         
         self.match_leaf(self.defs.TokenType.IS, node)
         

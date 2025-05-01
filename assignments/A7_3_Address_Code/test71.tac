@@ -3,7 +3,7 @@ _t1 = 5
 a = _t1
 _t2 = 10
 b = _t2
-_t3 = a ADD b
+_t3 = _BP-2 ADD _BP-4
 c = _t3
 endp one
 START	PROC	one
