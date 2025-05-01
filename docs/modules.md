@@ -184,6 +184,56 @@ This document provides detailed information about all modules in the Ada Compile
 
 ---
 
+## RDParserExtExt Module
+
+**File**: `src/jakadac/modules/RDParserExtExt.py`
+
+**Purpose**: Further extends `RDParserExtended` to integrate Three-Address Code generation and enhanced semantic validation.
+
+### Class: RDParserExtExt
+- Combines parser functionality with integrated TAC generation.
+- Uses mixins architecture to organize grammar rules.
+- `__init__(...)` : Sets up TACGenerator and connects symbol table.
+- `parseProg()` : Updates procedure symbol's parameter list after parsing arguments to ensure correct parameter validation.
+- Recently fixed parameter count validation for procedure calls.
+
+---
+
+## Parser Mixin Modules
+
+### DeclarationsMixin
+**File**: `src/jakadac/modules/rd_parser_mixins_declarations.py`
+
+**Purpose**: Implements declaration-related grammar rules for the parser.
+
+- `parseDeclarativePart()` : Handles variable and constant declarations.
+- `parseArgs()` : Parses procedure arguments and inserts them into symbol table.
+- `parseDecl()` : Processes individual declarations.
+- `parseDefPart()` : Handles variable definition.
+
+### StatementsMixin
+**File**: `src/jakadac/modules/rd_parser_mixins_statements.py`
+
+**Purpose**: Implements statement-related grammar rules for the parser.
+
+- `parseSeqOfStatements()` : Processes sequence of statements.
+- `parseStatement()` : Dispatches to specific statement parsers.
+- `parseAssignStat()` : Handles assignment statements.
+- `parseIOStat()` : Processes input/output statements.
+- `parseProcCall()` : Processes procedure calls with parameter validation.
+- `parseParams()` : Parses actual parameters in procedure calls.
+
+### ExpressionsMixin
+**File**: `src/jakadac/modules/rd_parser_mixins_expressions.py`
+
+**Purpose**: Implements expression-related grammar rules for the parser.
+
+- `parseExpr()` : Entry point for expression parsing.
+- `parseTerm()` : Handles terms in expressions.
+- `parseFactor()` : Processes factors in terms.
+
+---
+
 ## NewSemanticAnalyzer Module
 
 **File**: `src/jakadac/modules/NewSemanticAnalyzer.py`
