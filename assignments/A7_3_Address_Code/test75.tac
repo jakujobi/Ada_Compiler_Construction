@@ -1,6 +1,6 @@
 proc five
 proc fun
-_t1 = _BP+4 MUL _BP+6
+_t1 = _BP+4 MUL _BP+2
 c = _t1
 endp fun
 _t2 = 5

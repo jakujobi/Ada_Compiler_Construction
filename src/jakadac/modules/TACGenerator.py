@@ -45,7 +45,14 @@ class TACGenerator:
         self.output_filename = output_filename  
         self.temp_counter = 0  # For generating temporary variables  
         self.tac_lines = []    # List of TAC instructions  
-        self.start_proc_name = None  # Store the outermost procedure name  
+        self.start_proc_name = None  # Store the outermost procedure name
+        
+        # Track procedure declarations for reordering
+        self.proc_declarations = {}
+        self.current_proc = None
+        self.pending_main_proc = None
+        self.main_proc_instructions = []
+        
         self.logger = logger  
         self.logger.info(f"TAC Generator initialized. Output Target: '{self.output_filename}'")  
       
@@ -56,8 +63,14 @@ class TACGenerator:
         Args:  
             instruction_str: The instruction string to emit  
         """  
-        self.tac_lines.append(instruction_str)  
-        self.logger.debug(f"Emit TAC: {instruction_str}")  
+        # If we're in the main procedure, add to deferred list
+        if self.pending_main_proc and self.current_proc == self.pending_main_proc:
+            self.main_proc_instructions.append(instruction_str)
+            self.logger.debug(f"Added to deferred main proc: {instruction_str}")
+        else:
+            # Regular emit - add to tac_lines directly
+            self.tac_lines.append(instruction_str)  
+            self.logger.debug(f"Emit TAC: {instruction_str}")  
       
     def _newTempName(self) -> str:  
         """  
@@ -213,7 +226,20 @@ class TACGenerator:
         """  
         instruction = f"proc {proc_name}"  
         self.logger.info(f"Emitting Procedure Start: {instruction}")  
-        self.emit(instruction)  
+        
+        # Track the current procedure for instruction sorting
+        self.current_proc = proc_name
+        
+        # Check if this is the main procedure (outermost)
+        if self.start_proc_name == proc_name:
+            self.pending_main_proc = proc_name
+            self.main_proc_instructions = []  # Clear any old instructions
+            self.logger.debug(f"Main procedure '{proc_name}' declarations will be deferred")
+            self.main_proc_instructions.append(instruction)  # Add to main proc instructions
+        else:
+            # This is an inner procedure - emit directly
+            self.emit(instruction)
+        
         # Reset temporary counter for this procedure's scope  
         self.temp_counter = 0  
         self.logger.debug(f"Temporary counter reset for procedure '{proc_name}'")  
@@ -227,7 +253,17 @@ class TACGenerator:
         """  
         instruction = f"endp {proc_name}"  
         self.logger.info(f"Emitting Procedure End: {instruction}")  
-        self.emit(instruction)  
+        
+        # If this is the end of the main procedure, store it but don't emit yet
+        if self.pending_main_proc == proc_name:
+            self.main_proc_instructions.append(instruction)
+            self.logger.debug(f"Added end directive for main procedure '{proc_name}' to deferred list")
+        else:
+            # Inner procedure - emit directly
+            self.emit(instruction)
+            
+        # Reset current procedure tracking
+        self.current_proc = None
       
     def emitPush(self, place: str, mode: ParameterMode):  
         """  
@@ -309,6 +345,11 @@ class TACGenerator:
         Returns:  
             True if successful, False otherwise  
         """  
+        # Add any deferred main procedure instructions AFTER all other procedure declarations
+        if self.main_proc_instructions:
+            self.logger.info(f"Appending {len(self.main_proc_instructions)} deferred instructions for main procedure '{self.pending_main_proc}'")
+            self.tac_lines.extend(self.main_proc_instructions)
+            
         self.logger.info(f"Attempting to write {len(self.tac_lines)} TAC instructions to '{self.output_filename}'...")
 
         # Append the final START PROC instruction if a start procedure was identified
