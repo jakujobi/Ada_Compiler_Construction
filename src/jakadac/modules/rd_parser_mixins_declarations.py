@@ -340,7 +340,9 @@ class DeclarationsMixin:
                         # Assign offset and update next offset
                         param_symbol.set_variable_info(param_type, current_param_offset, param_size)
                         self.logger.debug(f" Assigning offset {current_param_offset} to param '{param_name}'")
-                        current_param_offset += param_size 
+                        # FIXED: Decrement parameter offset instead of incrementing
+                        # Parameters should be assigned decreasing offsets (4, 2) rather than (4, 6)
+                        current_param_offset -= param_size
                         
                         proc_symbol_params.append(param_symbol) # Store symbol for later?
                         proc_symbol_modes[param_name] = param_mode
