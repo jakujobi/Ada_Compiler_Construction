@@ -280,6 +280,42 @@ class Definitions:
         """
         return getattr(self.TokenType, token_type_str, None)
 
+      
+    def map_ada_op_to_tac(self, ada_op: str) -> str:  
+        """  
+        Map Ada operators (lexemes) to TAC operator strings.  
+          
+        Args:  
+            ada_op: The Ada operator lexeme (e.g., '+', 'mod', 'and')  
+              
+        Returns:  
+            The corresponding TAC operator string (e.g., 'ADD', 'MOD', 'AND').  
+            Returns the original operator if no mapping is found.  
+        """  
+        ada_op_lower = ada_op.lower()  # Ensure case-insensitivity for keywords  
+        mapping = {  
+            '+': 'ADD',  
+            '-': 'SUB',  
+            '*': 'MUL',  
+            '/': 'DIV',    # Floating point or integer division? Assumed context-dependent for now.  
+            'div': 'IDIV', # Explicit integer division if lexer distinguishes  
+            'mod': 'MOD',  
+            'rem': 'REM',  
+            'and': 'AND',  
+            'or': 'OR',  
+            'not': 'NOT',  
+            # Relational operators might map differently (e.g., to conditional jumps)  
+            # For direct boolean result TAC:  
+            '=': 'EQ',  
+            '/=': 'NE',  
+            '<': 'LT',  
+            '<=': 'LE',  
+            '>': 'GT',  
+            '>=': 'GE'  
+        }  
+        tac_op = mapping.get(ada_op_lower, ada_op)  # Default to original if no map  
+        return tac_op
+
 ###############################################################################
 # Full Documentation for Definitions Class
 ###############################################################################
