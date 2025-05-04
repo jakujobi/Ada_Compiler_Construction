@@ -422,7 +422,7 @@ class NewSemanticAnalyzer:
         else:
              string_value = original_value
         # Replace Ada doubled quotes "" with single quote " for ASM
-        string_value = string_value.replace("""", '"')
+        string_value = string_value.replace('""', '"')
              
         if not string_value.endswith('$'):
             string_value += '$'
