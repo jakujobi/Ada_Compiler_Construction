@@ -26,9 +26,9 @@ This checklist breaks down the implementation into verifiable steps, based on th
   * [ ] Place `io.asm` where MASM/TASM can find it during assembly (e.g., output directory or project root).
 * **[X] Update `Definitions.py`:**
 
-  * [X] Add `TokenType` enums (`TK_GET`, `TK_PUT`, `TK_PUTLN`).
-  * [X] Add `"get"`, `"put"`, `"putln"` to `reserved_words` dictionary.
-  * [ ] **Verify:** Run Lexer on test Ada code with I/O keywords; check for correct `TokenType` (not `TK_IDENTIFIER`).
+  * [X] Ensure `TokenType` enum includes `GET`, `PUT`, `PUTLN`.
+  * [X] Ensure `reserved_words` dictionary maps uppercase "GET", "PUT", "PUTLN" to `TokenType.GET`, `TokenType.PUT`, `TokenType.PUTLN` respectively.
+  * [ ] **Verify:** Run Lexer on test Ada code with I/O keywords; check for correct `TokenType` (`GET`, `PUT`, `PUTLN` - not `ID`).
 * **[X] Update `LexicalAnalyzer.py`:**
 
   * [X] No changes likely needed.

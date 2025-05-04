@@ -9,24 +9,22 @@
 ## 2. Module: `Definitions.py`
 
 ### Changes Needed:
-    * **Add New Tokens:** Define new token types in the `TokenType` enumeration for the I/O keywords if they are treated as reserved words.
+    * **Add New Token:** Ensure the `TokenType` enumeration includes `PUTLN` (assuming `GET` and `PUT` already exist from previous assignments).
         ```python
-        # Example additions to TokenType enum
-        TK_GET = auto()
-        TK_PUT = auto()
-        TK_PUTLN = auto()
+        # Example addition to TokenType enum members list
+        'PUTLN',
         ```
-    * **Add Reserved Words:** Add `"get"`, `"put"`, and `"putln"` to the `reserved_words` dictionary, mapping them to their corresponding new `TokenType` values.
+    * **Add Reserved Words:** Add `"PUTLN"` to the `reserved_words` dictionary, mapping it to `self.TokenType.PUTLN`. Ensure `"GET"` and `"PUT"` are already mapped correctly to `self.TokenType.GET` and `self.TokenType.PUT`.
         ```python
-        # Example additions to reserved_words dictionary
-        "get": TokenType.TK_GET,
-        "put": TokenType.TK_PUT,
-        "putln": TokenType.TK_PUTLN,
+        # Example addition to reserved_words dictionary
+        "GET": self.TokenType.GET,
+        "PUT": self.TokenType.PUT,
+        "PUTLN": self.TokenType.PUTLN,
         ```
 
 ### Verification:
-    * Run existing unit tests for `Definitions.py` (if any) or manually inspect the `reserved_words` dictionary and `TokenType` enum to confirm additions.
-    * Run the updated `LexicalAnalyzer` (see below) on source code containing `get`, `put`, `putln` and verify they are tokenized correctly with the new `TokenType`s, not as identifiers (`TK_IDENTIFIER`).
+    * Run existing unit tests for `Definitions.py` (if any) or manually inspect the `reserved_words` dictionary and `TokenType` enum to confirm setup.
+    * Run the updated `LexicalAnalyzer` (see below) on source code containing `get`, `put`, `putln` and verify they are tokenized correctly with `TokenType.GET`, `TokenType.PUT`, `TokenType.PUTLN`, not as identifiers (`TK_IDENTIFIER`).
 
 ### Module: `LexicalAnalyzer.py`
 
@@ -38,8 +36,8 @@
 ### Module: Parser (`RDParserExtExt.py` & Mixins - likely `rd_parser_mixins_statements.py`)
 
 ### Changes Needed:
-    * **Implement I/O Grammar Rules:** Create new parsing methods corresponding to the BNF productions for `IO_Stat`, `In_Stat`, `Out_Stat`, `Id_List`, `Write_List`, `Write_Token`, etc. These methods will handle matching the expected tokens (`TK_GET`, `TK_PUT`, `TK_PUTLN`, `TK_LPAREN`, `TK_RPAREN`, `TK_COMMA`, `TK_IDENTIFIER`, `TK_NUMLIT`, `TK_STRINGLIT`).
-    * **Integrate I/O Parsing:** Modify the existing `Parse_Statement` (or equivalent) method to recognize the start of an I/O statement (e.g., seeing `TK_GET`, `TK_PUT`, `TK_PUTLN`) and dispatch to the new `Parse_IO_Stat` method.
+    * **Implement I/O Grammar Rules:** Create new parsing methods corresponding to the BNF productions for `IO_Stat`, `In_Stat`, `Out_Stat`, `Id_List`, `Write_List`, `Write_Token`, etc. These methods will handle matching the expected tokens (`TokenType.GET`, `TokenType.PUT`, `TokenType.PUTLN`, `TokenType.LPAREN`, etc.).
+    * **Integrate I/O Parsing:** Modify the existing `Parse_Statement` (or equivalent) method to recognize the start of an I/O statement (e.g., seeing `TokenType.GET`, `TokenType.PUT`, `TokenType.PUTLN`) and dispatch to the new `Parse_IO_Stat` method.
     * **Semantic Action Calls:** Within the new I/O parsing methods, insert calls to the `TACGenerator` to emit the appropriate I/O TAC instructions (`rdi`, `wrs`, `wri`, `wrln`). This includes:
         * Passing the target variable's address/operand string for `rdi`.
         * Passing the correct operand string (variable address, numeric literal representation, or *string label*) for `wri` or `wrs`.
