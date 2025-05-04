@@ -207,7 +207,8 @@ class ExpressionsMixin:
                      return "ERROR_PLACE"
                 
                 result_place = self.tac_gen.newTemp()
-                tac_op = self.tac_gen.map_ada_op_to_tac(op)
+                # Use the original operator lexeme directly
+                tac_op = op 
                 self.tac_gen.emitBinaryOp(tac_op, result_place, left_place, right_place)
                 left_place = result_place
 
@@ -281,7 +282,8 @@ class ExpressionsMixin:
                      return "ERROR_PLACE"
                      
                 result_place = self.tac_gen.newTemp()
-                tac_op = self.tac_gen.map_ada_op_to_tac(op)
+                # Use the original operator lexeme directly
+                tac_op = op 
                 self.tac_gen.emitBinaryOp(tac_op, result_place, left_place, right_place)
                 left_place = result_place
 
@@ -398,7 +400,8 @@ class ExpressionsMixin:
                 operand_place = self.parseFactor() # Returns str
                 if isinstance(operand_place, str):
                      result_place = self.tac_gen.newTemp()
-                     self.tac_gen.emitUnaryOp("NOT", result_place, operand_place)
+                     # Use 'not' directly
+                     self.tac_gen.emitUnaryOp("not", result_place, operand_place) 
                      place = result_place
                 else:
                      place = "ERROR_PLACE" # Error in operand
@@ -415,13 +418,15 @@ class ExpressionsMixin:
                              _ = float(operand_place) # Check if it looks like a number
                              place = operand_place # If literal, unary plus is identity
                          except ValueError:
-                             # If not a literal (var/temp), emit UPLUS for clarity or specific backend needs
+                             # If not a literal (var/temp), emit unary plus
                              result_place = self.tac_gen.newTemp()
-                             self.tac_gen.emitUnaryOp("UPLUS", result_place, operand_place)
+                             # Use '+' directly
+                             self.tac_gen.emitUnaryOp("+", result_place, operand_place) 
                              place = result_place
                      else: # Unary minus
                         result_place = self.tac_gen.newTemp()
-                        self.tac_gen.emitUnaryOp("UMINUS", result_place, operand_place)
+                        # Use '-' directly
+                        self.tac_gen.emitUnaryOp("-", result_place, operand_place) 
                         place = result_place
                 else:
                      place = "ERROR_PLACE" # Error in operand
