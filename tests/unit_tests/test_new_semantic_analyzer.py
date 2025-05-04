@@ -205,7 +205,7 @@ class TestNewSemanticAnalyzer(unittest.TestCase):
         proc_symbol = self.symtab.lookup(proc_name)
         # Var size: INT = 2
         expected_local_size = len(var_names) * 2
-        self.assertEqual(proc_symbol.local_size, expected_local_size)
+        self.assertEqual(proc_symbol.size_of_locals, expected_local_size)
 
         # Check dump scope calls (once for proc scope, once for global)
         # self.assertEqual(mock_dump.call_count, 2) # Depends on implementation details
