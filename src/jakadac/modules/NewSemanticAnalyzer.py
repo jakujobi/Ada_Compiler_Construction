@@ -24,6 +24,7 @@ from .SymTable import (
 )
 from .Logger import logger
 from .RDParser import ParseTreeNode
+from .Token import Token
 
 class NewSemanticAnalyzer:
     def __init__(
@@ -48,6 +49,7 @@ class NewSemanticAnalyzer:
         self.offsets: Dict[int, int] = {}
         # next free positive offset for parameters
         self.param_offsets: Dict[int, int] = {}
+        self.string_label_counter: int = 0 # Added for unique string labels
 
     def analyze(self) -> bool:
         """
@@ -103,27 +105,46 @@ class NewSemanticAnalyzer:
             return
         # Enter new scope for procedure body
         self.symtab.enter_scope()
+        current_scope_depth = self.symtab.current_depth
         # Initialize offsets at new depth for locals and parameters
-        self.offsets[self.symtab.current_depth] = 0
-        self.param_offsets[self.symtab.current_depth] = 0
+        self.offsets[current_scope_depth] = 0
+        self.param_offsets[current_scope_depth] = 0 # This might not be used if offsets calculated in _visit_formals
+        
         # Handle formal parameters (inserted at this new scope depth)
         param_list, param_modes = self._visit_formals(node)
+        # Calculate total parameter size
+        total_param_size = sum(p.size for p in param_list if p.size is not None)
+
         # Declarations (constants & variables)
         decls_node = node.find_child_by_name("DeclarativePart")
         self._visit_declarative_part(decls_node)
+        # Get size of declared locals from offset counter
+        declared_local_size = self.offsets[current_scope_depth]
+
         # Nested procedures
         procs_node = node.find_child_by_name("Procedures")
         if procs_node:
             for child in procs_node.children:
                 if child.name == "Prog":
                     self._visit_program(child)
-        # Check statements for undeclared identifier uses
+
+        # Check statements for undeclared identifier uses and handle string literals
         stmts_node = node.find_child_by_name("SeqOfStatements")
         if stmts_node:
-            self._visit_statements(stmts_node)
-        # Record local size and update procedure info
-        local_size = self.offsets[self.symtab.current_depth]
-        proc_symbol.set_procedure_info(param_list, param_modes, local_size)
+            self._visit_statements(stmts_node) # Pass symtab to allow global string insertion
+
+        # Record sizes and update procedure info
+        # Note: local_size here only includes declared locals, not temps.
+        # Temps size needs to be handled later (e.g., by ASMGenerator based on TAC).
+        if proc_symbol:
+             if proc_symbol.entry_type == EntryType.PROCEDURE:
+                 proc_symbol.set_procedure_info(param_list, param_modes, declared_local_size, total_param_size)
+                 logger.info(f"Updated procedure '{proc_symbol.name}': local_size={declared_local_size}, param_size={total_param_size}")
+             elif proc_symbol.entry_type == EntryType.FUNCTION: # Assuming FUNCTION processing is similar
+                 # Ensure return_type is set appropriately elsewhere if needed
+                 proc_symbol.set_function_info(proc_symbol.return_type, param_list, param_modes, declared_local_size, total_param_size)
+                 logger.info(f"Updated function '{proc_symbol.name}': local_size={declared_local_size}, param_size={total_param_size}")
+
         # Dump and exit this scope
         self._dump_scope(self.symtab.current_depth)
         self.symtab.exit_scope()
@@ -344,16 +365,31 @@ class NewSemanticAnalyzer:
 
     def _visit_statements(self, node: ParseTreeNode) -> None:
         """
-        Check each statement for undeclared identifier uses.
+        Traverse SeqOfStatements nodes, checking for undeclared IDs
+        and handling string literals within I/O calls.
         """
+        # Example: This needs to be adapted based on *your specific parse tree structure* for I/O statements.
+        # Assume a structure like: Statement -> IOStat -> PutStat -> WriteList -> WriteToken -> LITERAL
         def dfs(n: ParseTreeNode):
-            # Only need to explicitly check assignment LHS here.
-            # Other undeclared IDs will be caught when visiting expression nodes.
-            if n.name == "AssignStat":
-                self._visit_assign_stat(n)
-            for c in n.children:
-                dfs(c)
-        dfs(node)
+            if n.name == "PutStat": # Or whatever your node name for put/putln is
+                # Find string literals within the arguments/write list
+                write_list = n.find_child_by_name("WriteList") # Example name
+                if write_list:
+                     for write_token in write_list.find_children_by_name("WriteToken"): # Example name
+                          literal_node = write_token.find_child_by_name("LITERAL") # Find the literal leaf
+                          if literal_node:
+                              self._handle_string_literal(literal_node)
+                               # The label returned isn't directly used here, but insertion is done.
+                               # The *Parser* action associated with this node would need the label.
+            elif n.name == "AssignStat": # Example: Check assignment statement LHS
+                 self._visit_assign_stat(n)
+            
+            # Recurse
+            for child in getattr(n, 'children', []):
+                dfs(child)
+
+        if node:
+           dfs(node)
 
     def _visit_assign_stat(self, node: ParseTreeNode) -> None:
         """Check that the variable on the left side of an assignment is declared."""
@@ -366,3 +402,56 @@ class NewSemanticAnalyzer:
             except SymbolNotFoundError:
                 line = getattr(id_node.token, 'line_number', -1)
                 self._error(f"Undeclared identifier '{lex}' used in assignment at line {line}")
+
+    def _handle_string_literal(self, string_node: ParseTreeNode) -> Optional[str]:
+        """
+        Generates a unique label for a string literal, adds it to the global
+        symbol table scope (depth 0) as a constant, and returns the label.
+        Ensures the string value has a '$' terminator.
+        """
+        if not (string_node.token and string_node.token.token_type == self.defs.TokenType.LITERAL):
+            logger.error("Node passed to _handle_string_literal is not a string literal.")
+            return None
+
+        # Get value, remove quotes, ensure $ terminator
+        # Assuming literal_value holds the content without outer quotes
+        original_value = getattr(string_node.token, 'literal_value', string_node.token.lexeme)
+        # Strip outer quotes if lexeme was used
+        if original_value.startswith('"') and original_value.endswith('"'):
+             string_value = original_value[1:-1]
+        else:
+             string_value = original_value
+        # Replace Ada doubled quotes "" with single quote " for ASM
+        string_value = string_value.replace("""", '"')
+             
+        if not string_value.endswith('$'):
+            string_value += '$'
+
+        # Generate unique label
+        label = f"_S{self.string_label_counter}"
+        self.string_label_counter += 1
+
+        # Create symbol (use string_node's token for location info)
+        # Store at depth 0 (global scope)
+        str_sym = Symbol(label, string_node.token, EntryType.CONSTANT, 0) 
+        str_sym.const_value = string_value
+        str_sym.var_type = None # Or potentially a new VarType.STRING_LITERAL?
+        
+        # Insert into GLOBAL scope (depth 0)
+        try:
+             global_scope = self.symtab._scope_stack[0]
+             if label in global_scope:
+                  logger.warning(f"String label '{label}' somehow already exists. Reusing.")
+                  return label # Avoid inserting duplicate label
+             global_scope[label] = str_sym # Insert directly into depth 0
+             logger.info(f"Inserted string literal symbol: {str_sym} into global scope.")
+        except IndexError:
+             logger.error("Cannot access global scope (depth 0) to insert string literal.")
+             self._error(f"Internal error: Could not access global scope for string '{label}'.")
+             return None
+        except Exception as e:
+             logger.error(f"Unexpected error inserting string literal '{label}': {e}")
+             self._error(f"Failed to insert string literal '{label}' due to {e}")
+             return None
+             
+        return label
