@@ -96,15 +96,14 @@ class TestSymbolTable(unittest.TestCase):
         """Test inserting a procedure symbol."""
         token = create_dummy_token("do_something")
         symbol = Symbol("do_something", token, EntryType.PROCEDURE, depth=0)
-        symbol.set_procedure_info(param_list=[], param_modes={}, size_of_locals=10, size_of_params=0)
+        symbol.set_procedure_info(param_list=[], param_modes={}, local_size=10)
 
         self.symtab.insert(symbol)
         found_symbol = self.symtab.lookup("do_something")
         self.assertEqual(found_symbol, symbol)
         self.assertEqual(found_symbol.entry_type, EntryType.PROCEDURE)
         self.assertEqual(found_symbol.param_list, [])
-        self.assertEqual(found_symbol.size_of_locals, 10)
-        self.assertEqual(found_symbol.size_of_params, 0)
+        self.assertEqual(found_symbol.local_size, 10)
 
     def test_lookup_not_found(self):
         """Test lookup for a symbol that doesn't exist."""
@@ -203,95 +202,6 @@ class TestSymbolTable(unittest.TestCase):
         self.assertEqual(len(current_symbols), 1)
         self.assertIn("global_var", current_symbols)
         self.assertNotIn("local_var", current_symbols)
-
-    # --- A8 Specific Tests --- 
-
-    def test_insert_parameter(self):
-        """Test inserting a parameter symbol with the is_parameter flag."""
-        token = create_dummy_token("param1")
-        # Create as PARAMETER type
-        symbol = Symbol("param1", token, EntryType.PARAMETER, depth=1)
-        # Set variable info, explicitly marking as parameter
-        symbol.set_variable_info(VarType.INT, offset=4, size=2, is_parameter=True)
-
-        self.symtab.enter_scope() # Enter scope 1 for the parameter
-        self.symtab.insert(symbol)
-        found_symbol = self.symtab.lookup("param1")
-        self.assertEqual(found_symbol, symbol)
-        self.assertEqual(found_symbol.entry_type, EntryType.PARAMETER)
-        self.assertTrue(found_symbol.is_parameter)
-        self.assertEqual(found_symbol.var_type, VarType.INT)
-        self.assertEqual(found_symbol.offset, 4)
-        self.assertEqual(found_symbol.size, 2)
-
-    def test_insert_local_variable_not_parameter(self):
-        """Test inserting a local variable symbol, ensuring is_parameter is False."""
-        token = create_dummy_token("local_x")
-        symbol = Symbol("local_x", token, EntryType.VARIABLE, depth=1)
-        # is_parameter defaults to False or can be set explicitly
-        symbol.set_variable_info(VarType.FLOAT, offset=-2, size=4, is_parameter=False)
-
-        self.symtab.enter_scope() # Enter scope 1
-        self.symtab.insert(symbol)
-        found_symbol = self.symtab.lookup("local_x")
-        self.assertEqual(found_symbol, symbol)
-        self.assertEqual(found_symbol.entry_type, EntryType.VARIABLE)
-        self.assertFalse(found_symbol.is_parameter)
-        self.assertEqual(found_symbol.var_type, VarType.FLOAT)
-        self.assertEqual(found_symbol.offset, -2)
-
-    def test_procedure_sizes(self):
-        """Test storing and retrieving size_of_locals and size_of_params for procedures."""
-        token = create_dummy_token("proc_with_sizes")
-        symbol = Symbol("proc_with_sizes", token, EntryType.PROCEDURE, depth=0)
-        # Simulate 4 bytes for params, 8 bytes for locals+temps
-        symbol.set_procedure_info(param_list=[], param_modes={}, size_of_locals=8, size_of_params=4)
-
-        self.symtab.insert(symbol)
-        found_symbol = self.symtab.lookup("proc_with_sizes")
-        self.assertEqual(found_symbol.entry_type, EntryType.PROCEDURE)
-        self.assertEqual(found_symbol.size_of_locals, 8)
-        self.assertEqual(found_symbol.size_of_params, 4)
-
-    def test_function_sizes(self):
-        """Test storing and retrieving size_of_locals and size_of_params for functions."""
-        token = create_dummy_token("func_with_sizes")
-        symbol = Symbol("func_with_sizes", token, EntryType.FUNCTION, depth=0)
-        # Simulate 2 bytes for params, 6 bytes for locals+temps
-        symbol.set_function_info(return_type=VarType.INT, param_list=[], param_modes={}, size_of_locals=6, size_of_params=2)
-
-        self.symtab.insert(symbol)
-        found_symbol = self.symtab.lookup("func_with_sizes")
-        self.assertEqual(found_symbol.entry_type, EntryType.FUNCTION)
-        self.assertEqual(found_symbol.return_type, VarType.INT)
-        self.assertEqual(found_symbol.size_of_locals, 6)
-        self.assertEqual(found_symbol.size_of_params, 2)
-
-    def test_string_literal_storage(self):
-        """Test inserting and retrieving a string literal symbol."""
-        label_token = create_dummy_token("_S0") # Label used as name
-        string_value = "Hello World!"
-        symbol = Symbol("_S0", label_token, EntryType.STRING_LITERAL, depth=0) # Use specific type
-        symbol.set_string_literal_info(string_value)
-
-        self.symtab.insert(symbol)
-        found_symbol = self.symtab.lookup("_S0")
-        self.assertEqual(found_symbol.entry_type, EntryType.STRING_LITERAL)
-        self.assertEqual(found_symbol.var_type, VarType.STRING)
-        self.assertEqual(found_symbol.const_value, "Hello World!$", "Should append $ terminator")
-        self.assertIsNone(found_symbol.offset)
-        self.assertIsNone(found_symbol.size)
-
-    def test_string_literal_already_terminated(self):
-        """Test inserting a string literal that already has the terminator."""
-        label_token = create_dummy_token("_S1")
-        string_value = "Another one$"
-        symbol = Symbol("_S1", label_token, EntryType.STRING_LITERAL, depth=0)
-        symbol.set_string_literal_info(string_value)
-
-        self.symtab.insert(symbol)
-        found_symbol = self.symtab.lookup("_S1")
-        self.assertEqual(found_symbol.const_value, "Another one$", "Should not double append $")
 
 
 if __name__ == '__main__':

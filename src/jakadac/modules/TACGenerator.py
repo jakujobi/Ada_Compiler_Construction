@@ -268,28 +268,28 @@ class TACGenerator:
     def emitPush(self, place: str, mode: ParameterMode):  
         """  
         Emit a push instruction for procedure calls.  
-        Handles pass-by-reference for OUT/INOUT by pushing the address (@place).
+        NOTE: Simplified to always emit 'push' based on exp_test75.tac format.
+        The 'mode' argument is kept for potential future use or debugging.
         
         Args:  
             place: The place to push (value, address source, or name)  
-            mode: The parameter mode (IN, OUT, INOUT)
+            mode: The parameter mode (currently ignored for instruction generation)
         """  
-        # --- Restored Original Logic --- 
-        # For OUT or INOUT parameters, push the address (pass by reference)  
-        if mode in (ParameterMode.OUT, ParameterMode.INOUT):  
-            instruction = f"push @{place}"  # Indicate address push  
-            self.logger.debug(f"Emitting Push Address ({mode.name}): {instruction}")  
-        else:  
-            # For IN parameters, push the value (pass by value)  
-            instruction = f"push {place}"  
-            self.logger.debug(f"Emitting Push Value ({mode.name}): {instruction}")  
-        self.emit(instruction)  
-
-        # --- Simplified logic (commented out) ---
-        # # Always emit 'push' instruction, using the provided place directly
-        # instruction = f"push {place}"
-        # self.logger.debug(f"Emitting Push (Mode: {mode.name}): {instruction}")  
-        # self.emit(instruction)
+        # Always emit 'push' instruction, using the provided place directly
+        instruction = f"push {place}"
+        self.logger.debug(f"Emitting Push (Mode: {mode.name}): {instruction}")  
+        self.emit(instruction)
+        
+        # --- Original logic (commented out) ---
+        # # For OUT or INOUT parameters, push the address (pass by reference)  
+        # if mode in (ParameterMode.OUT, ParameterMode.INOUT):  
+        #     instruction = f"push @{place}"  # Indicate address push  
+        #     self.logger.debug(f"Emitting Push Address ({mode.name}): {instruction}")  
+        # else:  
+        #     # For IN parameters, push the value (pass by value)  
+        #     instruction = f"push {place}"  
+        #     self.logger.debug(f"Emitting Push Value ({mode.name}): {instruction}")  
+        # self.emit(instruction)  
       
     def emitCall(self, proc_name: str):  
         """  
@@ -381,35 +381,3 @@ class TACGenerator:
             # import traceback  
             # self.logger.error(traceback.format_exc())  
             return False  
-
-    # --- Add the mapping function back --- 
-    @staticmethod
-    def map_ada_op_to_tac(ada_op: str) -> str:
-        """
-        Map common Ada operators to their TAC equivalents.
-        Handles case-insensitivity for keywords like 'mod', 'and', 'or'.
-        Returns the operator unchanged if no specific mapping exists.
-        """
-        op_lower = ada_op.lower()
-        op_map = {  
-            "+": "ADD",  
-            "-": "SUB",  
-            "*": "MUL",  
-            "/": "DIV",  # Floating point or integer division based on context later? Assume DIV for now.
-            "div": "IDIV", # Integer division
-            "mod": "MOD",  
-            "rem": "REM",
-            "and": "AND",  
-            "or": "OR",  
-            "not": "NOT", # Unary, but mapping fits here
-            "=": "EQ",
-            "/=": "NE",
-            "<": "LT",
-            ">": "GT",
-            "<=": "LE",
-            ">=": "GE",
-            # Add other operators as needed (e.g., XOR?)
-            # '**' (exponentiation) might require a helper function call in TAC
-        }  
-        # Return mapped TAC op, or uppercase version of input if not found
-        return op_map.get(op_lower, ada_op.upper()) 

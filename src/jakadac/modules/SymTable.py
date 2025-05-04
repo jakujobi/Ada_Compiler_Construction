@@ -99,7 +99,7 @@ class VarType(Enum):
     FLOAT = auto()
     REAL = auto() # Alias for FLOAT
     BOOLEAN = auto() # Added Boolean type
-    STRING = auto() # Added for string literals/constants
+    # Add other Ada types as needed (e.g., STRING, ARRAY, RECORD)
 
 class EntryType(Enum):
     """Enumeration for the kind of symbol being stored."""
@@ -109,7 +109,6 @@ class EntryType(Enum):
     FUNCTION = auto() # Distinguish procedures from functions
     TYPE = auto() # For user-defined types
     PARAMETER = auto() # Explicitly mark parameters
-    STRING_LITERAL = auto() # Added specifically for string literals
 
 class ParameterMode(Enum):
     """Enumeration for parameter passing modes."""
@@ -143,23 +142,16 @@ class Symbol:
         self.param_list: Optional[List['Symbol']] = None # Parameters for PROCEDURE/FUNCTION
         self.param_modes: Optional[Dict[str, ParameterMode]] = None # Modes for parameters
         self.return_type: Optional[VarType] = None # Return type for FUNCTION
-        self.is_parameter: bool = False # Flag to explicitly identify parameters
-        self.size_of_locals: Optional[int] = None # Renamed from local_size for clarity
-        self.size_of_params: Optional[int] = None # Total size of parameters
+        self.local_size: Optional[int] = None # Size of locals for PROCEDURE/FUNCTION
         # Add fields for TYPE definitions if needed (e.g., base type, fields)
 
-    def set_variable_info(self, var_type: VarType, offset: int, size: int, is_parameter: bool = False):
+    def set_variable_info(self, var_type: VarType, offset: int, size: int):
         """Sets attributes specific to VARIABLE or PARAMETER symbols."""
         if self.entry_type not in (EntryType.VARIABLE, EntryType.PARAMETER):
             logger.warning(f"Attempting to set variable info on non-variable/parameter symbol '{self.name}'")
         self.var_type = var_type
         self.offset = offset
         self.size = size
-        self.is_parameter = is_parameter
-        if is_parameter and self.entry_type != EntryType.PARAMETER:
-             logger.warning(f"Setting is_parameter=True for symbol '{self.name}' with entry_type {self.entry_type.name}")
-        elif not is_parameter and self.entry_type == EntryType.PARAMETER:
-             logger.warning(f"Setting is_parameter=False for symbol '{self.name}' with entry_type PARAMETER")
 
     def set_constant_info(self, const_type: VarType, value: Any):
         """Sets attributes specific to CONSTANT symbols."""
@@ -168,48 +160,32 @@ class Symbol:
         self.var_type = const_type
         self.const_value = value
 
-    def set_string_literal_info(self, value: str):
-        """Sets attributes specific to STRING_LITERAL symbols."""
-        if self.entry_type != EntryType.STRING_LITERAL:
-             logger.warning(f"Attempting to set string literal info on non-string-literal symbol '{self.name}'")
-        if not value.endswith('$'):
-             logger.warning(f"String literal value for '{self.name}' does not end with '$'. Appending.")
-             value += '$'
-        self.var_type = VarType.STRING # Assign STRING type
-        self.const_value = value # Store the string value
-
-    def set_procedure_info(self, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], size_of_locals: int, size_of_params: int):
+    def set_procedure_info(self, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int):
         """Sets attributes specific to PROCEDURE symbols."""
         if self.entry_type != EntryType.PROCEDURE:
             logger.warning(f"Attempting to set procedure info on non-procedure symbol '{self.name}'")
         self.param_list = param_list or []
         self.param_modes = param_modes or {}
-        self.size_of_locals = size_of_locals
-        self.size_of_params = size_of_params
+        self.local_size = local_size
 
-    def set_function_info(self, return_type: VarType, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], size_of_locals: int, size_of_params: int):
+    def set_function_info(self, return_type: VarType, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int):
         """Sets attributes specific to FUNCTION symbols."""
         if self.entry_type != EntryType.FUNCTION:
             logger.warning(f"Attempting to set function info on non-function symbol '{self.name}'")
         self.return_type = return_type
         self.param_list = param_list or []
         self.param_modes = param_modes or {}
-        self.size_of_locals = size_of_locals
-        self.size_of_params = size_of_params
+        self.local_size = local_size
 
     def __str__(self) -> str:
         """Provides a concise string representation of the symbol."""
         details = f"name='{self.name}', type={self.entry_type.name}, depth={self.depth}"
         if self.var_type: details += f", var_type={self.var_type.name}"
-        if self.is_parameter: details += f", is_param=True"
         if self.offset is not None: details += f", offset={self.offset}"
         if self.size is not None: details += f", size={self.size}"
-        if self.entry_type in (EntryType.CONSTANT, EntryType.STRING_LITERAL) and self.const_value is not None:
-             details += f", value={self.const_value!r}"
+        if self.const_value is not None: details += f", value={self.const_value!r}"
         if self.return_type: details += f", return={self.return_type.name}"
         if self.param_list is not None: details += f", params={len(self.param_list)}"
-        if self.size_of_locals is not None: details += f", local_sz={self.size_of_locals}"
-        if self.size_of_params is not None: details += f", param_sz={self.size_of_params}"
         return f"Symbol({details})"
 
     def __repr__(self) -> str:
@@ -282,7 +258,6 @@ class SymbolTable:
         Raises:
             DuplicateSymbolError: If a symbol with the same name already exists
                                   in the current scope.
-            ValueError: If symbol depth does not match current scope depth.
         """
         if not self._scope_stack:
              logger.error("Cannot insert symbol: No active scope.")
@@ -295,6 +270,8 @@ class SymbolTable:
 
         # Ensure symbol's depth matches current scope depth
         if symbol.depth != depth:
+            # logger.warning(f"Inserting symbol '{name}' with depth {symbol.depth} into scope {depth}. Adjusting symbol depth.")
+            # symbol.depth = depth # Remove adjustment - enforce correct depth from caller
             logger.error(f"Symbol '{name}' has depth {symbol.depth}, but current scope depth is {depth}.")
             raise ValueError(f"Attempting to insert symbol '{name}' with incorrect depth ({symbol.depth}) into scope {depth}.")
 
@@ -362,31 +339,29 @@ class SymbolTable:
         if not symbols:
             lines.append("<empty>")
             return "\n".join(lines)
-        # Define columns including new ones
-        headers = ["Lexeme", "Class", "Type", "IsParam", "Offset", "Size", "Value", "Params", "LocalSize", "ParamSize"]
+        # Define columns
+        headers = ["Lexeme", "Class", "Type", "Offset", "Size", "Value", "Params", "LocalSize"]
         rows = []
         for sym in symbols.values():
             lex = sym.name
             cls = sym.entry_type.name
-            typ = sym.var_type.name if sym.var_type else ""
-            is_param = str(sym.is_parameter) if sym.is_parameter is not None else ""
-            offset = str(sym.offset) if sym.offset is not None else ""
-            size = str(sym.size) if sym.size is not None else ""
+            typ = ""
+            offset = ""
+            size = ""
             value = ""
             params = ""
-            local_sz = ""
-            param_sz = ""
-
-            if sym.entry_type in (EntryType.CONSTANT, EntryType.STRING_LITERAL):
-                value = repr(sym.const_value) if sym.const_value is not None else ""
-            elif sym.entry_type == EntryType.PROCEDURE or sym.entry_type == EntryType.FUNCTION:
+            localsz = ""
+            if sym.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
+                typ = sym.var_type.name if sym.var_type else ""
+                offset = str(sym.offset) if sym.offset is not None else ""
+                size = str(sym.size) if sym.size is not None else ""
+            elif sym.entry_type == EntryType.CONSTANT:
+                typ = sym.var_type.name if sym.var_type else ""
+                value = str(sym.const_value)
+            elif sym.entry_type == EntryType.PROCEDURE:
                 params = str(len(sym.param_list) if sym.param_list else 0)
-                local_sz = str(sym.size_of_locals) if sym.size_of_locals is not None else ""
-                param_sz = str(sym.size_of_params) if sym.size_of_params is not None else ""
-                if sym.entry_type == EntryType.FUNCTION:
-                     typ = sym.return_type.name if sym.return_type else "N/A"
-
-            rows.append([lex, cls, typ, is_param, offset, size, value, params, local_sz, param_sz])
+                localsz = str(sym.local_size if sym.local_size is not None else 0)
+            rows.append([lex, cls, typ, offset, size, value, params, localsz])
         # Compute column widths
         col_widths = [max(len(headers[i]), *(len(row[i]) for row in rows)) for i in range(len(headers))]
         # Build table
@@ -413,7 +388,7 @@ if __name__ == "__main__":
 
         proc_token = Token("IDENTIFIER", "my_proc", line_number=0, column_number=0)
         my_proc = Symbol("my_proc", proc_token, EntryType.PROCEDURE, symtab.current_depth)
-        my_proc.set_procedure_info([], {}, 0, 0) # No params, 0 local size for example
+        my_proc.set_procedure_info([], {}, 0) # No params, 0 local size for example
         symtab.insert(my_proc)
 
     except DuplicateSymbolError as e:
