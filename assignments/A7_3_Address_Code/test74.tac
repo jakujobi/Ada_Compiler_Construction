@@ -6,8 +6,8 @@ _t2 = 10
 b = _t2
 _t3 = 20
 d = _t3
-_t4 = a MUL b
-_t5 = _BP-4 ADD _t4
+_t4 = a * b
+_t5 = _BP-4 + _t4
 c = _t5
 endp one
 call one
