@@ -41,7 +41,7 @@ class Definitions:
                 # Existing tokens
                 'PROCEDURE', 'MODULE', 'IS', 'BEGIN', 'END',
                 'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP',
-                'INTEGER', 'FLOAT', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
+                'INTEGER', 'FLOAT', 'CHAR', 'ID', 'NUM', 'REAL',
                 'LITERAL', 'CHAR_LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
                 'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
                 'DOT', 'EOF', 'CONCAT', 'IN', 'OUT',
@@ -63,6 +63,8 @@ class Definitions:
                 'INTEGERT', 'REALT', 'CHART', 'CONST',
                 # Added new token types (removed duplicate CONSTANT):
                 'CONSTANT', 'INOUT',
+                # Added for A8 Input/Output
+                'GET', 'PUT', 'PUTLN',
             ]
         )
 
@@ -84,8 +86,6 @@ class Definitions:
             "INTEGER": self.TokenType.INTEGERT,  # Map INTEGER to INTEGERT
             "REAL": self.TokenType.REALT,       # Map REAL to REALT
             "CHAR": self.TokenType.CHART,       # Map CHAR to CHART
-            "GET": self.TokenType.GET,
-            "PUT": self.TokenType.PUT,
             "END": self.TokenType.END,
             "IN": self.TokenType.IN,
             "OUT": self.TokenType.OUT,
@@ -151,7 +151,10 @@ class Definitions:
             "USE": self.TokenType.USE,
             "WHEN": self.TokenType.WHEN,
             "WITH": self.TokenType.WITH,
-            "XOR": self.TokenType.XOR
+            "XOR": self.TokenType.XOR,
+            "GET": self.TokenType.GET,
+            "PUT": self.TokenType.PUT,
+            "PUTLN": self.TokenType.PUTLN
         }
 
         # The token_patterns dictionary holds compiled regular expressions for each token type.
