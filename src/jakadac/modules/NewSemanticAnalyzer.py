@@ -108,22 +108,30 @@ class NewSemanticAnalyzer:
         self.param_offsets[self.symtab.current_depth] = 0
         # Handle formal parameters (inserted at this new scope depth)
         param_list, param_modes = self._visit_formals(node)
+
+        # Calculate total size of parameters
+        size_of_params = sum(p.size for p in param_list if p.size is not None)
+
         # Declarations (constants & variables)
         decls_node = node.find_child_by_name("DeclarativePart")
         self._visit_declarative_part(decls_node)
+
         # Nested procedures
         procs_node = node.find_child_by_name("Procedures")
         if procs_node:
             for child in procs_node.children:
                 if child.name == "Prog":
                     self._visit_program(child)
+
         # Check statements for undeclared identifier uses
         stmts_node = node.find_child_by_name("SeqOfStatements")
         if stmts_node:
             self._visit_statements(stmts_node)
+
         # Record local size and update procedure info
         local_size = self.offsets[self.symtab.current_depth]
-        proc_symbol.set_procedure_info(param_list, param_modes, local_size)
+        proc_symbol.set_procedure_info(param_list, param_modes, local_size, size_of_params)
+
         # Dump and exit this scope
         self._dump_scope(self.symtab.current_depth)
         self.symtab.exit_scope()
