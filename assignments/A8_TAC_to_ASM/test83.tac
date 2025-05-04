@@ -9,4 +9,4 @@ _t4 = _BP-4 * _BP-8
 _t5 = _BP-2 + _t4
 CC = _t5
 endp three
-START	PROC	three
+START PROC three

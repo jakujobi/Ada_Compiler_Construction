@@ -389,7 +389,7 @@ class NewSemanticAnalyzer:
                 dfs(child)
 
         if node:
-        dfs(node)
+            dfs(node)
 
     def _visit_assign_stat(self, node: ParseTreeNode) -> None:
         """Check that the variable on the left side of an assignment is declared."""

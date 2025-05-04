@@ -44,33 +44,62 @@ class TACGenerator:
         """  
         self.output_filename = output_filename  
         self.temp_counter = 0  # For generating temporary variables  
-        self.tac_lines = []    # List of TAC instructions  
-        self.start_proc_name = None  # Store the outermost procedure name
+        self.tac_lines: List[Union[str, tuple]] = []    # List of TAC instructions (can be tuple or string)  
+        self.start_proc_name = None  # Store the outermost procedure name  
+        self.string_literals: Dict[str, str] = {} # For storing string labels -> values  
+        self.string_label_counter = 0 # For generating unique string labels  
         
-        # Track procedure declarations for reordering
-        self.proc_declarations = {}
-        self.current_proc = None
-        self.pending_main_proc = None
-        self.main_proc_instructions = []
+        # Track procedure declarations for reordering  
+        self.proc_declarations = {}  
+        self.current_proc = None  
+        self.pending_main_proc = None  
+        self.main_proc_instructions: List[Union[str, tuple]] = [] # Store tuples or strings  
         
         self.logger = logger  
         self.logger.info(f"TAC Generator initialized. Output Target: '{self.output_filename}'")  
       
-    def emit(self, instruction_str: str):  
+    def _format_instruction(self, instruction: Union[str, tuple]) -> str:  
+        """Formats a TAC instruction tuple into a string."""  
+        if isinstance(instruction, str):  
+            return instruction # Already formatted  
+        elif isinstance(instruction, tuple):  
+            op = instruction[0]  
+            args = instruction[1:]  
+            if op in ('rdi', 'wri', 'wrs', 'push', 'call', 'proc', 'endp', 'START PROC'): # Instructions with 1 arg  
+                return f"{op} {args[0]}"  
+            elif op in ('wrln',): # Instructions with 0 args  
+                return op  
+            elif op == '=': # Assignment  
+                if len(args) == 2:  
+                    return f"{args[0]} = {args[1]}"  
+                elif len(args) == 3: # Unary op assignment  
+                    return f"{args[0]} = {args[1]} {args[2]}"  
+            elif op in ('+', '-', '*', '/', 'mod', 'rem', 'and', 'or'): # Binary op assignment  
+                if len(args) == 3:  
+                    return f"{args[0]} = {args[1]} {op} {args[2]}"  
+            # Add other formatting rules as needed  
+            self.logger.warning(f"Unrecognized TAC tuple format: {instruction}. Using default format.")  
+            return " ".join(map(str, instruction))  
+        else:  
+            self.logger.error(f"Cannot format non-string/non-tuple instruction: {instruction}")  
+            return "ERROR_FORMATTING"  
+      
+    def emit(self, instruction: Union[str, tuple]):  
         """  
-        Emit a TAC instruction.  
+        Emit a TAC instruction (tuple preferred).  
           
         Args:  
-            instruction_str: The instruction string to emit  
+            instruction: The instruction tuple or string to emit  
         """  
-        # If we're in the main procedure, add to deferred list
-        if self.pending_main_proc and self.current_proc == self.pending_main_proc:
-            self.main_proc_instructions.append(instruction_str)
-            self.logger.debug(f"Added to deferred main proc: {instruction_str}")
-        else:
-            # Regular emit - add to tac_lines directly
-            self.tac_lines.append(instruction_str)  
-            self.logger.debug(f"Emit TAC: {instruction_str}")  
+        # Format the instruction for logging and potentially for immediate list storage  
+        # instruction_str = self._format_instruction(instruction)  
+      
+        if self.pending_main_proc and self.current_proc == self.pending_main_proc:  
+            self.main_proc_instructions.append(instruction) # Store tuple/string  
+            self.logger.debug(f"Added to deferred main proc: {instruction}")  
+        else:  
+            self.tac_lines.append(instruction) # Store tuple/string  
+            self.logger.debug(f"Emit TAC: {instruction}")  
       
     def _newTempName(self) -> str:  
         """  
@@ -125,15 +154,21 @@ class TACGenerator:
 
             # Handle constants - use their value directly
             if symbol.entry_type == EntryType.CONSTANT and symbol.const_value is not None:
-                place_str = str(symbol.const_value)
-                self.logger.debug(f"Place for CONSTANT '{symbol.name}' is value: {place_str}")
+                 # Check if it's a string literal constant (using label as name)
+                 if isinstance(symbol.const_value, str) and symbol.name.startswith("_S"):
+                     place_str = symbol.name # Use the label as the place
+                     self.logger.debug(f"Place for STRING CONSTANT '{symbol.name}' is label: {place_str}")
+                 else:
+                    place_str = str(symbol.const_value)
+                    self.logger.debug(f"Place for CONSTANT '{symbol.name}' is value: {place_str}")
 
             # Handle Variables/Parameters based on scope depth
             elif symbol.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER) and symbol.offset is not None:
                 if current_proc_depth is None: # Should not happen if parsing structured code
                     self.logger.error(f"getPlace called for {symbol.name} outside a procedure scope. Using name.")
                     place_str = symbol.name
-                elif symbol.depth == current_proc_depth + 1:
+                # Check if symbol belongs to the current procedure's scope (depth + 1)
+                elif symbol.depth == (current_proc_depth + 1 if current_proc_depth is not None else 0):
                     # LOCAL to the current procedure: Use BP Offset
                     if symbol.entry_type == EntryType.PARAMETER:
                         # Positive offset for parameters relative to BP
@@ -141,24 +176,25 @@ class TACGenerator:
                         self.logger.debug(f"Place for LOCAL PARAMETER '{symbol.name}' (Depth {symbol.depth}) is BP offset: {place_str}")
                     else: # VARIABLE
                         # Negative offset for local variables relative to BP
-                        offset_val = symbol.offset # Assume offset is already negative
-                        if offset_val > 0: # Safety check if offset logic was positive
-                             self.logger.warning(f"Local variable '{symbol.name}' offset {symbol.offset} is positive, expected negative. Using as is.")
-                        place_str = f"_BP{offset_val}" 
+                        offset_val = symbol.offset # Assume offset is already negative or 0
+                        if offset_val > 0: # Safety check if offset logic was positive for locals
+                             self.logger.warning(f"Local variable '{symbol.name}' offset {symbol.offset} is positive, expected negative or zero. Using as is.")
+                        # Use _BP-N for negative offsets, _BP for offset 0 (potentially first local)
+                        place_str = f"_BP{offset_val}" if offset_val < 0 else f"_BP+{offset_val}" # Or just _BP if 0?
                         self.logger.debug(f"Place for LOCAL VARIABLE '{symbol.name}' (Depth {symbol.depth}) is BP offset: {place_str}")
-                elif symbol.depth <= current_proc_depth:
+                # Check if symbol belongs to an enclosing scope (including global 0)
+                elif current_proc_depth is not None and symbol.depth <= current_proc_depth:
                     # From an ENCLOSING scope (including global depth 0): Use Name
-                    # Note: Depth 0 variables are handled implicitly here if current_proc_depth >= 0
                     place_str = symbol.name
                     self.logger.debug(f"Place for ENCLOSING SCOPE Symbol '{symbol.name}' (Declared Depth {symbol.depth}, Current Depth {current_proc_depth}) is name: {place_str}")
                 else:
                     # Should not happen with correct parsing/symbol table depth tracking
                     self.logger.error(f"Unexpected depth scenario for Symbol '{symbol.name}' (Declared Depth {symbol.depth}, Current Depth {current_proc_depth}). Using name.")
                     place_str = symbol.name
-        
+
             # Handle Procedure/Function names (typically just use the name)
             elif symbol.entry_type in (EntryType.PROCEDURE, EntryType.FUNCTION):
-                 place_str = symbol.name 
+                 place_str = symbol.name
                  self.logger.debug(f"Place for PROCEDURE/FUNCTION Symbol '{symbol.name}' is name: {place_str}")
 
             # Handle other unexpected symbol types or symbols without offsets
@@ -172,7 +208,12 @@ class TACGenerator:
         # Handle direct strings (e.g., from expression parsing results that aren't temps or symbols)
         elif isinstance(symbol_or_value, str):
              self.logger.debug(f"Getting place for a raw string value: '{symbol_or_value}'")
-             place_str = symbol_or_value # Assume it's a literal or already processed place
+             # Check if it looks like a BP offset
+             if symbol_or_value.startswith("_BP"):
+                 place_str = symbol_or_value
+             # Assume it's a literal, temp, or global name otherwise
+             else:
+                 place_str = symbol_or_value
 
         # Log the final place decision
         self.logger.debug(f"==> Final Place determined: {place_str}")
@@ -188,7 +229,7 @@ class TACGenerator:
             left_place: The left operand place  
             right_place: The right operand place  
         """  
-        instruction = f"{dest_place} = {left_place} {op} {right_place}"  
+        instruction = (op, dest_place, left_place, right_place)  
         self.logger.debug(f"Emitting Binary Op: {instruction}")  
         self.emit(instruction)  
       
@@ -201,7 +242,7 @@ class TACGenerator:
             dest_place: The destination place  
             operand_place: The operand place  
         """  
-        instruction = f"{dest_place} = {op} {operand_place}"  
+        instruction = ('=', dest_place, op, operand_place)  
         self.logger.debug(f"Emitting Unary Op: {instruction}")  
         self.emit(instruction)  
       
@@ -213,7 +254,7 @@ class TACGenerator:
             dest_place: The destination place  
             source_place: The source place  
         """  
-        instruction = f"{dest_place} = {source_place}"  
+        instruction = ('=', dest_place, source_place)  
         self.logger.debug(f"Emitting Assignment: {instruction}")  
         self.emit(instruction)  
       
@@ -224,21 +265,21 @@ class TACGenerator:
         Args:  
             proc_name: The name of the procedure  
         """  
-        instruction = f"proc {proc_name}"  
+        instruction = ('proc', proc_name)  
         self.logger.info(f"Emitting Procedure Start: {instruction}")  
         
-        # Track the current procedure for instruction sorting
-        self.current_proc = proc_name
+        # Track the current procedure for instruction sorting  
+        self.current_proc = proc_name  
         
-        # Check if this is the main procedure (outermost)
-        if self.start_proc_name == proc_name:
-            self.pending_main_proc = proc_name
-            self.main_proc_instructions = []  # Clear any old instructions
-            self.logger.debug(f"Main procedure '{proc_name}' declarations will be deferred")
-            self.main_proc_instructions.append(instruction)  # Add to main proc instructions
-        else:
-            # This is an inner procedure - emit directly
-            self.emit(instruction)
+        # Check if this is the main procedure (outermost)  
+        if self.start_proc_name == proc_name:  
+            self.pending_main_proc = proc_name  
+            self.main_proc_instructions = []  # Clear any old instructions  
+            self.logger.debug(f"Main procedure '{proc_name}' declarations will be deferred")  
+            self.main_proc_instructions.append(instruction)  # Add to main proc instructions  
+        else:  
+            # This is an inner procedure - emit directly  
+            self.emit(instruction)  
         
         # Reset temporary counter for this procedure's scope  
         self.temp_counter = 0  
@@ -251,133 +292,160 @@ class TACGenerator:
         Args:  
             proc_name: The name of the procedure  
         """  
-        instruction = f"endp {proc_name}"  
+        instruction = ('endp', proc_name)  
         self.logger.info(f"Emitting Procedure End: {instruction}")  
         
-        # If this is the end of the main procedure, store it but don't emit yet
-        if self.pending_main_proc == proc_name:
-            self.main_proc_instructions.append(instruction)
-            self.logger.debug(f"Added end directive for main procedure '{proc_name}' to deferred list")
-        else:
-            # Inner procedure - emit directly
-            self.emit(instruction)
+        # If ending the deferred main procedure, append endp and process  
+        if self.pending_main_proc and self.current_proc == self.pending_main_proc:  
+            self.main_proc_instructions.append(instruction)  
+            # Reorder instructions: main procedure first, then others  
+            self.tac_lines = self.main_proc_instructions + self.tac_lines  
+            self.logger.debug(f"Deferred main procedure '{proc_name}' ended and instructions prepended.")  
+            self.pending_main_proc = None # Reset pending flag  
+            self.main_proc_instructions = []  
+        else:  
+            self.emit(instruction)  
             
-        # Reset current procedure tracking
-        self.current_proc = None
+        # Reset current_proc context if needed (optional, might be handled by caller)  
+        # self.current_proc = None  
       
     def emitPush(self, place: str, mode: ParameterMode):  
         """  
-        Emit a push instruction for procedure calls.  
-        NOTE: Simplified to always emit 'push' based on exp_test75.tac format.
-        The 'mode' argument is kept for potential future use or debugging.
-        
-        Args:  
-            place: The place to push (value, address source, or name)  
-            mode: The parameter mode (currently ignored for instruction generation)
+        Emit a push instruction for a parameter.  
+        Handles adding '@' for OUT/INOUT parameters.  
+        Format: ('push', place_or_addr)  
         """  
-        # Always emit 'push' instruction, using the provided place directly
-        instruction = f"push {place}"
-        self.logger.debug(f"Emitting Push (Mode: {mode.name}): {instruction}")  
-        self.emit(instruction)
-        
-        # --- Original logic (commented out) ---
-        # # For OUT or INOUT parameters, push the address (pass by reference)  
-        # if mode in (ParameterMode.OUT, ParameterMode.INOUT):  
-        #     instruction = f"push @{place}"  # Indicate address push  
-        #     self.logger.debug(f"Emitting Push Address ({mode.name}): {instruction}")  
-        # else:  
-        #     # For IN parameters, push the value (pass by value)  
-        #     instruction = f"push {place}"  
-        #     self.logger.debug(f"Emitting Push Value ({mode.name}): {instruction}")  
-        # self.emit(instruction)  
+        operand = place  
+        if mode in (ParameterMode.OUT, ParameterMode.INOUT):  
+            # Check if place is already an address (e.g., global variable name)  
+            # This logic might be tricky. Assume getPlace provides the correct base name.  
+            # Let ASM generator handle dereferencing globals vs. locals.  
+            operand = f"@{place}"  
+            self.logger.debug(f"Pushing address for OUT/INOUT param: {operand}")  
+        else:  
+            self.logger.debug(f"Pushing value for IN param: {operand}")  
+
+        instruction = ('push', operand)  
+        self.emit(instruction)  
       
     def emitCall(self, proc_name: str):  
         """  
-        Emit a procedure call instruction.  
+        Emit a call instruction.  
           
         Args:  
             proc_name: The name of the procedure to call  
         """  
-        instruction = f"call {proc_name}"  
+        instruction = ('call', proc_name)  
         self.logger.debug(f"Emitting Call: {instruction}")  
         self.emit(instruction)  
       
-    def emitRead(self, place: str):
-        """
-        Emit a read instruction (for GET).
-        
-        Args:
-            place: The destination place for the input
-        """
-        instruction = f"read {place}"
-        self.logger.debug(f"Emitting Read: {instruction}")
-        self.emit(instruction)
-        
-    def emitWrite(self, place: str):
-        """
-        Emit a write instruction (for PUT).
-        
-        Args:
-            place: The source place to output
-        """
-        instruction = f"write {place}"
-        self.logger.debug(f"Emitting Write: {instruction}")
-        self.emit(instruction)
+    # --- New I/O Methods ---  
+    def emitRead(self, place: str):  
+        """  
+        Emit a read integer instruction.  
+        Format: ('rdi', place)  
+        """  
+        instruction = ('rdi', place)  
+        self.logger.info(f"Emitting Read Int: {instruction}")  
+        self.emit(instruction)  
+      
+    def emitWrite(self, place: str):  
+        """  
+        Emit a write integer instruction.  
+        Format: ('wri', place)  
+        """  
+        # Semantic check: Is place likely an integer? (Best effort)  
+        # Could check symbol table type if place is a symbol name  
+        instruction = ('wri', place)  
+        self.logger.info(f"Emitting Write Int: {instruction}")  
+        self.emit(instruction)  
+      
+    def emitWriteString(self, string_value: str):  
+        """  
+        Emit a write string instruction.  
+        Generates a label, stores the string, and emits 'wrs'.  
+        Format: ('wrs', label)  
+        """  
+        # Generate label  
+        label = f"_S{self.string_label_counter}"  
+        self.string_label_counter += 1  
+
+        # Store processed string value with terminator  
+        processed_value = string_value # Assuming parser already processed escapes  
+        if not processed_value.endswith('$'):  
+             processed_value += '$'  
+        self.string_literals[label] = processed_value  
+        self.logger.debug(f"Stored string literal: {label} -> \"{processed_value}\"")  
+
+        # Emit instruction  
+        instruction = ('wrs', label)  
+        self.logger.info(f"Emitting Write String: {instruction}")  
+        self.emit(instruction)  
+      
+    def emitNewLine(self):  
+        """  
+        Emit a write newline instruction.  
+        Format: ('wrln',)  
+        """  
+        instruction = ('wrln',)  
+        self.logger.info(f"Emitting Write Newline: {instruction}")  
+        self.emit(instruction)  
+    # --- End New I/O Methods ---  
       
     def emitProgramStart(self, main_proc_name: str):  
         """  
-        Record the outermost procedure name for the final 'start' directive. # REVERTED
-          
-        Args:  
-            main_proc_name: The name of the main procedure  
+        Emit the START PROC directive after all code.  
+        This now just records the main procedure name for reordering logic.  
+        Format: ('START PROC', main_proc_name)  
         """  
-        self.logger.info(f"Recording program start procedure: '{main_proc_name}'")  
-        self.start_proc_name = main_proc_name # REVERTED 
-        # --- REMOVED: Emit start instruction directly --- 
-        # start_instruction = f"start proc {main_proc_name}"
-        # self.logger.debug(f"Emit TAC: {start_instruction}")
-        # self.emit(start_instruction) 
+        # Store the name of the procedure designated as the program entry point  
+        self.start_proc_name = main_proc_name  
+        self.logger.info(f"Program entry point set to: '{main_proc_name}'")  
+        # The actual START PROC line is added during writeOutput  
+      
+    def get_string_literals(self) -> Dict[str, str]:  
+        """Returns the dictionary of stored string literals (label -> value)."""  
+        return self.string_literals.copy()  
       
     def writeOutput(self) -> bool:  
         """  
-        Write the TAC instructions to the output file.  
-          
-        Returns:  
-            True if successful, False otherwise  
+        Write the generated TAC instructions to the output file.  
+        Handles reordering and adding START PROC.  
+        Returns True on success, False on failure.  
         """  
-        # Add any deferred main procedure instructions AFTER all other procedure declarations
-        if self.main_proc_instructions:
-            self.logger.info(f"Appending {len(self.main_proc_instructions)} deferred instructions for main procedure '{self.pending_main_proc}'")
-            self.tac_lines.extend(self.main_proc_instructions)
-            
-        self.logger.info(f"Attempting to write {len(self.tac_lines)} TAC instructions to '{self.output_filename}'...")
+        self.logger.info(f"Writing TAC output to: {self.output_filename}")  
 
-        # Append the final START PROC instruction if a start procedure was identified
-        if self.start_proc_name:
-            start_instruction = f"START\tPROC\t{self.start_proc_name}"
-            self.tac_lines.append(start_instruction)
-            self.logger.debug(f"Appended final START instruction: {start_instruction}")
-        else:
-            self.logger.warning("No start procedure name was recorded; cannot emit START PROC directive.")
+        # Ensure main procedure (if deferred) is processed  
+        if self.pending_main_proc:  
+             self.logger.warning(f"Main procedure '{self.pending_main_proc}' was started but not ended. Appending instructions.")  
+             # Append an endp if missing?  
+             if not self.main_proc_instructions or self.main_proc_instructions[-1] != ('endp', self.pending_main_proc):  
+                  self.main_proc_instructions.append(('endp', self.pending_main_proc))  
+             self.tac_lines = self.main_proc_instructions + self.tac_lines  
+             self.pending_main_proc = None  
+
+        # Add START PROC directive at the end if a start procedure was identified  
+        if self.start_proc_name:  
+            start_instruction = ('START PROC', self.start_proc_name)  
+            self.tac_lines.append(start_instruction)  
+            self.logger.debug(f"Appended final instruction: {start_instruction}")  
+        else:  
+            self.logger.warning("No start procedure was designated (emitProgramStart never called).")  
 
         try:  
-            # Ensure the output directory exists  
-            output_path = Path(self.output_filename)  
-            output_path.parent.mkdir(parents=True, exist_ok=True)  
+            # Ensure output directory exists  
+            output_dir = Path(self.output_filename).parent  
+            output_dir.mkdir(parents=True, exist_ok=True)  
   
-            with open(output_path, 'w', encoding='utf-8') as f:  
-                # Write all collected TAC instructions  
-                for line in self.tac_lines:  
-                    f.write(f"{line}\n")  
-  
-            self.logger.info(f"TAC output successfully written to '{self.output_filename}'")  
+            with open(self.output_filename, 'w') as f:  
+                for instruction in self.tac_lines:  
+                    formatted_line = self._format_instruction(instruction)  
+                    f.write(formatted_line + '\n')  
+            self.logger.info(f"Successfully wrote {len(self.tac_lines)} TAC lines.")  
             return True  
-        except IOError as e:  # Catch specific IO errors  
-            self.logger.error(f"IOError writing TAC output to '{self.output_filename}': {e}")  
+        except IOError as e:  
+            self.logger.error(f"Failed to write TAC file '{self.output_filename}': {e}")  
             return False  
-        except Exception as e:  # Catch any other unexpected errors  
-            self.logger.error(f"Unexpected error writing TAC output to '{self.output_filename}': {e}")  
-            # Optionally log traceback for unexpected errors  
-            # import traceback  
-            # self.logger.error(traceback.format_exc())  
-            return False  
+        except Exception as e:  
+            self.logger.error(f"An unexpected error occurred during TAC writing: {e}")  
+            return False
