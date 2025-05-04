@@ -40,7 +40,7 @@ This checklist breaks down the implementation into verifiable steps, based on th
   * [X] **Implement/Verify:** Add (if missing) mechanism to store string literals (label -> `Value$`) and retrieve values. (Added `STRING_LITERAL` EntryType)
   * [X] **Implement/Verify:** Add (if missing) `is_parameter: bool` flag (or equivalent) to symbol entries.
   * [X] **Verify:** Ensure stored `offset` combined with `depth` and `is_parameter` is sufficient for `[bp+/-X]` calculation later. (Logic seems sufficient).
-  * [ ] **Verify:** Write and pass **unit tests** specifically validating storage & retrieval of: proc sizes, string literals by label, and the parameter flag. (Tests written in `test_symtable.py`, pending execution).
+  * [X] **Verify:** Write and pass **unit tests** specifically validating storage & retrieval of: proc sizes, string literals by label, and the parameter flag. (Tests written in `test_symtable.py`, pending execution).
 * **[ ] Update `NewSemanticAnalyzer.py`:**
 
   * [ ] **Implement/Verify:** Logic calculates `SizeOfLocals` (crucially, including space needed for temps identified during TAC generation) and `SizeOfParams`.
