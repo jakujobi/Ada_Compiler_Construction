@@ -33,19 +33,19 @@ This checklist breaks down the implementation into verifiable steps, based on th
 
   * [X] No changes likely needed.
   * [X] **Verify:** (Covered by `Definitions.py` verification).
-* **[ ] Update `SymTable.py` (CRITICAL):**
+* **[X] Update `SymTable.py` (CRITICAL):**
 
-  * [ ] **Implement/Verify:** Add (if missing) `size_of_locals: int` field to procedure entries.
-  * [ ] **Implement/Verify:** Add (if missing) `size_of_params: int` field to procedure entries.
-  * [ ] **Implement/Verify:** Add (if missing) mechanism to store string literals (label -> `Value$`) and retrieve values.
-  * [ ] **Implement/Verify:** Add (if missing) `is_parameter: bool` flag (or equivalent) to symbol entries.
-  * [ ] **Verify:** Ensure stored `offset` combined with `depth` and `is_parameter` is sufficient for `[bp+/-X]` calculation later.
-  * [ ] **Verify:** Write and pass **unit tests** specifically validating storage & retrieval of: proc sizes, string literals by label, and the parameter flag.
+  * [X] **Implement/Verify:** Add (if missing) `size_of_locals: int` field to procedure entries. *(Used existing `local_size` field)*
+  * [X] **Implement/Verify:** Add (if missing) `size_of_params: int` field to procedure entries. *(Added `param_size` field)*
+  * [X] **Implement/Verify:** Add (if missing) mechanism to store string literals (label -> `Value$`) and retrieve values. *(Using `EntryType.CONSTANT`, label as name, value in `const_value`)*
+  * [X] **Implement/Verify:** Add (if missing) `is_parameter: bool` flag (or equivalent) to symbol entries. *(Using existing `EntryType.PARAMETER`)*
+  * [X] **Verify:** Ensure stored `offset` combined with `depth` and `is_parameter` is sufficient for `[bp+/-X]` calculation later. *(Confirmed structure stores necessary info)*
+  * [ ] **Verify:** Write and pass **unit tests** specifically validating storage & retrieval of: proc sizes, string literals by label, and the parameter flag. *(Tests added to `test_symtable.py`, but need import resolution)*
 * **[ ] Update `NewSemanticAnalyzer.py`:**
 
   * [ ] **Implement/Verify:** Logic calculates `SizeOfLocals` (crucially, including space needed for temps identified during TAC generation) and `SizeOfParams`.
-  * [ ] **Implement/Verify:** Logic stores calculated sizes into the procedure's `SymbolTable` entry.
-  * [ ] **Implement/Verify:** Logic identifies string literals in `put`/`putln`, calls `SymbolTable` to store them, and gets back the label.
+  * [ ] **Implement/Verify:** Logic stores calculated sizes into the procedure's `SymbolTable` entry (using `local_size` and `param_size` fields).
+  * [ ] **Implement/Verify:** Logic identifies string literals in `put`/`putln`, calls `SymbolTable` to store them (as `CONSTANT` with label as name, value in `const_value`), and gets back the label.
   * [ ] **Verify:** Run Semantic Analysis on test procedures; **inspect `SymbolTable` state/dump** to confirm correct sizes are stored and string literals are added.
 * **[ ] Update `Parser` (`RDParserExtExt.py` / Mixins):**
 

@@ -143,6 +143,7 @@ class Symbol:
         self.param_modes: Optional[Dict[str, ParameterMode]] = None # Modes for parameters
         self.return_type: Optional[VarType] = None # Return type for FUNCTION
         self.local_size: Optional[int] = None # Size of locals for PROCEDURE/FUNCTION
+        self.param_size: Optional[int] = None # Added: Use for SizeOfParams (total bytes)
         # Add fields for TYPE definitions if needed (e.g., base type, fields)
 
     def set_variable_info(self, var_type: VarType, offset: int, size: int):
@@ -160,15 +161,16 @@ class Symbol:
         self.var_type = const_type
         self.const_value = value
 
-    def set_procedure_info(self, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int):
+    def set_procedure_info(self, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int, param_size: int):
         """Sets attributes specific to PROCEDURE symbols."""
         if self.entry_type != EntryType.PROCEDURE:
             logger.warning(f"Attempting to set procedure info on non-procedure symbol '{self.name}'")
         self.param_list = param_list or []
         self.param_modes = param_modes or {}
         self.local_size = local_size
+        self.param_size = param_size # Store total parameter size
 
-    def set_function_info(self, return_type: VarType, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int):
+    def set_function_info(self, return_type: VarType, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int, param_size: int):
         """Sets attributes specific to FUNCTION symbols."""
         if self.entry_type != EntryType.FUNCTION:
             logger.warning(f"Attempting to set function info on non-function symbol '{self.name}'")
@@ -176,6 +178,7 @@ class Symbol:
         self.param_list = param_list or []
         self.param_modes = param_modes or {}
         self.local_size = local_size
+        self.param_size = param_size # Store total parameter size
 
     def __str__(self) -> str:
         """Provides a concise string representation of the symbol."""
@@ -185,7 +188,10 @@ class Symbol:
         if self.size is not None: details += f", size={self.size}"
         if self.const_value is not None: details += f", value={self.const_value!r}"
         if self.return_type: details += f", return={self.return_type.name}"
-        if self.param_list is not None: details += f", params={len(self.param_list)}"
+        # Display calculated sizes if available
+        if self.local_size is not None: details += f", local_size={self.local_size}"
+        if self.param_size is not None: details += f", param_size={self.param_size}"
+        elif self.param_list is not None: details += f", params={len(self.param_list)}" # Fallback if size not set
         return f"Symbol({details})"
 
     def __repr__(self) -> str:
@@ -388,7 +394,7 @@ if __name__ == "__main__":
 
         proc_token = Token("IDENTIFIER", "my_proc", line_number=0, column_number=0)
         my_proc = Symbol("my_proc", proc_token, EntryType.PROCEDURE, symtab.current_depth)
-        my_proc.set_procedure_info([], {}, 0) # No params, 0 local size for example
+        my_proc.set_procedure_info([], {}, 0, 0) # No params, 0 local size, 0 param size for example
         symtab.insert(my_proc)
 
     except DuplicateSymbolError as e:
