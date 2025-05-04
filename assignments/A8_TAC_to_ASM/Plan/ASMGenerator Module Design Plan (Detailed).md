@@ -38,10 +38,10 @@ This document provides a detailed plan for the 8086 assembly code generation mod
     * **Action:**
       1. Strip leading/trailing whitespace. Ignore empty lines or comment lines (if any defined).
       2. Check for and extract a leading label (e.g., L1:). Store label without the colon.
-      3. Split the remaining string (likely by whitespace or comma, depending on TAC format) into components.
+      3. **(Crucial!)** Based on the **actual, observed format** of your A7 TAC output (delimiters, operand order), split the remaining string into components.
       4. Identify the opcode (usually the first component after the label, or the first component if no label).
-      5. Map the remaining components to op1, op2, dest based on the *known format* of the specific opcode. This requires a mapping or conditional logic (e.g., for dest \= op1 op op2, the order is dest, op1, op2 after the \=; for wrs Label, the order is just op1=Label; for proc Name, dest=Name). Needs careful definition based on A7's output format.
-      6. Handle instructions with varying numbers of operands gracefully (e.g., wrln has none, push @Var has one, add has three).
+      5. Map the remaining components to op1, op2, dest based on the *known format* of the specific opcode. Define expected patterns clearly (e.g., for `dest = op1 op op2`, order might be dest, op1, op2 after `=`; for `wrs Label`, just op1=Label; for `proc Name`, dest=Name).
+      6. Handle instructions with varying numbers of operands gracefully (e.g., `wrln` has none, `push @Var` has one, `add` has three).
     * **Output:** Populated TACInstruction instance. Raise an error for unparseable lines.
 
 ### **2.2. TACParser Class**
@@ -123,8 +123,9 @@ This document provides a detailed plan for the 8086 assembly code generation mod
          * If entry.depth \>= 2:
            * Retrieve offset \= entry.offset and is\_param \= entry.isParameter.
            * **Translate Internal Offset to 8086 Offset:**
-             * If is\_param: asm\_offset \= offset \+ 4 (Assuming internal param offsets start at 0 for first param, 2 for second... and account for RetAddr(+2) and OldBP(+0)). **Verify this calculation carefully based on how offsets are stored in SymTable\!** Example: If offset 0 is first param, calc is 0 \+ 4 \= 4\. If offset 2 is second param, calc is 2 \+ 4 \= 6\.
-             * Else (local/temp): asm\_offset \= \-(offset \+ 2\) (Assuming internal local/temp offsets start at 0 for first, 2 for second... and account for OldBP(+0)). Example: If offset 0 is first local, calc is \-(0+2) \= \-2. If offset 2 is second local, calc is \-(2+2) \= \-4.
+             * **(Verify!)** Cross-reference your specific stack frame documentation (`Notes/Semantic Analysis.md`, `Notes/Symbol Tables.md`) for exact layout.
+             * If is\_param: asm\_offset \= offset \+ 4 (Assuming internal param offsets start at 0, first param is at [bp+4] after RetAddr(+2) and OldBP(+0)). Example: offset 0 -> +4, offset 2 -> +6.
+             * Else (local/temp): asm\_offset \= \-(offset \+ 2\) (Assuming internal local/temp offsets start at 0, first local is at [bp-2] after OldBP(+0)). Example: offset 0 -> -2, offset 2 -> -4.
            * Return formatted f"\[bp{'+' if asm\_offset \> 0 else ''}{asm\_offset}\]".
       6. **Error:** If lookup fails or type is unexpected, raise an informative error including the tac\_operand and line\_number (if available).
     * **Output:** The assembly operand string (e.g., "10", "\[bp-4\]", "\[bp+6\]", "myGlobal", "OFFSET \_S0", "cc").
@@ -142,12 +143,14 @@ This document provides a detailed plan for the 8086 assembly code generation mod
       * dest \= formatter.format\_operand(instr.dest, ...)
       * src \= formatter.format\_operand(instr.op1, ...)
       * Return \[f" mov ax, {src}", f" mov {dest}, ax"\] (Handle potential immediate source differently if needed: mov {dest}, {src}).
+      * **Note on Dereferencing:** If `dest` corresponds to a reference parameter (e.g., looks like `[bp+N]` from formatter), the sequence should be: `mov bx, dest_address_from_[bp+N]; mov ax, src; mov [bx], ax`. Similarly, if `src` is a reference parameter: `mov bx, src_address_from_[bp+N]; mov ax, [bx]; mov dest, ax`.
     * **translate\_add(self, instr, formatter):**
       * dest \= formatter.format\_operand(instr.dest, ...)
       * op1 \= formatter.format\_operand(instr.op1, ...)
       * op2 \= formatter.format\_operand(instr.op2, ...)
       * Return \[f" mov ax, {op1}", f" add ax, {op2}", f" mov {dest}, ax"\]
-    * **translate\_mul(self, instr, formatter):** (Similar to add, using mov bx, op2, imul bx)
+      * **Note on Dereferencing:** Similar logic applies if operands or destination are reference parameters (load address to BX, use `[bx]` for operation, store result via `[bx]` if dest is reference).
+    * **translate\_mul(self, instr, formatter):** (Similar to add, using mov bx, op2, imul bx, apply dereferencing logic)
     * **translate\_proc(self, instr, formatter):**
       * proc\_name \= instr.dest
       * proc\_info \= self.symbol\_table.lookup(proc\_name)
@@ -208,3 +211,8 @@ This document provides a detailed plan for the 8086 assembly code generation mod
       9. Writes the result to self.asm\_filepath.
   * \_generate\_main\_entry(self) \-\> List\[str\]:
     * **Action:** Returns the list of strings for the standard main PROC block, ensuring call {self.start\_proc\_name} uses the name collected during the loop. Includes error handling if start\_proc\_name is missing.
+
+## **3\. Error Handling & Logging**
+
+* Implement specific and informative error messages throughout all components (e.g., "Invalid TAC format on line {line_num}: {line}", "SymbolTable lookup failed for identifier '{operand}' in procedure '{proc_name}' during TAC line {line_num}", "Missing required procedure size information for '{proc_name}' in SymbolTable").
+* Utilize the existing `Logger` for debug tracing and informational messages.

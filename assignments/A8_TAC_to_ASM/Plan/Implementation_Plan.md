@@ -8,7 +8,9 @@
    * **Action:** Before making *any* changes for Assignment 8, ensure your current working A7 code is committed to a stable branch (e.g., `main` or `assignment-7`).
    * Create a new branch specifically for Assignment 8: `git checkout -b assignment-8`.
    * **All subsequent modifications** (to existing modules and addition of new ones) will be performed  **on this `assignment-8` branch** . This isolates A8 development and preserves the working state of previous assignments.
-2. **Existing Module Updates (Perform on `assignment-8` branch):**
+2. **Confirm A7 TAC Format:**
+    * **Action:** Before implementing `TACParser`, review the output of your A7 `TACGenerator` for a few key test cases. Note the exact format (delimiters, operand order for different opcodes) to guide the parsing logic in `TACInstruction.from_tac_line`.
+3. **Existing Module Updates (Perform on `assignment-8` branch):**
    * **Goal:** Modify existing compiler components to support A8 features (I/O, required symbol table info).
    * **Sub-Plan & Verification:**
      * **`Definitions.py`:**
@@ -27,18 +29,19 @@
        * **Change:** Verify/implement logic to calculate total `SizeOfLocals` (including temps) and `SizeOfParams` for each procedure. Store these values in the procedure's `SymbolTable` entry. Verify/implement logic to identify string literals during `put`/`putln` analysis, interface with `SymbolTable` to store the literal and get its unique label (e.g., `_S0`).
        * **Verification:** After semantic analysis, inspect `SymbolTable` dump/state for procedures; verify `SizeOfLocals` and `SizeOfParams` are present and correct. Verify string literals result in labeled entries in the `SymbolTable`.
      * **`SymTable.py`:**
-       * **Change:** **CRITICAL.** Verify/add fields to procedure symbol entries for `size_of_locals: int` and `size_of_params: int`. Verify/add mechanism to store string literal values mapped to unique labels (e.g., new entry type or field in constant entry). Verify/add `is_parameter: bool` flag (or equivalent mechanism) to distinguish parameters from locals. Ensure `offset` storage is sufficient for `ASMOperandFormatter` to calculate final `[bp+/-X]`.
+       * **Change:** **CRITICAL.** Ensure the `SymbolTable` implementation **supports** (adding if necessary) fields in procedure entries for `size_of_locals: int` and `size_of_params: int`. Implement a mechanism to store string literal values mapped to unique labels (e.g., new entry type or field in constant entry). Ensure an `is_parameter: bool` flag (or equivalent) exists to distinguish parameters from locals. Verify that `offset` storage provides sufficient info for `ASMOperandFormatter` to calculate final `[bp+/-X]`.
        * **Verification:** Write/run unit tests specifically validating storage and retrieval of procedure sizes, string literal values by label, and the parameter flag.
      * **`Driver.py` / `JohnA8.py`:**
        * **Change:** Add the ASM generation phase after TAC generation. Instantiate `ASMGenerator`, pass necessary inputs (TAC path, ASM path, populated `SymbolTable`), and call `asm_generator.generate_asm()`.
        * **Verification:** Run the full driver; verify it proceeds through all phases including ASM generation without crashing. Check that `.tac` and `.asm` files are produced.
-3. **`io.asm`:** Place `io.asm` in an accessible location (e.g., project root or output directory).
-4. **Verify `io.asm` Conventions:** Open `io.asm` source. Confirm and document register usage:
+4. **`io.asm`:** Place `io.asm` in an accessible location (e.g., project root or output directory).
+5. **Verify `io.asm` Conventions:** Open `io.asm` source. Confirm and document register usage:
    * `readint`: Returns value in `BX`. (Confirmed)
-   * `writeint`: Expects value in **`AX`** or  **`DX`** ?  **(Action: Verify & Document)** .
+   * `writeint`: Expects value in **`AX`** or  **`DX`** ?  **(Action: Verify & Document findings clearly below or in Comp_Findings_A8.md)**.
+     * *Verified `writeint` register: [Enter Register Here, e.g., AX]*
    * `writestr`: Expects offset in `DX`. (Confirmed)
-5. **Tooling:** Confirm MASM/TASM and DOSBox installation and operation.
-6. **Symbol Table Access:** Ensure the `Driver` correctly passes the *populated* `SymbolTable` instance to the `ASMGenerator`.
+6. **Tooling:** Confirm MASM/TASM and DOSBox installation and operation.
+7. **Symbol Table Access:** Ensure the `Driver` correctly passes the *populated* `SymbolTable` instance to the `ASMGenerator`.
 
 ## 1. Phase 0: Foundational ASM Generator Components & Verification
 
@@ -133,3 +136,4 @@
 * **Logging:** Use `Logger.py` for DEBUG and INFO level messages.
 * **Testing Strategy:** Combine unit, incremental integration, and final system tests.
 * **Code Quality:** Follow PEP 8, use type hints, write docstrings and comments.
+
