@@ -4,7 +4,7 @@ This checklist breaks down the implementation into verifiable steps, based on th
 
 ## Phase 0: Prerequisites & Setup
 
-* **[ ] Git Branching:**
+* **[X] Git Branching:**
 
   * [X] Ensure A7 code is committed to a stable branch (`main` or `assignment-7`).
   * [X] Create and checkout a new branch: `git checkout -b A8-work`.
@@ -32,38 +32,38 @@ This checklist breaks down the implementation into verifiable steps, based on th
 * **[X] Update `LexicalAnalyzer.py`:**
 
   * [X] No changes likely needed.
-  * [ ] **Verify:** (Covered by `Definitions.py` verification).
-* **[ ] Update `SymbolTable.py` (CRITICAL):**
+  * [X] **Verify:** (Covered by `Definitions.py` verification).
+* **[ ] Update `SymTable.py` (CRITICAL):**
 
-  * [ ] **Implement/Verify:** Procedure entries support `size_of_locals: int` field.
-  * [ ] **Implement/Verify:** Procedure entries support `size_of_params: int` field.
-  * [ ] **Implement/Verify:** Mechanism exists to store string literals (e.g., `_S0`) and retrieve their values (e.g., `"Prompt$"`). Ensure stored value includes `$` terminator.
-  * [ ] **Implement/Verify:** Symbol entries have an `is_parameter: bool` flag (or equivalent).
-  * [ ] **Implement/Verify:** Stored `offset` combined with `depth` and `is_parameter` is sufficient for `[bp+/-X]` calculation later.
-  * [ ] **Verify:** Write and pass **unit tests** for storing/retrieving proc sizes, string literals by label, and parameter flags.
+  * [ ] **Implement/Verify:** Add (if missing) `size_of_locals: int` field to procedure entries.
+  * [ ] **Implement/Verify:** Add (if missing) `size_of_params: int` field to procedure entries.
+  * [ ] **Implement/Verify:** Add (if missing) mechanism to store string literals (label -> `Value$`) and retrieve values.
+  * [ ] **Implement/Verify:** Add (if missing) `is_parameter: bool` flag (or equivalent) to symbol entries.
+  * [ ] **Verify:** Ensure stored `offset` combined with `depth` and `is_parameter` is sufficient for `[bp+/-X]` calculation later.
+  * [ ] **Verify:** Write and pass **unit tests** specifically validating storage & retrieval of: proc sizes, string literals by label, and the parameter flag.
 * **[ ] Update `NewSemanticAnalyzer.py`:**
 
-  * [ ] **Implement/Verify:** Logic calculates `SizeOfLocals` (including space for temps based on TAC generation analysis) and `SizeOfParams` during procedure analysis.
+  * [ ] **Implement/Verify:** Logic calculates `SizeOfLocals` (crucially, including space needed for temps identified during TAC generation) and `SizeOfParams`.
   * [ ] **Implement/Verify:** Logic stores calculated sizes into the procedure's `SymbolTable` entry.
-  * [ ] **Implement/Verify:** Logic identifies string literals in `put`/`putln` and calls `SymbolTable` to store them and get back a label (e.g., `_S0`).
-  * [ ] **Verify:** Run Semantic Analysis on test procedures; inspect `SymbolTable` state/dump to confirm correct sizes are stored. Verify string literals are added to `SymbolTable`.
+  * [ ] **Implement/Verify:** Logic identifies string literals in `put`/`putln`, calls `SymbolTable` to store them, and gets back the label.
+  * [ ] **Verify:** Run Semantic Analysis on test procedures; **inspect `SymbolTable` state/dump** to confirm correct sizes are stored and string literals are added.
 * **[ ] Update `Parser` (`RDParserExtExt.py` / Mixins):**
 
   * [ ] **Implement:** New parsing methods for I/O grammar (`IO_Stat`, `In_Stat`, `Out_Stat`, etc.).
-  * [ ] **Implement:** Integrate calls to new I/O parsing methods into `Parse_Statement`.
-  * [ ] **Implement:** Semantic actions within I/O parsing methods call `TACGenerator` correctly for `rdi`, `wrs`, `wri`, `wrln` (using labels for strings).
-  * [ ] **Implement:** Logic for `CALL ProcName(Args...)` semantic action retrieves `ProcName`'s parameter info (modes) from `SymbolTable`.
-  * [ ] **Implement:** Semantic action for `CALL` signals `TACGenerator` to emit `push @Arg` for `OUT`/`IN OUT` params, and `push Arg` for `IN` params.
-  * [ ] **Verify:** Parse Ada code with various I/O statements; check for syntax errors.
+  * [ ] **Implement:** Integrate calls to I/O parsing methods into `Parse_Statement`.
+  * [ ] **Implement:** Semantic actions in I/O methods call `TACGenerator` for `rdi`, `wrs` (using label), `wri`, `wrln`.
+  * [ ] **Implement:** `CALL ProcName(Args...)` semantic action retrieves `ProcName`'s parameter **modes** from `SymbolTable`.
+  * [ ] **Implement:** `CALL` semantic action signals `TACGenerator` to emit `push @Arg` for `OUT`/`IN OUT` params, `push Arg` for `IN` params.
+  * [ ] **Verify:** Parse Ada code with I/O statements; check for syntax errors. Verify required `SymbolTable` lookups occur.
 * **[ ] Update `TACGenerator.py`:**
 
   * [ ] **Implement:** New methods (`emit_read_int`, `emit_write_int`, `emit_write_string`, `emit_write_newline`).
-  * [ ] **Implement/Verify:** `emit_push` (or similar method) accepts an argument/flag to handle emitting `push @VarName` vs `push VarName`.
+  * [ ] **Implement/Verify:** `emit_push` (or similar) accepts argument/flag to emit `push @VarName` vs `push VarName`.
   * [ ] **Verify:** Unit test new `emit_` methods.
-  * [ ] **Verify (Integration):** Run Ada -> TAC pipeline on code with I/O and reference parameters. Inspect `.tac` output for correctly formatted `rdi`, `wrs`, `wri`, `wrln`, and `push @Var` / `push Var` instructions.
+  * [ ] **Verify (Integration):** Run Ada -> TAC pipeline with I/O & reference params. **Inspect `.tac` output** for correct `rdi`, `wrs`, `wri`, `wrln`, and `push @Var`/`push Var`.
 * **[ ] Update `Driver.py` / `JohnA8.py`:**
 
-  * [ ] Ensure `SymbolTable` instance passed to subsequent phases is the *final, populated* one after parsing/semantic analysis.
+  * [ ] Ensure *final, populated* `SymbolTable` instance is available for later phases.
 
   * *Note: Adding the `ASMGenerator` call happens later (Phase 1/2).*
 
@@ -71,12 +71,12 @@ This checklist breaks down the implementation into verifiable steps, based on th
 
 * **Goal:** Create basic structures for holding/parsing TAC, ready for ASM generation.
 * **[ ] Implement `TACInstruction` Data Class (`src/jakadac/asm_generator/tac_instruction.py`):**
-  * [ ] Define `@dataclass` with `line_number`, `label`, `opcode`, `op1`, `op2`, `dest`.
-  * [ ] Implement `TACInstruction.from_tac_line()` based on **confirmed A7 TAC format**.
-  * [ ] **Verify:** Unit test `from_tac_line` with diverse valid/invalid TAC lines matching your format.
+  * [ ] Define `@dataclass` with fields (`line_number`, `label`, `opcode`, `op1`, `op2`, `dest`, potentially `op3` for binary ops based on format).
+  * [ ] Implement `TACInstruction.from_tac_line()` based on **confirmed A7 TAC format** (handle different operand counts, comments, `START PROC` structure).
+  * [ ] **Verify:** Unit test `from_tac_line` robustly with diverse valid/invalid TAC lines matching your confirmed format.
 * **[ ] Implement `TACParser` Class (`src/jakadac/asm_generator/tac_parser.py`):**
   * [ ] Implement `__init__(tac_filepath)`.
-  * [ ] Implement `parse() -> List[TACInstruction]` using `TACInstruction.from_tac_line()`. Handle file errors.
+  * [ ] Implement `parse() -> List[TACInstruction]` using `TACInstruction.from_tac_line()`. Handle file I/O errors.
   * [ ] **Verify:** Unit test `TACParser.parse` with sample `.tac` files. Check returned list structure and error handling.
 
 ## Phase 2: Skeleton Generation & Data Collection
@@ -84,171 +84,92 @@ This checklist breaks down the implementation into verifiable steps, based on th
 * **Goal:** Generate the basic `.asm` file structure and `.data` section.
 * **[ ] Implement `DataSegmentManager` (`src/jakadac/asm_generator/data_segment_manager.py`):**
   * [ ] Implement `__init__(symbol_table)`.
-  * [ ] Implement `collect_definitions(instructions: List[TACInstruction])` - identify globals (depth 1) and string labels (`_S...`) by looking up operands in `SymbolTable`. Store unique globals and `label -> value` string pairs. Handle `c` -> `cc` renaming for globals if lexeme is 'c'.
-  * [ ] Implement `get_data_section_asm() -> List[str]` - format `.data` section lines (`VarName DW ?`, `_SLabel DB "Value$",'$'`). Ensure sorting for consistent output.
-  * [ ] **Verify:** Unit test `DataSegmentManager` with mock `SymbolTable` and `TACInstruction` list. Check `.data` output format.
+  * [ ] Implement `collect_definitions(...)`: identify globals (depth 1 vars) & string labels (`_S...`) via `SymbolTable` lookups. Store unique globals & `label -> value` pairs. Handle `c`->`cc`.
+  * [ ] Implement `get_data_section_asm()`: format `.data` section lines (`VarName DW ?`, `_SLabel DB "Value$",'$'`). **Ensure sorting** for consistent output.
+  * [ ] **Verify:** Unit test `DataSegmentManager` with mock `SymbolTable`/Instructions. Check `.data` output format.
 * **[ ] Implement `ASMOperandFormatter` (`src/jakadac/asm_generator/asm_operand_formatter.py`):**
   * [ ] Implement `__init__(symbol_table)`.
-  * [ ] Implement basic `format_operand(tac_operand, ...)`: handle immediate values, handle global variables (depth 1 lookup, apply `c` -> `cc` rename).
-  * [ ] **Verify:** Unit test `format_operand` for immediate and global variable cases.
+  * [ ] Implement basic `format_operand(...)`: handle immediates, handle globals (depth 1 lookup, apply `c`->`cc`).
+  * [ ] **Verify:** Unit test `format_operand` for immediate and global cases.
 * **[ ] Implement `ASMGenerator` (`src/jakadac/asm_generator/asm_generator.py`):**
   * [ ] Implement `__init__(tac_filepath, asm_filepath, symbol_table)`. Instantiate `TACParser`, `DataSegmentManager`, `ASMOperandFormatter`.
-  * [ ] Implement `_generate_main_entry()` returning a *static minimal* `main PROC` (DS init, basic DOS exit).
-  * [ ] Implement `generate_asm()`:
-    * Call `tac_parser.parse()`.
-    * Call `data_manager.collect_definitions()`.
-    * Call `data_manager.get_data_section_asm()`.
-    * Assemble and write basic `.asm` file: Boilerplate (`.model`, `.586`, `.stack`) + `.data` section + `.code` + `include io.asm` + minimal `main PROC` + `END main`.
-  * [ ] **Modify `Driver.py` / `JohnA8.py`:** Add the call to instantiate and run `ASMGenerator.generate_asm()` after TAC generation, passing the required paths and the populated `SymbolTable`.
-  * [ ] **Verify (Integration):** Run Driver (`python JohnA8.py testfile.ada`) on an Ada file generating simple TAC (globals only).
-    * [ ] Check if `.tac` and `.asm` files are created.
-    * [ ] Inspect `.asm` for correct boilerplate, `.data` (globals only), `.code`, `include`, minimal `main`.
-    * [ ] Assemble the generated `.asm` with MASM/TASM. **Verify it assembles without errors.** (Covers R2, R3, R4.1 partially, R5, R6 partially).
+  * [ ] Implement `_generate_main_entry()` returning *static minimal* `main PROC`.
+  * [ ] Implement `generate_asm()`: Call parser & data manager; write boilerplate, `.data`, `.code`, `include`, minimal `main`, `END main`.
+  * [ ] **Modify `Driver.py` / `JohnA8.py`:** Add call to instantiate & run `ASMGenerator.generate_asm()` after TAC gen, passing paths & populated `SymbolTable`.
+  * [ ] **Verify (Integration):** Run Driver on simple Ada->TAC->ASM (globals only). Check `.asm` created. Inspect boilerplate, `.data`, `include`, `main`. **Assemble `.asm` with MASM/TASM - verify no errors.**
 
 ## Phase 3: Basic Procedures & Global Assignments
 
 * **Goal:** Translate `proc`/`endp`, `call`, and `=` involving globals/immediates.
 * **[ ] Implement `ASMInstructionMapper` (`src/jakadac/asm_generator/asm_instruction_mapper.py`):**
   * [ ] Implement `__init__(symbol_table)`.
-* **[ ] Implement `ASMInstructionMapper.translate_proc`:**
-  * [ ] Lookup proc info in `SymbolTable` to get `SizeOfLocals`.
-  * [ ] Generate `Name PROC`, `push bp`, `mov bp, sp`, `sub sp, SizeOfLocals` ASM lines.
-* **[ ] Implement `ASMInstructionMapper.translate_endp`:**
-  * [ ] Lookup proc info in `SymbolTable` to get `SizeOfLocals`, `SizeOfParams`.
-  * [ ] Generate `add sp, SizeOfLocals`, `pop bp`, `ret SizeOfParams`, `Name ENDP` ASM lines.
-* **[ ] Implement `ASMInstructionMapper.translate_assign`:**
-  * [ ] Use `ASMOperandFormatter` for `dest` and `src`.
-  * [ ] Generate `mov ax, src` / `mov dest, ax` (or `mov dest, immediate` if src is immediate).
-* **[ ] Implement `ASMInstructionMapper.translate_call`:**
-  * [ ] Generate `call ProcName`.
+* **[ ] Implement `ASMInstructionMapper.translate_proc`:** Lookup `SizeOfLocals` from `SymbolTable`. Generate `Name PROC`, prologue (`push bp`, `mov bp, sp`, `sub sp, SizeOfLocals`).
+* **[ ] Implement `ASMInstructionMapper.translate_endp`:** Lookup `SizeOfLocals`, `SizeOfParams`. Generate epilogue (`add sp, SizeOfLocals`, `pop bp`, `ret SizeOfParams`), `Name ENDP`.
+* **[ ] Implement `ASMInstructionMapper.translate_assign`:** Format operands. Generate `mov ax, src`/`mov dest, ax` (or `mov dest, immediate`).
+* **[ ] Implement `ASMInstructionMapper.translate_call`:** Format operand (ProcName). Generate `call ProcName`.
 * **[ ] Enhance `ASMGenerator.generate_asm()`:**
   * [ ] Instantiate `ASMInstructionMapper`.
-  * [ ] Modify main loop:
-    * Handle `START` TAC: Store `start_proc_name = instr.op1`.
-    * Handle `PROC` TAC: Set `current_proc_context = instr.dest`; call `mapper.translate_proc`.
-    * Handle `ENDP` TAC: Call `mapper.translate_endp`; clear `current_proc_context`.
-    * Handle `=` TAC: Call `mapper.translate_assign`.
-    * Handle `CALL` TAC: Call `mapper.translate_call`.
-    * Handle labels: Append `instr.label + ':'`.
-  * [ ] Modify `_generate_main_entry()` to use the collected `start_proc_name` in the `call UserMainProc` line. Add error check if `start_proc_name` is missing.
-* **[ ] Verify (Unit Tests):** Unit test `translate_proc`, `translate_endp`, `translate_assign` (global/immediate cases), `translate_call`.
-* **[ ] Verify (Integration):** Run Driver on Ada code generating TAC with empty procedures, calls between them, global assignments, and a `START` directive.
-  * [ ] Inspect `.asm` for correct `PROC`/`ENDP` blocks.
-  * [ ] Verify procedure prologues/epilogues (check `sub sp`, `ret N` values against `SymbolTable` data).
-  * [ ] Verify `call` instructions.
-  * [ ] Verify global assignments.
-  * [ ] Verify `main PROC` calls the correct user procedure.
-  * [ ] Assemble `.asm` and run in DOSBox (e.g., Test Case 1). Check for clean execution and termination. (Covers R6 fully, R7, R8, R10 partially, R12).
+  * [ ] Modify main loop: Handle `STARTPROC` (store name), `PROC` (set context, call mapper), `ENDP` (clear context, call mapper), `=`, `CALL` (call mapper), labels (`Label:`).
+  * [ ] Modify `_generate_main_entry()` to use collected `start_proc_name` & add error check.
+* **[ ] Verify (Unit Tests):** Unit test `translate_proc/endp/assign/call`.
+* **[ ] Verify (Integration):** Run Driver (Ada->ASM) with procedures, calls, global assignments, `START`. Inspect `.asm` for `PROC`/`ENDP`, prologues/epilogues (verify sizes!), `call`, assignments, `main`. Assemble & run (Test Case 1 equiv). Check clean execution.
 
 ## Phase 4: Locals, Temps & Arithmetic
 
 * **Goal:** Implement `[bp+/-X]` addressing and `+`, `*` translation.
 * **[ ] Enhance `ASMOperandFormatter.format_operand`:**
-  * [ ] **Implement:** Full logic for depth >= 2 operands.
-  * [ ] Retrieve `offset`, `isParameter` from `SymbolTable` entry.
-  * [ ] **Implement:** Translate internal offset to final 8086 `[bp+/-X]` string (e.g., local offset 0 -> `[bp-2]`, param offset 0 -> `[bp+4]`). **Double-check calculation against stack layout documentation.**
-  * [ ] Handle `c`->`cc` rename for local/temp 'c'.
-  * [ ] **Verify:** Unit test `format_operand` extensively for various local, parameter, and temporary variable cases (`[bp-...]`, `[bp+...]`).
+  * [ ] **Implement:** Full logic for depth >= 2: Retrieve `offset`, `isParameter`. Translate internal offset to `[bp+/-X]` (**Double-check calc against stack docs!**). Handle `c`->`cc`.
+  * [ ] **Verify:** Unit test `format_operand` extensively for locals, params, temps (`[bp-...]`, `[bp+...]`).
 * **[ ] Enhance `ASMInstructionMapper`:**
-  * [ ] Implement `translate_add`: `mov ax, op1; add ax, op2; mov dest, ax`. Ensure operands are formatted correctly.
-  * [ ] Implement `translate_mul`: `mov ax, op1; mov bx, op2; imul bx; mov dest, ax`. Ensure operands are formatted correctly.
-  * [ ] Update `translate_assign` to handle stack variable destinations/sources correctly using the enhanced `ASMOperandFormatter`.
-  * [ ] **Verify:** Unit test `translate_add`, `translate_mul`. Re-test `translate_assign` with stack variables.
-* **[ ] Enhance `ASMGenerator.generate_asm()`:**
-  * [ ] Add handling for `+`, `*` opcodes in the main loop, calling the mapper.
-* **[ ] Verify (Integration):** Run Driver on Ada code generating TAC involving local variables, temps, and arithmetic (`+`, `*`).
-  * [ ] Inspect `.asm` for correct `[bp-...]` and `[bp+...]` usage in assignments and arithmetic.
-  * [ ] Verify arithmetic instruction sequences.
-  * [ ] Assemble `.asm`. Run in DOSBox (may require simple I/O or debugger to verify results). (Covers R9.2, R10 fully, R11, R18).
+  * [ ] Implement `translate_add`: `mov ax, op1; add ax, op2; mov dest, ax`. Format operands.
+  * [ ] Implement `translate_mul`: `mov ax, op1; mov bx, op2; imul bx; mov dest, ax`. Format operands.
+  * [ ] Update `translate_assign` for stack variables using enhanced formatter.
+  * [ ] **Verify:** Unit test `translate_add/mul`. Re-test `translate_assign` with stack vars.
+* **[ ] Enhance `ASMGenerator.generate_asm()`:** Add handling for `+`, `*` opcodes (if separate from `=`).
+* **[ ] Verify (Integration):** Run Driver (Ada->ASM) with locals, temps, arithmetic. Inspect `.asm` for correct `[bp...]` usage & arithmetic sequences. Assemble & Run (use I/O or debugger to check results).
 
 ## Phase 5: String Output & Literals
 
 * **Goal:** Handle string literals and translate `wrs`, `wrln`.
-* **[ ] Verify Prerequisite:** Confirm `SymbolTable` stores `Label -> Value$` pairs and `TACGenerator` emits `wrs Label` TAC correctly.
-* **[ ] Enhance `DataSegmentManager`:**
-  * [ ] Verify `collect_definitions` retrieves string labels/values from `SymbolTable`.
-  * [ ] Verify `get_data_section_asm` generates correct `_SLabel DB "Value$",'$'` lines.
-  * [ ] **Verify:** Re-run unit tests for `DataSegmentManager` focusing on string literal handling.
-* **[ ] Enhance `ASMOperandFormatter.format_operand`:**
-  * [ ] **Implement/Verify:** Logic translates `_SLabel` operands to `OFFSET _SLabel`.
-  * [ ] **Verify:** Unit test `format_operand` for string label cases.
-* **[ ] Implement `ASMInstructionMapper.translate_wrs`:**
-  * [ ] Generate `mov dx, OFFSET Label; call writestr`.
-  * [ ] **Verify:** Unit test `translate_wrs`.
-* **[ ] Implement `ASMInstructionMapper.translate_wrln`:**
-  * [ ] Generate `call writeln`.
-  * [ ] **Verify:** Unit test `translate_wrln`.
-* **[ ] Enhance `ASMGenerator.generate_asm()`:**
-  * [ ] Add handling for `wrs`, `wrln` opcodes in main loop.
-* **[ ] Verify (Integration):** Run Driver on Ada code using `put` / `putln` with string literals.
-  * [ ] Inspect `.data` section for correct string definitions.
-  * [ ] Inspect `.code` section for `mov dx, OFFSET ...; call writestr` and `call writeln`.
-  * [ ] Assemble `.asm`, run in DOSBox, verify correct string and newline output. (Covers R4.2, R9.4, R15.1, R15.4).
+* **[ ] Verify Prerequisite:** Confirm `SymbolTable` stores `Label -> Value$` pairs & `TACGenerator` emits `wrs Label`.
+* **[ ] Enhance `DataSegmentManager`:** Verify `collect_definitions` retrieves strings & `get_data_section_asm` generates `Label DB "Value$",'$'`. Verify via unit tests.
+* **[ ] Enhance `ASMOperandFormatter.format_operand`:** Implement/Verify translation of `_SLabel` to `OFFSET _SLabel`. Verify via unit tests.
+* **[ ] Implement `ASMInstructionMapper.translate_wrs`:** Generate `mov dx, OFFSET Label; call writestr`. Verify via unit test.
+* **[ ] Implement `ASMInstructionMapper.translate_wrln`:** Generate `call writeln`. Verify via unit test.
+* **[ ] Enhance `ASMGenerator.generate_asm()`:** Add handling for `wrs`, `wrln`.
+* **[ ] Verify (Integration):** Run Driver (Ada->ASM) with `put`/`putln` strings. Inspect `.data` & `.code`. Assemble, run, verify string/newline output.
 
 ## Phase 6: Parameter Passing (Value) & Integer Output
 
 * **Goal:** Implement pass-by-value (`push`) and integer output (`wri`).
-* **[ ] Implement `ASMInstructionMapper.translate_push`:**
-  * [ ] Format the operand using `ASMOperandFormatter`.
-  * [ ] Generate `mov ax, FormattedValueOperand; push ax` (or `push ImmediateValue`).
-  * [ ] **Verify:** Unit test `translate_push`.
+* **[ ] Implement `ASMInstructionMapper.translate_push`:** Format operand. Generate `mov ax, ValueOperand; push ax` (or `push Immediate`). Verify via unit test.
 * **[ ] Verify `ASMInstructionMapper.translate_endp`:** Ensure `ret N` uses correct `SizeOfParams`.
-* **[ ] Verify `ASMOperandFormatter.format_operand`:** Ensure it correctly formats parameters (`[bp+X]`).
-* **[ ] Implement `ASMInstructionMapper.translate_wri`:**
-  * [ ] Format operand using `ASMOperandFormatter`.
-  * [ ] Generate `mov REG, FormattedValueOperand; call writeint` (using the register **confirmed** for `writeint` in Phase 0).
-  * [ ] **Verify:** Unit test `translate_wri`.
-* **[ ] Enhance `ASMGenerator.generate_asm()`:**
-  * [ ] Add handling for `push` (value) and `wri` opcodes.
-* **[ ] Verify (Integration):** Run Driver on Ada code equivalent to Test Case 3 (procedures with value parameters, integer output).
-  * [ ] Inspect `.asm` for correct `push` instructions before `call`.
-  * [ ] Verify callee accesses parameters via correct `[bp+N]`.
-  * [ ] Verify `ret N` matches `SizeOfParams`.
-  * [ ] Verify `wri` translation uses correct register and operand.
-  * [ ] Assemble, run in DOSBox, verify correct parameter passing and integer output. (Covers R13, R15.2).
+* **[ ] Verify `ASMOperandFormatter.format_operand`:** Ensure correct formatting for parameters (`[bp+X]`).
+* **[ ] Implement `ASMInstructionMapper.translate_wri`:** Format operand. Generate `mov REG, ValueOperand; call writeint` (using **confirmed** register). Verify via unit test.
+* **[ ] Enhance `ASMGenerator.generate_asm()`:** Add handling for `push` (value) & `wri`.
+* **[ ] Verify (Integration):** Run Driver (Ada->ASM) for Test Case 3 equiv. Inspect `push`, `ret N`, `[bp+X]`, `wri` translation. Assemble, run, verify param passing & integer output.
 
 ## Phase 7: Integer Input & Pass-by-Reference
 
 * **Goal:** Implement integer input (`rdi`) and pass-by-reference (`push @`, dereferencing).
-* **[ ] Implement `ASMInstructionMapper.translate_rdi`:**
-  * [ ] Format destination address operand (e.g., `[bp-2]`) using `ASMOperandFormatter`.
-  * [ ] Generate `call readint; mov FormattedAddressOperand, bx`.
-  * [ ] **Verify:** Unit test `translate_rdi`.
-* **[ ] Implement `ASMInstructionMapper.translate_push_ref`:**
-  * [ ] Get the *unformatted variable name* (`instr.op1`). Assume TAC format is `push @VarName`.
-  * [ ] Generate `mov ax, offset VarName; push ax`. *(Handle potential global vs. local offset needed? Check MASM `offset` behavior for stack vars if needed - usually works for globals)*. Revisit if `offset` doesn't work directly for stack vars.
-  * [ ] **Verify:** Unit test `translate_push_ref`.
-* **[ ] Enhance `ASMInstructionMapper` (Dereferencing):**
-  * [ ] Modify `translate_assign`, `translate_add`, `translate_mul` to handle cases where source or destination operands correspond to reference parameters.
-  * [ ] Logic: If operand is reference param `[bp+N]`, load address `mov bx, [bp+N]`, then use `[bx]` for loads (`mov ax, [bx]`) or stores (`mov [bx], ax`).
-  * [ ] **Verify:** Re-run/add unit tests for `translate_assign/add/mul` covering reference parameter cases.
-* **[ ] Enhance `ASMGenerator.generate_asm()`:**
-  * [ ] Add handling for `rdi` and `push @` opcodes.
-* **[ ] Verify (Integration):** Run Driver on Ada code equivalent to Test Case 5 (procedures with reference parameters, integer input).
-  * [ ] Inspect `.asm` for `push offset VarName` for reference args.
-  * [ ] Inspect `.asm` for `call readint; mov Address, bx`.
-  * [ ] Inspect `.asm` for dereferencing logic (`mov bx, [bp+N]; ... mov [bx], ax` or `mov ax, [bx]`).
-  * [ ] Verify `ret N` is correct.
-  * [ ] Assemble, run in DOSBox, provide input, verify caller variable is modified correctly after call returns. (Covers R14, R15.3).
+* **[ ] Implement `ASMInstructionMapper.translate_rdi`:** Format address operand. Generate `call readint; mov AddressOperand, bx`. Verify via unit test.
+* **[ ] Implement `ASMInstructionMapper.translate_push_ref`:** Assume TAC `push @VarName`. Generate `mov ax, offset VarName; push ax`. (*Verify MASM `offset` works for stack vars; revisit if needed*). Verify via unit test.
+* **[ ] Enhance `ASMInstructionMapper` (Dereferencing):** Modify `assign/add/mul` to handle reference params: load address `mov bx, [bp+N]`, use `[bx]` for loads/stores. **Verify via unit tests** covering ref param cases.
+* **[ ] Enhance `ASMGenerator.generate_asm()`:** Add handling for `rdi` & `push @`.
+* **[ ] Verify (Integration):** Run Driver (Ada->ASM) for Test Case 5 equiv. Inspect `push offset`, `ret N`, `call readint`, `mov Address, bx`, dereferencing (`mov bx, [bp+N]; ... [bx] ...`). Assemble, run, provide input, verify caller variable modified.
 
 ## Phase 8: Final Integration, Testing & Refinement
 
 * **Goal:** Ensure end-to-end correctness against all official tests.
-* **[ ] Execute Full Pipeline:**
-  * [ ] Run `python JohnA8.py test8X.ada` for all official A8 test files (test81 through test86 or similar).
-* **[ ] Assemble & Link:**
-  * [ ] Use MASM/TASM to assemble each generated `test8X_exp.asm` (or your output name).
-  * [ ] Link to create `.exe`.
-  * [ ] **Resolve ALL assembly/linking errors.**
-* **[ ] Run in DOSBox:**
-  * [ ] Execute each `test8X.exe`.
-* **[ ] Verify Output & Behavior:**
-  * [ ] Compare actual program output/behavior against the expected output/behavior for each test case. Use `fc` command or similar for comparing output files if applicable.
-  * [ ] **Resolve ALL discrepancies.**
-* **[ ] Debugging:**
-  * [ ] Use logging, debugger (if possible, e.g., DOSBox debugger), or manual code inspection to trace errors back through TAC and ASM generation.
-* **[ ] Code Review & Cleanup:**
-  * [ ] Review code for clarity, correctness, PEP 8 adherence.
-  * [ ] Add/improve comments and docstrings.
-  * [ ] Remove unused code or debugging statements.
+* **[ ] Execute Full Pipeline:** Run `python JohnA8.py test8X.ada` for all official tests.
+* **[ ] Assemble & Link:** Use MASM/TASM on each generated `.asm`. Link `.exe`. **Resolve ALL errors.**
+* **[ ] Run in DOSBox:** Execute each `test8X.exe`.
+* **[ ] Verify Output & Behavior:** Compare actual vs expected output. Use `fc` if helpful. **Resolve ALL discrepancies.**
+* **[ ] Debugging:** Use logging, debugger, manual inspection to trace errors.
+* **[ ] Code Review & Cleanup:** Review clarity, correctness, PEP 8. Add comments/docstrings. Remove debug code.
 * **[ ] Final Verification:** Confirm all requirements R1-R18 are met.
+
+## Overall Considerations
+
+* **[ ] Error Handling:** Implement robust `try...except` blocks and specific, informative custom exceptions throughout.
+* **[ ] Logging:** Use `Logger.py` for DEBUG/INFO messages to trace execution and states.
