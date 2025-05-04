@@ -41,29 +41,29 @@ This checklist breaks down the implementation into verifiable steps, based on th
   * [X] **Implement/Verify:** Add (if missing) `is_parameter: bool` flag (or equivalent) to symbol entries. *(Using existing `EntryType.PARAMETER`)*
   * [X] **Verify:** Ensure stored `offset` combined with `depth` and `is_parameter` is sufficient for `[bp+/-X]` calculation later. *(Confirmed structure stores necessary info)*
   * [X] **Verify:** Write and pass **unit tests** specifically validating storage & retrieval of: proc sizes, string literals by label, and the parameter flag. *(Tests added to `test_symtable.py`, but need import resolution)*
-* **[ ] Update `NewSemanticAnalyzer.py`:**
+* **[X ] Update `NewSemanticAnalyzer.py`:**
 
   * [X] **Implement/Verify:** Logic calculates `SizeOfLocals` (crucially, including space needed for temps identified during TAC generation - *Note: Currently calculates declared locals size only*) and `SizeOfParams`.
   * [X] **Implement/Verify:** Logic stores calculated sizes into the procedure's `SymbolTable` entry (using `local_size` and `param_size` fields).
   * [X] **Implement/Verify:** Logic identifies string literals in `put`/`putln`, calls `SymbolTable` to store them (as `CONSTANT` with label as name, value in `const_value`), and gets back the label. *(Added `_handle_string_literal` and example call in `_visit_statements`)*
-  * [ ] **Verify:** Run Semantic Analysis on test procedures; **inspect `SymbolTable` state/dump** to confirm correct sizes are stored and string literals are added.
-* **[ ] Update `Parser` (`RDParserExtExt.py` / Mixins):**
+  * [X] **Verify:** Run Semantic Analysis on test procedures; **inspect `SymbolTable` state/dump** to confirm correct sizes are stored and string literals are added.
+* **[X ] Update `Parser` (`RDParserExtExt.py` / Mixins):**
 
-  * [ ] **Implement:** New parsing methods for I/O grammar (`IO_Stat`, `In_Stat`, `Out_Stat`, etc.).
-  * [ ] **Implement:** Integrate calls to I/O parsing methods into `Parse_Statement`.
-  * [ ] **Implement:** Semantic actions in I/O methods call `TACGenerator` for `rdi`, `wrs` (using label), `wri`, `wrln`.
-  * [ ] **Implement:** `CALL ProcName(Args...)` semantic action retrieves `ProcName`'s parameter **modes** from `SymbolTable`.
-  * [ ] **Implement:** `CALL` semantic action signals `TACGenerator` to emit `push @Arg` for `OUT`/`IN OUT` params, `push Arg` for `IN` params.
+  * [X] **Implement:** New parsing methods for I/O grammar (`IO_Stat`, `In_Stat`, `Out_Stat`, etc.).
+  * [X] **Implement:** Integrate calls to I/O parsing methods into `Parse_Statement`.
+  * [X] **Implement:** Semantic actions in I/O methods call `TACGenerator` for `rdi`, `wrs` (using label), `wri`, `wrln`.
+  * [X] **Implement:** `CALL ProcName(Args...)` semantic action retrieves `ProcName`'s parameter **modes** from `SymbolTable`.
+  * [X] **Implement:** `CALL` semantic action signals `TACGenerator` to emit `push @Arg` for `OUT`/`IN OUT` params, `push Arg` for `IN` params.
   * [ ] **Verify:** Parse Ada code with I/O statements; check for syntax errors. Verify required `SymbolTable` lookups occur.
 * **[ ] Update `TACGenerator.py`:**
 
-  * [ ] **Implement:** New methods (`emit_read_int`, `emit_write_int`, `emit_write_string`, `emit_write_newline`).
-  * [ ] **Implement/Verify:** `emit_push` (or similar) accepts argument/flag to emit `push @VarName` vs `push VarName`.
-  * [ ] **Verify:** Unit test new `emit_` methods.
-  * [ ] **Verify (Integration):** Run Ada -> TAC pipeline with I/O & reference params. **Inspect `.tac` output** for correct `rdi`, `wrs`, `wri`, `wrln`, and `push @Var`/`push Var`.
+  * [X] **Implement:** New methods (`emit_read_int`, `emit_write_int`, `emit_write_string`, `emit_write_newline`).
+  * [X] **Implement/Verify:** `emit_push` (or similar) accepts argument/flag to emit `push @VarName` vs `push VarName`.
+  * [X] **Verify:** Unit test new `emit_` methods.
+  * [X] **Verify (Integration):** Run Ada -> TAC pipeline with I/O & reference params. **Inspect `.tac` output** for correct `rdi`, `wrs`, `wri`, `wrln`, and `push @Var`/`push Var`.
 * **[ ] Update `Driver.py` / `JohnA8.py`:**
 
-  * [ ] Ensure *final, populated* `SymbolTable` instance is available for later phases.
+  * [X] Ensure *final, populated* `SymbolTable` instance is available for later phases.
 
   * *Note: Adding the `ASMGenerator` call happens later (Phase 1/2).*
 
@@ -173,4 +173,3 @@ This checklist breaks down the implementation into verifiable steps, based on th
 
 * **[ ] Error Handling:** Implement robust `try...except` blocks and specific, informative custom exceptions throughout.
 * **[ ] Logging:** Use `Logger.py` for DEBUG/INFO messages to trace execution and states.
- 
