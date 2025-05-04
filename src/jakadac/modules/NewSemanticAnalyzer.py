@@ -371,19 +371,31 @@ class NewSemanticAnalyzer:
         # Example: This needs to be adapted based on *your specific parse tree structure* for I/O statements.
         # Assume a structure like: Statement -> IOStat -> PutStat -> WriteList -> WriteToken -> LITERAL
         def dfs(n: ParseTreeNode):
-            if n.name == "PutStat": # Or whatever your node name for put/putln is
-                # Find string literals within the arguments/write list
-                write_list = n.find_child_by_name("WriteList") # Example name
-                if write_list:
-                     for write_token in write_list.find_children_by_name("WriteToken"): # Example name
-                          literal_node = write_token.find_child_by_name("LITERAL") # Find the literal leaf
-                          if literal_node:
-                              self._handle_string_literal(literal_node)
-                               # The label returned isn't directly used here, but insertion is done.
-                               # The *Parser* action associated with this node would need the label.
-            elif n.name == "AssignStat": # Example: Check assignment statement LHS
+            if n.name == "IOStat": # Check the container first
+                # Look for PutStat or PutLnStat inside IOStat
+                put_stat = n.find_child_by_name("PutStat")
+                putln_stat = n.find_child_by_name("PutLnStat")
+                target_stat = put_stat or putln_stat
+
+                if target_stat:
+                    # Find the literal argument directly within Put(Ln)Stat if it exists
+                    # Assumes WriteArg -> LITERAL or WriteArg -> Expr structure is simplified,
+                    # and LITERAL is a direct child if present.
+                    literal_node = target_stat.find_child_by_name("LITERAL")
+                    if literal_node:
+                        self.logger.debug(f"Found LITERAL node in {target_stat.name}: {literal_node.token}")
+                        # Call handler. The label isn't used here, but symbol is inserted.
+                        self._handle_string_literal(literal_node)
+                    # else: Handle expression case if needed (e.g., check identifiers within Expr)
+
+            elif n.name == "AssignStat": # Check assignment statement LHS and RHS IDs
                 self._visit_assign_stat(n)
-            
+            elif n.name == "GetStat": # Check identifier used in GET
+                self._visit_get_stat(n)
+            elif n.name == "ProcCall": # Check identifiers used as parameters
+                self._visit_proc_call(n)
+            # Add checks for other statement types (IF, LOOP, etc.) if they use identifiers
+
             # Recurse
             for child in getattr(n, 'children', []):
                 dfs(child)
@@ -392,16 +404,61 @@ class NewSemanticAnalyzer:
             dfs(node)
 
     def _visit_assign_stat(self, node: ParseTreeNode) -> None:
-        """Check that the variable on the left side of an assignment is declared."""
-        # The first ID child in an AssignStat node is the LHS
+        """Check that the variable on the left side of an assignment is declared.
+           Also checks identifiers used on the right side expression."""
+        # Check LHS
         id_node = node.find_child_by_name("ID")
         if id_node and id_node.token:
-            lex = id_node.token.lexeme
-            try:
-                self.symtab.lookup(lex)
-            except SymbolNotFoundError:
-                line = getattr(id_node.token, 'line_number', -1)
-                self._error(f"Undeclared identifier '{lex}' used in assignment at line {line}")
+            self._check_identifier_declared(id_node.token)
+        # Recursively check RHS Expression
+        expr_node = node.find_child_by_name("Expr") # Adjust if node name is different
+        if expr_node:
+            self._check_expr_identifiers(expr_node)
+
+    def _visit_get_stat(self, node: ParseTreeNode) -> None:
+        """Check that the identifier used in a GET statement is declared and valid."""
+        id_node = node.find_child_by_name("ID")
+        if id_node and id_node.token:
+            self._check_identifier_declared(id_node.token, check_assignable=True)
+
+    def _visit_proc_call(self, node: ParseTreeNode) -> None:
+        """Check identifiers used as actual parameters in a procedure call."""
+        # Check procedure name itself
+        proc_id_node = node.find_child_by_name("ID")
+        if proc_id_node and proc_id_node.token:
+            self._check_identifier_declared(proc_id_node.token, check_callable=True)
+        # Check parameters within Params -> Expr
+        params_node = node.find_child_by_name("Params")
+        if params_node:
+             for expr_node in params_node.find_children_by_name("Expr"):
+                  self._check_expr_identifiers(expr_node)
+
+    def _check_expr_identifiers(self, node: ParseTreeNode) -> None:
+        """Recursively checks all ID nodes within an expression subtree."""
+        if node.name == "ID" and node.token:
+             self._check_identifier_declared(node.token)
+        for child in getattr(node, 'children', []):
+             self._check_expr_identifiers(child)
+
+    def _check_identifier_declared(self, token: Token, check_assignable: bool = False, check_callable: bool = False) -> None:
+        """Helper to check if an identifier is declared in the symbol table."""
+        lex = token.lexeme
+        line = getattr(token, 'line_number', -1)
+        col = getattr(token, 'column_number', -1)
+        try:
+            symbol = self.symtab.lookup(lex)
+            # Optional additional checks
+            if check_assignable:
+                 if symbol.entry_type == EntryType.CONSTANT:
+                      self._error(f"Cannot assign to constant '{lex}' at line {line}")
+                 elif symbol.entry_type in (EntryType.PROCEDURE, EntryType.FUNCTION):
+                      self._error(f"Cannot assign to procedure/function '{lex}' at line {line}")
+            if check_callable:
+                 if symbol.entry_type not in (EntryType.PROCEDURE, EntryType.FUNCTION):
+                      self._error(f"Identifier '{lex}' is not callable at line {line}")
+
+        except SymbolNotFoundError:
+            self._error(f"Undeclared identifier '{lex}' used at line {line}")
 
     def _handle_string_literal(self, string_node: ParseTreeNode) -> Optional[str]:
         """

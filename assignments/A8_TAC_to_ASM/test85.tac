@@ -1,14 +1,12 @@
 proc five
 proc fun
-_t1 = _BP+4 * _BP+2
+_t1 = ParamA * ParamB
 LocalC = _t1
 endp fun
-_t2 = 7
-A = _t2
-_t3 = 6
-B = _t3
-push A
+A = 7
+B = 6
 push B
+push A
 call fun
 endp five
-START	PROC	five
+START PROC five

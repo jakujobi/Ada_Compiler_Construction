@@ -58,6 +58,8 @@ class StatementsMixin:
     parseProcCall: Callable[[], Optional[ParseTreeNode]]
     parseParams: Callable[[], Union[ParseTreeNode, List[str]]]
     parseIOStat: Callable[[], Optional[ParseTreeNode]]
+    # ADDED type hint for current_procedure_depth from base
+    current_procedure_depth: Optional[int]
 
     # --- Statement Parsing Methods --- 
 
@@ -252,19 +254,20 @@ class StatementsMixin:
                      self._add_child(node, expr_result)
                 result_node = node
             elif self.tac_gen and target_symbol and isinstance(expr_result, str):
-                 dest_place = self.tac_gen.getPlace(target_symbol)
+                 # Use self.current_procedure_depth for context
+                 dest_place = self.tac_gen.getPlace(target_symbol, current_proc_depth=self.current_procedure_depth)
                  source_place = expr_result
-                 # Handle literal assignment via temporary
-                 is_literal = source_place.isdigit() or (source_place.startswith('-') and source_place[1:].isdigit())
-                 if is_literal:
-                     temp_place = self.tac_gen.newTemp()
-                     self.logger.debug(f" Emitting TAC: {temp_place} = {source_place}")
-                     self.tac_gen.emitAssignment(temp_place, source_place)
-                     self.logger.debug(f" Emitting TAC: {dest_place} = {temp_place}")
-                     self.tac_gen.emitAssignment(dest_place, temp_place)
-                 else:
-                     self.logger.debug(f" Emitting TAC: {dest_place} = {source_place}")
-                     self.tac_gen.emitAssignment(dest_place, source_place)
+                 # Handle literal assignment via temporary (Simpler: let TAC gen handle)
+                 # is_literal = source_place.isdigit() or (source_place.startswith('-') and source_place[1:].isdigit())
+                 # if is_literal:
+                 #     temp_place = self.tac_gen.newTemp()
+                 #     self.logger.debug(f" Emitting TAC: {temp_place} = {source_place}")
+                 #     self.tac_gen.emitAssignment(temp_place, source_place)
+                 #     self.logger.debug(f" Emitting TAC: {dest_place} = {temp_place}")
+                 #     self.tac_gen.emitAssignment(dest_place, temp_place)
+                 # else:
+                 self.logger.debug(f" Emitting TAC: {dest_place} = {source_place}")
+                 self.tac_gen.emitAssignment(dest_place, source_place)
                  result_node = None # No node in TAC mode
             else:
                  # Log warning if TAC couldn't be generated
@@ -340,7 +343,8 @@ class StatementsMixin:
                           msg = f"Cannot GET into procedure/function '{idt_token.lexeme}'"
                           self.report_semantic_error(msg, getattr(idt_token,'line_number',-1), getattr(idt_token,'column_number',-1))
                      else:
-                          target_place = self.tac_gen.getPlace(target_sym)
+                          # Use self.current_procedure_depth for context
+                          target_place = self.tac_gen.getPlace(target_sym, current_proc_depth=self.current_procedure_depth)
                           self.logger.debug(f" Emitting TAC: read {target_place}")
                           self.tac_gen.emitRead(target_place) # Assume emitRead exists
                  except SymbolNotFoundError:
