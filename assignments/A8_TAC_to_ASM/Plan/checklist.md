@@ -173,3 +173,4 @@ This checklist breaks down the implementation into verifiable steps, based on th
 
 * **[ ] Error Handling:** Implement robust `try...except` blocks and specific, informative custom exceptions throughout.
 * **[ ] Logging:** Use `Logger.py` for DEBUG/INFO messages to trace execution and states.
+ 

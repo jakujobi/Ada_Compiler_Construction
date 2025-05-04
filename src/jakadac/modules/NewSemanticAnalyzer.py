@@ -382,14 +382,14 @@ class NewSemanticAnalyzer:
                                # The label returned isn't directly used here, but insertion is done.
                                # The *Parser* action associated with this node would need the label.
             elif n.name == "AssignStat": # Example: Check assignment statement LHS
-                 self._visit_assign_stat(n)
+                self._visit_assign_stat(n)
             
             # Recurse
             for child in getattr(n, 'children', []):
                 dfs(child)
 
         if node:
-           dfs(node)
+        dfs(node)
 
     def _visit_assign_stat(self, node: ParseTreeNode) -> None:
         """Check that the variable on the left side of an assignment is declared."""

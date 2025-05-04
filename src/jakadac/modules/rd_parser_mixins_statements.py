@@ -150,7 +150,7 @@ class StatementsMixin:
                 # Could be AssignStat (assignment or procedure call)
                 self.logger.debug(f" Statement starts with ID ('{self.current_token.lexeme}'), parsing as AssignStat/ProcCall")
                 child_node = self.parseAssignStat() # type: ignore[misc]
-            elif token_type == self.defs.TokenType.GET or token_type == self.defs.TokenType.PUT:
+            elif token_type in {self.defs.TokenType.GET, self.defs.TokenType.PUT, self.defs.TokenType.PUTLN}:
                 # IOStat
                 self.logger.debug(f" Statement starts with '{self.current_token.lexeme}', parsing as IOStat")
                 child_node = self.parseIOStat() # type: ignore[misc]
@@ -163,7 +163,7 @@ class StatementsMixin:
                 else:
                      self.match(self.defs.TokenType.NULL) # Just consume
             else:
-                self.report_error(f"Expected statement (Identifier, GET, PUT, NULL), found {self.current_token.lexeme}")
+                self.report_error(f"Expected statement (Identifier, GET, PUT, PUTLN, NULL), found {self.current_token.lexeme}")
                 self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
                 child_node = None
             
@@ -297,30 +297,42 @@ class StatementsMixin:
 
     def parseIOStat(self) -> Optional[ParseTreeNode]:
         """
-        IOStat -> GET ( idt ) | PUT ( Expr )
-        (Assuming modified grammar based on logging added earlier)
+        IOStat -> GetStat | PutStat | PutLnStat
+        GetStat -> GET ( idt )
+        PutStat -> PUT ( WriteArg )
+        PutLnStat -> PUTLN ( WriteArg )
+        WriteArg -> Expr | LITERAL (String literal)
         """
         node: Optional[ParseTreeNode] = None
         if self.build_parse_tree:
             node = ParseTreeNode("IOStat")
         
         self.logger.debug("Entering parseIOStat")
-        if self.current_token and self.current_token.token_type == self.defs.TokenType.GET:
+        if not self.current_token:
+             self.report_error("Unexpected end of input in IOStat")
+             return node # Or None
+
+        token_type = self.current_token.token_type
+
+        if token_type == self.defs.TokenType.GET:
             self.logger.info("Parsing GET statement")
-            self.match_leaf(self.defs.TokenType.GET, node)
-            self.match_leaf(self.defs.TokenType.LPAREN, node)
-            
+            # --- Parse GET ---
+            get_node: Optional[ParseTreeNode] = None
+            if self.build_parse_tree: get_node = ParseTreeNode("GetStat")
+
+            self.match_leaf(self.defs.TokenType.GET, get_node)
+            self.match_leaf(self.defs.TokenType.LPAREN, get_node)
+
             idt_token: Optional[Token] = None
             if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
                 idt_token = self.current_token
-            # Call match_leaf even if token is None or wrong type, it will handle error reporting
-            self.match_leaf(self.defs.TokenType.ID, node) 
-            
+            self.match_leaf(self.defs.TokenType.ID, get_node) # Handles error reporting
+
             # --- TAC Generation for GET ---
             if self.tac_gen and idt_token and self.symbol_table:
                  try:
                      target_sym = self.symbol_table.lookup(idt_token.lexeme)
-                     # TODO: Check if assignable (not constant/procedure)
+                     # Semantic check: Can we assign to this?
                      if target_sym.entry_type == EntryType.CONSTANT:
                           msg = f"Cannot GET into constant '{idt_token.lexeme}'"
                           self.report_semantic_error(msg, getattr(idt_token,'line_number',-1), getattr(idt_token,'column_number',-1))
@@ -330,54 +342,94 @@ class StatementsMixin:
                      else:
                           target_place = self.tac_gen.getPlace(target_sym)
                           self.logger.debug(f" Emitting TAC: read {target_place}")
-                          # Check if emitRead method exists before calling
-                          if hasattr(self.tac_gen, 'emitRead'):
-                              self.tac_gen.emitRead(target_place)
-                          else:
-                              self.logger.error("TAC Generator does not have emitRead method.")
+                          self.tac_gen.emitRead(target_place) # Assume emitRead exists
                  except SymbolNotFoundError:
                      msg = f"Undeclared variable '{idt_token.lexeme}' used in GET statement"
                      self.report_semantic_error(msg, getattr(idt_token,'line_number',-1), getattr(idt_token,'column_number',-1))
                  except AttributeError as e:
-                      self.logger.error(f"Attribute error during GET TAC generation: {e}") # Catch potential None errors
-            # --- End TAC --- 
-            
-            self.match_leaf(self.defs.TokenType.RPAREN, node)
-            
-        elif self.current_token and self.current_token.token_type == self.defs.TokenType.PUT:
-            self.logger.info("Parsing PUT statement")
-            self.match_leaf(self.defs.TokenType.PUT, node)
-            self.match_leaf(self.defs.TokenType.LPAREN, node)
-            
-            # Parse expression (returns Node or str)
-            expr_result = self.parseExpr()
-            if self.build_parse_tree and node and isinstance(expr_result, ParseTreeNode):
-                self._add_child(node, expr_result)
-                
-            # --- TAC Generation for PUT --- 
-            if self.tac_gen and isinstance(expr_result, str):
-                 source_place = expr_result
-                 self.logger.debug(f" Emitting TAC: write {source_place}")
-                 try:
-                      # Check if emitWrite method exists
-                      if hasattr(self.tac_gen, 'emitWrite'):
-                           self.tac_gen.emitWrite(source_place)
-                      else:
-                           self.logger.error("TAC Generator does not have emitWrite method.")
-                 except AttributeError as e:
-                      self.logger.error(f"Attribute error during PUT TAC generation: {e}") # Catch None errors
-            elif self.tac_gen and not isinstance(expr_result, str):
-                 self.logger.error(f"Could not get TAC place for PUT expression (got type {type(expr_result)}).")
-            # --- End TAC --- 
-                 
-            self.match_leaf(self.defs.TokenType.RPAREN, node)
+                      self.logger.error(f"Attribute error during GET TAC generation: {e}")
+            # --- End TAC ---
+
+            self.match_leaf(self.defs.TokenType.RPAREN, get_node)
+            if self.build_parse_tree and node and get_node: self._add_child(node, get_node)
+            # --- End Parse GET ---
+
+        elif token_type in {self.defs.TokenType.PUT, self.defs.TokenType.PUTLN}:
+            is_putln = (token_type == self.defs.TokenType.PUTLN)
+            stmt_type = "PUTLN" if is_putln else "PUT"
+            self.logger.info(f"Parsing {stmt_type} statement")
+            # --- Parse PUT / PUTLN ---
+            put_node: Optional[ParseTreeNode] = None
+            if self.build_parse_tree: put_node = ParseTreeNode("PutLnStat" if is_putln else "PutStat")
+
+            self.match_leaf(token_type, put_node) # Match PUT or PUTLN
+            self.match_leaf(self.defs.TokenType.LPAREN, put_node)
+
+            # Parse WriteArg (Expr or Literal)
+            expr_node: Optional[ParseTreeNode] = None
+            expr_place: Optional[str] = None
+            literal_token: Optional[Token] = None
+
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LITERAL:
+                 # --- Handle String Literal ---
+                 self.logger.debug("Parsing PUT/PUTLN with string literal")
+                 literal_token = self.current_token
+                 self.match_leaf(self.defs.TokenType.LITERAL, put_node)
+                 if self.tac_gen and literal_token:
+                     # Process string literal: remove outer quotes, handle Ada "" escape
+                     raw_string = literal_token.lexeme
+                     if len(raw_string) >= 2 and raw_string.startswith('"') and raw_string.endswith('"'):
+                          processed_string = raw_string[1:-1].replace('""', '"')
+                          self.logger.debug(f" Emitting TAC: wrs \"{processed_string}\" (via string value)")
+                          # Assuming TACGenerator handles label generation internally
+                          self.tac_gen.emitWriteString(processed_string)
+                     else:
+                          self.logger.error(f"Invalid string literal format: {raw_string}")
+                          self.report_error(f"Invalid string literal format: {raw_string}")
+                 # --- End String Literal ---
+            else:
+                 # --- Handle Expression ---
+                 self.logger.debug("Parsing PUT/PUTLN with expression")
+                 expr_result = self.parseExpr()
+                 if self.build_parse_tree and put_node and isinstance(expr_result, ParseTreeNode):
+                      expr_node = expr_result
+                      self._add_child(put_node, expr_node) # Add Expr node to PutStat/PutLnStat
+                 elif self.tac_gen and isinstance(expr_result, str):
+                      expr_place = expr_result
+                      self.logger.debug(f" Emitting TAC: write {expr_place}")
+                      try:
+                           self.tac_gen.emitWrite(expr_place) # Assume emitWrite exists
+                      except AttributeError as e:
+                           self.logger.error(f"Attribute error during {stmt_type} TAC generation: {e}")
+                 elif self.tac_gen:
+                      self.logger.error(f"Could not get TAC place for {stmt_type} expression (got type {type(expr_result)}).")
+                      self.report_error(f"Invalid expression in {stmt_type} statement.")
+                 # --- End Expression ---
+
+            self.match_leaf(self.defs.TokenType.RPAREN, put_node)
+
+            # Handle PUTLN newline
+            if is_putln:
+                 if self.build_parse_tree and put_node:
+                      # Optionally add a specific node for the newline action
+                      pass # Or add a 'NewLine' leaf?
+                 if self.tac_gen:
+                      self.logger.debug(" Emitting TAC: wrln")
+                      try:
+                           self.tac_gen.emitNewLine() # Assume emitNewLine exists
+                      except AttributeError as e:
+                           self.logger.error(f"Attribute error during PUTLN newline TAC generation: {e}")
+
+            if self.build_parse_tree and node and put_node: self._add_child(node, put_node)
+            # --- End Parse PUT / PUTLN ---
+
         else:
-            # Handle potential empty IOStat or error if grammar requires GET/PUT
-            self.report_error(f"Expected GET or PUT, found {self.current_token.lexeme if self.current_token else 'EOF'}")
-            # self.panic_mode_recover({...}) # Optional recovery
-            pass 
+            # Handle potential empty IOStat or error if grammar requires GET/PUT/PUTLN
+            self.report_error(f"Expected GET, PUT, or PUTLN, found {self.current_token.lexeme if self.current_token else 'EOF'}")
+            self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
+            pass
         self.logger.debug("Exiting parseIOStat")
-        return node # Return node if building tree, else None (implicitly)
+        return node # Return IOStat node if building tree, else None
 
 
     def parseParams(self) -> Union[ParseTreeNode, List[str]]:
@@ -565,32 +617,51 @@ class StatementsMixin:
                  # Push parameters (if any)
                  if actual_params_count > 0 and len(actual_param_places) == len(formal_param_list): # Ensure lists align
                       self.logger.info(f" Emitting Param Pushes for {proc_sym.name}")
-                      for i, actual_place in enumerate(actual_param_places):
+                      # Iterate in reverse for standard stack push order (last param first)
+                      for i in range(actual_params_count - 1, -1, -1):
+                          actual_place = actual_param_places[i]
                           formal_param_symbol = formal_param_list[i] # Safe index
-                          param_mode = formal_param_modes.get(formal_param_symbol.name, ParameterMode.IN) 
-                          
+                          # Default to IN mode if not found (shouldn't happen with proper setup)
+                          param_mode = formal_param_modes.get(formal_param_symbol.name, ParameterMode.IN)
+
                           push_operand = actual_place # Default
-                          if self.symbol_table and isinstance(actual_place, str):
-                               try:
-                                   source_symbol = self.symbol_table.lookup(actual_place)
-                                   if source_symbol.depth == 1: # If param is global/outermost
-                                        push_operand = source_symbol.name
-                                        self.logger.debug(f" Push operand is outermost var: {push_operand}")
-                               except SymbolNotFoundError:
-                                   pass # Literal or temporary
-                                   
-                          self.logger.info(f"  Pushing: {push_operand} (Mode: {param_mode})")
+                          # --- Determine if push operand needs adjustment (e.g., for globals) ---
+                          # Note: Previous code attempted lookup, but push should generally use the
+                          # computed place (could be var name, temp, or offset like _BP-X)
+                          # Let TACGenerator handle how places are used.
+                          # if self.symbol_table and isinstance(actual_place, str):
+                          #      try:
+                          #          source_symbol = self.symbol_table.lookup(actual_place)
+                          #          # Check if symbol is global/outermost? This check might be fragile.
+                          #          # if source_symbol.depth == 1: # If param is global/outermost
+                          #          #      push_operand = source_symbol.name
+                          #          #      self.logger.debug(f" Push operand potentially adjusted to: {push_operand}")
+                          #      except SymbolNotFoundError:
+                          #          pass # Literal or temporary, use actual_place
+                          # --- End adjustment check ---
+
+                          self.logger.info(f"  Pushing Param {i+1}/{actual_params_count}: {push_operand} (Mode: {param_mode.name})")
+                          # Pass the mode to emitPush
                           self.tac_gen.emitPush(push_operand, param_mode)
+
                  elif actual_params_count > 0: # Mismatch case, log warning
                       self.logger.warning("Skipping param pushes due to count mismatch.")
-                 
+
                  # Emit call instruction
                  self.logger.info(f" Emitting Call: {proc_name}")
                  self.tac_gen.emitCall(proc_name)
-                 
+
+                 # --- Handle return value for FUNCTION calls (if implemented) ---
+                 # if proc_sym.entry_type == EntryType.FUNCTION:
+                 #     return_place = self.tac_gen.newTemp()
+                 #     self.logger.info(f" Emitting POP for function return value into {return_place}")
+                 #     self.tac_gen.emitPop(return_place) # Assuming emitPop exists
+                 #     # The function result is now in return_place
+                 #     # This would likely be handled in parseFactor for function calls
+
              except AttributeError as ae:
                   self.logger.error(f"Attribute error during TAC generation for proc call: {ae}")
-        # --- End TAC Generation --- 
+        # --- End TAC Generation ---
 
         self.logger.debug("Exiting parseProcCall")
         # Return node if tree building, otherwise None
