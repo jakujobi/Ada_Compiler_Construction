@@ -48,6 +48,19 @@ from .rd_parser_mixins_declarations import DeclarationsMixin
 from .rd_parser_mixins_statements import StatementsMixin
 from .rd_parser_mixins_expressions import ExpressionsMixin
 # --- End Import Mixins ---
+
+# Import the procedure registry (add this near the top, with other imports)
+try:
+    from .asm_gen.procedure_registry import registry as proc_registry
+except ImportError:
+    # Create a dummy registry if not available
+    class DummyRegistry:
+        def register_procedure(self, name, symbol):
+            pass
+        def get_procedure(self, name):
+            return None
+    proc_registry = DummyRegistry()
+
 class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDParser):
     """
     Extended Recursive Descent Parser with grammar rules for statements and expressions,
@@ -266,6 +279,9 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         # Needs verification if nesting > 1 level works correctly.
 
         self.logger.info(f"Finished parsing procedure: {procedure_name}")
+
+        # Add this line to register the procedure in the registry
+        proc_registry.register_procedure(procedure_name, proc_sym)
 
         if self.build_parse_tree:
             return node

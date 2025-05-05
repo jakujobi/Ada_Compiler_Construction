@@ -19,12 +19,14 @@ try:
     from .data_segment_manager import DataSegmentManager
     from .asm_operand_formatter import ASMOperandFormatter
     from .asm_instruction_mapper import ASMInstructionMapper
+    from .procedure_registry import registry as proc_registry
 except ImportError:
     # Fallback for direct imports if relative imports fail
     from tac_instruction import TACInstruction
     from data_segment_manager import DataSegmentManager
     from asm_operand_formatter import ASMOperandFormatter
     from asm_instruction_mapper import ASMInstructionMapper
+    from procedure_registry import registry as proc_registry
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -102,8 +104,25 @@ class ASMGenerator:
         # Pass 2: Allocate offsets for temps and update symbol table
         for proc_name, temps in proc_temps.items():
             try:
-                # Get procedure symbol
-                proc_symbol = self.symbol_table.lookup(proc_name)
+                # Get procedure symbol - first try symbol table, then registry
+                logger.info(f"Looking up procedure symbol for '{proc_name}'")
+                
+                proc_symbol = None
+                try:
+                    # Try regular symbol table first
+                    proc_symbol = self.symbol_table.lookup(proc_name)
+                    logger.info(f"Found procedure '{proc_name}' in symbol table")
+                except Exception as e:
+                    logger.warning(f"Procedure '{proc_name}' not found in symbol table: {e}")
+                    
+                    # Try procedure registry as fallback
+                    proc_symbol = proc_registry.get_procedure(proc_name)
+                    if proc_symbol:
+                        logger.info(f"Found procedure '{proc_name}' in procedure registry")
+                    else:
+                        logger.error(f"Procedure '{proc_name}' not found in registry either")
+                        # Skip this procedure
+                        continue
                 
                 # Calculate additional space needed for temps (2 bytes per temp for Integer)
                 temp_space = len(temps) * 2

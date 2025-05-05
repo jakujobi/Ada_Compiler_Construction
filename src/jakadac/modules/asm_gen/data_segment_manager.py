@@ -11,6 +11,13 @@ Handles identification of global variables and string literals for the .data sec
 from typing import Dict, List, Set
 import logging
 
+# Import EntryType directly from SymTable
+try:
+    from ..SymTable import EntryType
+except ImportError:
+    # Fallback import path
+    from src.jakadac.modules.SymTable import EntryType
+
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 # Basic configuration if run standalone or not configured elsewhere
@@ -39,18 +46,21 @@ class DataSegmentManager:
         Identify variables to include in the .data section.
         """
         try:
-            # Access the symbol table's scope at depth 0 (global scope)
-            global_scope = self.symbol_table.get_scope_at_depth(0)
-            
-            # If no global scope exists, log a warning and return
-            if not global_scope:
-                logger.warning("No global scope found in symbol table")
-                return
-            
-            # Iterate through symbols in the global scope
+            logger.info("Starting collection of global definitions for .data section")
+            # Attempt to get the global scope (depth 0)
+            try:
+                global_scope = self.symbol_table.get_symbols_at_depth(0)
+            except IndexError as e:
+                logger.error(f"Error collecting global definitions: {e}")
+                global_scope = {} # Fallback to empty scope
+            except AttributeError as e:
+                logger.error(f"Error collecting global definitions: {e}")
+                global_scope = {} # Fallback to empty scope
+
+            # Iterate through symbols in the retrieved global scope
             for symbol_name, symbol in global_scope.items():
                 # Check if the symbol is a VARIABLE
-                if symbol.entry_type == self.symbol_table.EntryType.VARIABLE:
+                if symbol.entry_type == EntryType.VARIABLE:
                     # Add the variable name to our set (handles potential C -> CC rename)
                     self.global_vars.add(symbol.name)
                     logger.debug(f"Added global variable: {symbol.name}")

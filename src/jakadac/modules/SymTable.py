@@ -142,8 +142,8 @@ class Symbol:
         self.param_list: Optional[List['Symbol']] = None # Parameters for PROCEDURE/FUNCTION
         self.param_modes: Optional[Dict[str, ParameterMode]] = None # Modes for parameters
         self.return_type: Optional[VarType] = None # Return type for FUNCTION
-        self.local_size: Optional[int] = None # Size of locals for PROCEDURE/FUNCTION
-        self.param_size: Optional[int] = None # Added: Use for SizeOfParams (total bytes)
+        self.local_size: int = 0 # Size of locals for PROCEDURE/FUNCTION (Initialized to 0)
+        self.param_size: int = 0 # Added: Use for SizeOfParams (total bytes) (Initialized to 0)
         # Add fields for TYPE definitions if needed (e.g., base type, fields)
 
     def set_variable_info(self, var_type: VarType, offset: int, size: int):
@@ -249,10 +249,25 @@ class SymbolTable:
         exiting_scope = self._scope_stack.pop()
         logger.info(f"Exiting scope depth {self._current_depth}. Removing {len(exiting_scope)} symbols.")
         self._current_depth -= 1
-        if self._current_depth < -1: # Should not happen if logic is correct
-             logger.critical("Symbol table depth inconsistency detected!")
-             self._current_depth = -1 # Reset for safety
 
+    def get_symbols_at_depth(self, depth: int) -> Dict[str, Symbol]:
+        """
+        Returns the dictionary of symbols for a specific scope depth.
+
+        Args:
+            depth: The scope depth to retrieve symbols from.
+
+        Returns:
+            A dictionary mapping symbol names to Symbol objects at the given depth.
+
+        Raises:
+            IndexError: If the requested depth is out of bounds.
+        """
+        if 0 <= depth < len(self._scope_stack):
+            return self._scope_stack[depth]
+        else:
+            logger.error(f"Attempted to access invalid scope depth: {depth}. Valid range: 0 to {len(self._scope_stack) - 1}")
+            raise IndexError(f"Invalid scope depth: {depth}")
 
     def insert(self, symbol: Symbol):
         """
