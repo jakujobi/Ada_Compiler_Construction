@@ -19,14 +19,12 @@ try:
     from .data_segment_manager import DataSegmentManager
     from .asm_operand_formatter import ASMOperandFormatter
     from .asm_instruction_mapper import ASMInstructionMapper
-    from .procedure_registry import registry as proc_registry
 except ImportError:
     # Fallback for direct imports if relative imports fail
     from tac_instruction import TACInstruction
     from data_segment_manager import DataSegmentManager
     from asm_operand_formatter import ASMOperandFormatter
     from asm_instruction_mapper import ASMInstructionMapper
-    from procedure_registry import registry as proc_registry
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -66,6 +64,10 @@ class ASMGenerator:
         self.start_proc_name = None
         self.temp_allocations = {}  # proc_name -> {temp_name -> offset}
         
+        # Error tracking
+        self.error_count = 0
+        self.has_critical_errors = False
+        
         logger.info(f"ASM Generator initialized with {len(tac_instructions)} TAC instructions")
         logger.info(f"ASM output will be written to: {asm_filepath}")
     
@@ -101,28 +103,20 @@ class ASMGenerator:
                     proc_temps[current_proc].add(operand)
                     logger.debug(f"Found temp {operand} in {current_proc}")
         
+        # Log all procedure names for which we need to allocate temporaries
+        logger.debug(f"Procedures needing temp allocation: {list(proc_temps.keys())}")
+        
         # Pass 2: Allocate offsets for temps and update symbol table
         for proc_name, temps in proc_temps.items():
             try:
-                # Get procedure symbol - first try symbol table, then registry
-                logger.info(f"Looking up procedure symbol for '{proc_name}'")
+                # Get procedure symbol
+                logger.debug(f"Attempting to look up symbol for procedure '{proc_name}' for temp allocation.")
                 
-                proc_symbol = None
-                try:
-                    # Try regular symbol table first
-                    proc_symbol = self.symbol_table.lookup(proc_name)
-                    logger.info(f"Found procedure '{proc_name}' in symbol table")
-                except Exception as e:
-                    logger.warning(f"Procedure '{proc_name}' not found in symbol table: {e}")
-                    
-                    # Try procedure registry as fallback
-                    proc_symbol = proc_registry.get_procedure(proc_name)
-                    if proc_symbol:
-                        logger.info(f"Found procedure '{proc_name}' in procedure registry")
-                    else:
-                        logger.error(f"Procedure '{proc_name}' not found in registry either")
-                        # Skip this procedure
-                        continue
+                # Log current scope depths in symbol table
+                logger.debug(f"Current symbol table depth: {self.symbol_table.current_depth}")
+                
+                # Try to find the procedure in any accessible scope
+                proc_symbol = self.symbol_table.lookup(proc_name)
                 
                 # Calculate additional space needed for temps (2 bytes per temp for Integer)
                 temp_space = len(temps) * 2
@@ -148,7 +142,12 @@ class ASMGenerator:
                     logger.debug(f"Allocated {temp} at [bp{offset}] in {proc_name}")
                     
             except Exception as e:
+                self.error_count += 1
                 logger.error(f"Error allocating temps for {proc_name}: {e}")
+                # Set critical error flag if this is a procedure symbol not found error
+                if "Symbol '" in str(e) and "not found" in str(e):
+                    self.has_critical_errors = True
+                # Continue with other procedures rather than aborting entirely
     
     def generate_asm(self):
         """
@@ -158,14 +157,28 @@ class ASMGenerator:
         2. Generate data segment
         3. Generate code segment
         4. Write final file
+        
+        Returns:
+            bool: True if ASM generation was successful, False if critical errors were encountered
         """
         try:
             # Pass 1: Allocate temporaries
             self._allocate_temporaries()
             
+            # Exit early if critical errors detected in temporary allocation
+            if self.has_critical_errors:
+                logger.error("Critical errors encountered during temporary allocation. ASM generation may be incomplete.")
+                return False
+            
             # Initialize components
             self.data_manager = DataSegmentManager(self.symbol_table)
-            self.data_manager.collect_definitions()
+            try:
+                self.data_manager.collect_definitions()
+            except Exception as e:
+                self.error_count += 1
+                logger.error(f"Error in data segment collection: {e}")
+                self.has_critical_errors = True
+                return False
             
             self.formatter = ASMOperandFormatter(self.temp_allocations)
             self.mapper = ASMInstructionMapper(self.formatter, self.symbol_table)
@@ -187,7 +200,11 @@ class ASMGenerator:
                         current_proc_symbol = self.symbol_table.lookup(instr.op1)
                         self.formatter.set_current_procedure(instr.op1)
                     except Exception as e:
+                        self.error_count += 1
                         logger.error(f"Error retrieving symbol for procedure {instr.op1}: {e}")
+                        # This is a critical error - can't proceed correctly without procedure symbol
+                        if "not found" in str(e):
+                            self.has_critical_errors = True
                         
                 elif instr.opcode.lower() == 'endp':
                     current_proc_symbol = None
@@ -203,6 +220,7 @@ class ASMGenerator:
                     asm_snippet = self.mapper.translate(instr, current_proc_symbol)
                     code_lines.extend(asm_snippet)
                 except Exception as e:
+                    self.error_count += 1
                     error_comment = f"; -- ERROR translating {instr.original_tuple}: {e} --"
                     logger.error(f"Error translating instruction {instr.original_tuple}: {e}")
                     code_lines.append(error_comment)
@@ -241,9 +259,12 @@ class ASMGenerator:
             logger.info(f"ASM generation complete. Written to {self.asm_filepath}")
             logger.info(f"ASM file contains {len(asm_lines)} lines")
             
-            return True
+            # Return success only if no critical errors were encountered
+            return not self.has_critical_errors
             
         except Exception as e:
+            self.error_count += 1
+            self.has_critical_errors = True
             logger.error(f"Error during ASM generation: {e}")
             raise
     

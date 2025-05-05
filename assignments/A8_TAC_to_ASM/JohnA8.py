@@ -113,10 +113,27 @@ class JohnA8(BaseDriver):
             )
             
             # Generate ASM
-            self.asm_generator.generate_asm()
-            
-            self.logger.info(f"ASM generation completed successfully: {self.asm_output_filename}")
-            return True
+            try:
+                generation_result = self.asm_generator.generate_asm()
+                
+                # Check for specific error flags or error counts that might be set
+                error_conditions = [
+                    not generation_result,  # If generate_asm returns False
+                    hasattr(self.asm_generator, 'error_count') and self.asm_generator.error_count > 0
+                ]
+                
+                # Since we don't have error_count tracking in the current implementation,
+                # we'll look for specific errors in the logs or method calls
+                if any(error_conditions):
+                    self.logger.error("ASM generation reported errors.")
+                    return False
+                    
+                self.logger.info(f"ASM generation completed successfully: {self.asm_output_filename}")
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"Exception during ASM generation: {e}")
+                return False
             
         except Exception as e:
             self.logger.error(f"Error during ASM generation: {e}")
@@ -173,9 +190,10 @@ class JohnA8(BaseDriver):
                  
             # Generate ASM code
             asm_gen_ok = self.run_asm_generation()
+            self.asm_gen_ok = asm_gen_ok  # Store the result as an instance attribute
+            
             if not asm_gen_ok:
                 self.logger.error("Errors occurred during ASM generation.")
-                # Ensure summary reflects the failure
                 # We don't return here, let it finish and print summary
 
             self.logger.info("A8 compilation pipeline finished.")
@@ -189,46 +207,36 @@ class JohnA8(BaseDriver):
             # Always print summary regardless of exceptions
             self.print_compilation_summary()
 
-    def print_compilation_summary(self):
-        """Print a summary of the compilation process."""
-        self.logger.info("-" * 21)
-        self.logger.info("Compilation Summary")
-        self.logger.info("-" * 21)
-        
-        lexical_status = "Done" if hasattr(self, 'lexical_analyzer') else "Skipped"
-        syntax_status = "Done" if hasattr(self, 'parser') else "Skipped"
-        semantic_status = "Done" if hasattr(self, 'semantic_analyzer') else "Skipped"
-        tac_write_status = "Done" if hasattr(self, 'tac_write_ok') and self.tac_write_ok else "Skipped"
-        
-        self.logger.info(f"Lexical   : {lexical_status:<7} | Errors: {self.lexical_errors}")
-        self.logger.info(f"Syntax    : {syntax_status:<7} | Errors: {self.syntax_errors}")
-        self.logger.info(f"Semantic  : {semantic_status:<7} | Errors: {self.semantic_errors}")
-        self.logger.info(f"TAC Write : {tac_write_status:<7} | Errors: {0 if tac_write_status == 'Done' else 'N/A'}")
+    def print_compilation_summary(self) -> None:
+        """Prints a summary of the compilation phases, including ASM generation."""
+        super().print_compilation_summary()  # Call the parent implementation for regular phases
         
         # Add ASM generator summary
         asm_ran = hasattr(self, 'asm_generator')
-        asm_ok = asm_ran and not any("Error during ASM generation" in msg for msg in self.logger.get_log_messages(logging.ERROR))
         
-        asm_status = "Skipped" if not asm_ran else ("Done" if asm_ok else "Failed")
+        # Check if ASM generation was successful based on run_asm_generation's return value
+        asm_ok = getattr(self, 'asm_gen_ok', False)
         
-        self.logger.info(f"ASM Gen   : {asm_status:<7} | Errors: {'N/A' if not asm_ran else (0 if asm_ok else 1)}")
+        asm_status = "Skipped" if not asm_ran else ("OK" if asm_ok else "Failed")
+        asm_output = self.asm_output_filename if hasattr(self, 'asm_output_filename') else "Not specified"
         
-        self.logger.info("-" * 21)
-        
-        # Calculate total errors
-        total_errors = self.lexical_errors + self.syntax_errors + self.semantic_errors
-        if tac_write_status == "Done" and not self.tac_write_ok:
-            total_errors += 1
-        if asm_ran and not asm_ok:
-            total_errors += 1
-        
-        self.logger.info(f"Total Errors: {total_errors}")
-        
-        # Print success/failure message
-        if total_errors == 0:
-            self.logger.info("Compilation completed successfully!")
+        self.logger.info(f"ASM Generation: {asm_status}")
+        self.logger.info(f"ASM Output: {asm_output}")
+
+        # Adjust overall success message based on all phases, including ASM
+        # Check for lexical, syntax, semantic, tac write, and asm errors
+        has_errors = any([
+            self.lexical_errors,
+            self.syntax_errors,
+            self.semantic_errors,
+            not getattr(self, 'tac_write_ok', True), # Check if TAC write failed
+            not asm_ok # Check if ASM failed
+        ])
+
+        if has_errors:
+            self.logger.info("Compilation finished with errors.")
         else:
-            self.logger.info("Compilation completed with errors.")
+            self.logger.info("Compilation completed successfully!")
 
 def main():
     """Main function to parse arguments and run the JohnA8Driver."""

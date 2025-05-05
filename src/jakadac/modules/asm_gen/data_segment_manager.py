@@ -12,11 +12,7 @@ from typing import Dict, List, Set
 import logging
 
 # Import EntryType directly from SymTable
-try:
-    from ..SymTable import EntryType
-except ImportError:
-    # Fallback import path
-    from src.jakadac.modules.SymTable import EntryType
+from ..SymTable import EntryType
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)

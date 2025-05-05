@@ -228,6 +228,11 @@ class SymbolTable:
         self._current_depth: int = -1 # Will become 0 when first scope is entered
         self.enter_scope() # Initialize the global scope
         logger.info("Symbol Table initialized.")
+        
+        # Storage for symbols that have been exited from scope
+        # This helps with cross-scope symbol lookups after parsing is complete
+        self._preserved_symbols = {}  # Dict mapping name -> Symbol
+        self._preserve_by_depth = {}  # Dict mapping depth -> Dict[name, Symbol]
 
     @property
     def current_depth(self) -> int:
@@ -241,13 +246,31 @@ class SymbolTable:
         logger.info(f"Entered scope depth {self._current_depth}")
 
     def exit_scope(self):
-        """Exits the current lexical scope."""
-        if self._current_depth < 0:
-            logger.error("Attempted to exit scope below global scope.")
-            # Optionally raise an internal error
+        """
+        Exits the current scope, removing all symbols declared at this level.
+        
+        Returns:
+            None
+        """
+        if self._current_depth <= 0:
+            logger.warning("Cannot exit global scope (depth 0).")
             return
-        exiting_scope = self._scope_stack.pop()
+            
+        # Get symbols from the current scope before removing
+        exiting_scope = self._scope_stack[-1]
+        
+        # Preserve procedure symbols for later lookup
+        for name, symbol in exiting_scope.items():
+            if symbol.entry_type == EntryType.PROCEDURE or symbol.entry_type == EntryType.FUNCTION:
+                logger.debug(f"Preserving {symbol.entry_type.name} symbol '{name}' from depth {self._current_depth}")
+                self.preserve_symbol(symbol)
+        
+        # Remove the scope
+        self._scope_stack.pop()
+        
         logger.info(f"Exiting scope depth {self._current_depth}. Removing {len(exiting_scope)} symbols.")
+        # Optionally print the table of the scope being exited
+        # self._dump_scope(self._current_depth + 1) # Depth was already decremented
         self._current_depth -= 1
 
     def get_symbols_at_depth(self, depth: int) -> Dict[str, Symbol]:
@@ -265,9 +288,7 @@ class SymbolTable:
         """
         if 0 <= depth < len(self._scope_stack):
             return self._scope_stack[depth]
-        else:
-            logger.error(f"Attempted to access invalid scope depth: {depth}. Valid range: 0 to {len(self._scope_stack) - 1}")
-            raise IndexError(f"Invalid scope depth: {depth}")
+        raise IndexError(f"Scope depth {depth} is out of bounds (0-{len(self._scope_stack)-1})")
 
     def insert(self, symbol: Symbol):
         """
@@ -303,13 +324,13 @@ class SymbolTable:
         current_scope[name] = symbol
         logger.info(f"Inserted symbol: {symbol}")
 
-    def lookup(self, name: str, lookup_current_scope_only: bool = False) -> Symbol:
+    def _lookup_active_scopes(self, name: str, current_scope_only: bool = False) -> Symbol:
         """
-        Looks up a symbol by name, searching from the current scope outwards.
+        Looks up a symbol by name in active scopes only, searching from the current scope outwards.
 
         Args:
             name: The name (identifier) of the symbol to find.
-            lookup_current_scope_only: If True, only search the current scope.
+            current_scope_only: If True, only search the current scope.
 
         Returns:
             The found Symbol object.
@@ -317,9 +338,9 @@ class SymbolTable:
         Raises:
             SymbolNotFoundError: If the symbol is not found in any accessible scope.
         """
-        logger.debug(f"Looking up symbol '{name}' (current scope only: {lookup_current_scope_only})")
+        logger.debug(f"Looking up symbol '{name}' (current scope only: {current_scope_only})")
 
-        if lookup_current_scope_only:
+        if current_scope_only:
             if self._scope_stack:
                 current_scope = self._scope_stack[-1]
                 if name in current_scope:
@@ -341,6 +362,35 @@ class SymbolTable:
                      logger.warning(f"Scope inconsistency: looking for depth {depth}, but stack size is {len(self._scope_stack)}")
 
             logger.debug(f"'{name}' not found in any accessible scope.")
+            raise SymbolNotFoundError(name)
+
+    def lookup(self, name: str, current_scope_only: bool = False) -> Symbol:
+        """
+        Looks up a symbol by name, searching from the current scope outwards.
+        If not found in active scopes, checks preserved symbols.
+
+        Args:
+            name: The name (identifier) of the symbol to find.
+            current_scope_only: If True, only search the current scope.
+
+        Returns:
+            The found Symbol object.
+
+        Raises:
+            SymbolNotFoundError: If the symbol is not found in any accessible scope.
+        """
+        # First look in active scopes
+        try:
+            return self._lookup_active_scopes(name, current_scope_only)
+        except SymbolNotFoundError:
+            # If not found in active scopes and we're not restricted to current scope,
+            # try preserved symbols
+            if not current_scope_only:
+                symbol = self.get_preserved_symbol(name)
+                if symbol:
+                    logger.debug(f"Found '{name}' in preserved symbols storage (was at depth {symbol.depth})")
+                    return symbol
+            # If still not found, raise the original exception
             raise SymbolNotFoundError(name)
 
     def get_current_scope_symbols(self) -> Dict[str, Symbol]:
@@ -393,6 +443,45 @@ class SymbolTable:
         for row in rows:
             lines.append(" | ".join(row[i].ljust(col_widths[i]) for i in range(len(headers))))
         return "\n".join(lines)
+
+    def preserve_symbol(self, symbol: Symbol):
+        """
+        Preserves a symbol for later lookup, even after its scope has been exited.
+        This is useful for procedures that need to be referenced after parsing.
+        
+        Args:
+            symbol: The symbol to preserve
+        """
+        self._preserved_symbols[symbol.name] = symbol
+        
+        # Also add to depth-indexed dictionary
+        if symbol.depth not in self._preserve_by_depth:
+            self._preserve_by_depth[symbol.depth] = {}
+        self._preserve_by_depth[symbol.depth][symbol.name] = symbol
+
+    def get_preserved_symbol(self, name: str) -> Optional[Symbol]:
+        """
+        Retrieves a preserved symbol by name.
+        
+        Args:
+            name: The name of the symbol to look up
+            
+        Returns:
+            The Symbol object if found, None otherwise
+        """
+        return self._preserved_symbols.get(name)
+        
+    def get_preserved_symbols_at_depth(self, depth: int) -> Dict[str, Symbol]:
+        """
+        Returns all preserved symbols at a specific depth.
+        
+        Args:
+            depth: The scope depth to retrieve symbols from
+            
+        Returns:
+            Dictionary mapping names to Symbol objects
+        """
+        return self._preserve_by_depth.get(depth, {})
 
 # --- Example Usage ---
 if __name__ == "__main__":

@@ -323,6 +323,30 @@ Log File Naming:
 """
         print(help_text)
 
+    # ----------------------------------------------------------------
+    # Additional utility methods
+    # ----------------------------------------------------------------
+    def get_log_messages(self, level=logging.ERROR):
+        """
+        Retrieve log messages of a specific level from memory-based handlers.
+        
+        Args:
+            level (int): The logging level to filter messages by (e.g., logging.ERROR)
+            
+        Returns:
+            list: A list of messages with the specified level
+        """
+        messages = []
+        
+        # Since we don't keep an in-memory buffer of logs by default,
+        # we'll return an empty list and log a warning
+        self.warning("get_log_messages called, but no in-memory log buffer is available")
+        
+        # In a future enhancement, we could add a MemoryHandler to store recent logs
+        # and return actual messages here
+        
+        return messages
+
 ###############################################################################
 # Full Documentation for the Logger Class
 ###############################################################################
