@@ -514,3 +514,50 @@ class ASMGenerator:
 
     # --- Utility or Helper Methods (Example - can be expanded) ---
     # Potentially, methods for error reporting formatting, etc.
+
+    def is_immediate(self, operand_asm_string: str) -> bool:
+        """Checks if the ASM operand string represents an immediate value."""
+        if not operand_asm_string:
+            return False
+        try:
+            int(operand_asm_string) # Check for decimal
+            return True
+        except ValueError:
+            try:
+                int(operand_asm_string, 16) # Check for hex (e.g., "0FFH")
+                if operand_asm_string.upper().endswith("H"):
+                    return True
+            except ValueError:
+                # Check for character literal like 'A'
+                if len(operand_asm_string) == 3 and operand_asm_string.startswith("'") and operand_asm_string.endswith("'"):
+                    return True
+                # Could add checks for binary, octal if needed
+                return False
+        return False # Should be caught by try-except
+
+    def is_register(self, operand_asm_string: str) -> bool:
+        """Checks if the ASM operand string is a known register."""
+        if not operand_asm_string:
+            return False
+        # Common 8086 registers
+        regs = {
+            "AX", "BX", "CX", "DX", "SI", "DI", "SP", "BP",
+            "AL", "AH", "BL", "BH", "CL", "CH", "DL", "DH",
+            "CS", "DS", "ES", "SS" # Segment registers (less common as operands in this context)
+        }
+        return operand_asm_string.upper() in regs
+
+    # We have to handle string labels like _S0 correctly
+    # by returning "OFFSET _S0" when the context implies an address is needed (e.g. for WRS).
+    # Example snippet for get_operand_asm related to string labels:
+    #
+    # if tac_operand.startswith("_S") and tac_operand[2:].isdigit():
+    #     # For WRS, or if explicitly needing an address (e.g. PUSH @mystring)
+    #     if instruction_opcode == TACOpcode.WRITE_STR or \
+    #        (instruction_opcode == TACOpcode.PUSH and tac_operand_obj.is_address_of): # Assuming TACOperand object passed
+    #         return f"OFFSET {tac_operand}"
+    #     # If it's a string constant assigned to a variable, it might just be the label
+    #     # or its value depending on how you manage constants.
+    #     # For now, this is a simplified check.
+    #     # If _S0 is used in an expression like X = _S0, it's more complex.
+    #     # This code assumes _S0 is primarily for WRS.
