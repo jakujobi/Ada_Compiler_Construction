@@ -121,32 +121,32 @@ Extensions:
 
 - autoDocstring: auto documenting python
 - Better Comments: Adding todos
-- Blockman
-- Code Runner
+- Blockman: slits python code into blocks
+- Code Runner: run the code
 - Code Spell Checker
-- Error Lens
-- GitHub Pull Request
-- GitLen
-- Hide Comments
-- indent-rainbow
+- Error Lens: Live errors in the IDE
+- GitHub Pull Request: Faster Pull requests from the IDE
+- GitLens: Creating well detailed commit messages
+- Hide Comments: Hide all comments
+- indent-rainbow: clearly show indents in python
 - IntelliCode
-- LanguageTool
-- Martkdiwn All in One
+- LanguageTool: Spell check
+- Martkdiwn All in One: Work with markdown in VSCode
 - Markown Collapsible headers
-- Markdown Preview
-- markdownlint
-- Office Viewer
-- Output Colorizer
+- Markdown Preview: View markdown
+- markdownlint: Linting markdown for lint errors
+- Office Viewer: View doc files (Dr hamer uses docs)
+- Output Colorizer: Colorize my terminal output
 - Path intllisense
 - Prettier
 - Pylance
 - Python
 - Pthon DebuggerPython Envy
-- Python Indent
+- Python Indent: Automatically indent python code
 - Python Preview
-- Spacetime
-- Toggle Bracket Guides
-- VS Code Counter
+- Spacetime: tract time spent
+- Toggle Bracket Guides: Toggle blocks of code
+- VS Code Counter: COunt lines of code
 
 ## Conclusion
 
