@@ -147,7 +147,7 @@ class TACParser:
                                         self._parse_operand(op2_str))
 
         #    dest = UN_OP op1 (e.g., t1 = uminus a)
-        unary_assign_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_@\.\+\-]*)\s*=\s*(uminus|not)\s+([a-zA-Z_][a-zA-Z0-9_@\.\+\-]*)', instruction_part, re.IGNORECASE)
+        unary_assign_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_@\.+-]*)\s*=\s*(uminus|not)\s+([a-zA-Z_][a-zA-Z0-9_@\.+-]*)', instruction_part, re.IGNORECASE)
         if unary_assign_match:
             dest_str, op_str, op1_str = map(clean_comment, unary_assign_match.groups())
             opcode = TACOpcode.from_string(op_str)
