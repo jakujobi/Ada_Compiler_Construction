@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # NewSemanticAnalyzer.py
 # type: ignore
-# Author: AI Assistant
+# Author: John Akujobi and improved together with locally run Qwen
 # Version: 1.0
 """
 Semantic Analyzer for Ada Compiler

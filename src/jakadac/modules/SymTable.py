@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SymTable.py
-# Author: John Akujobi (Refactored by AI Assistant)
+# Author: John Akujobi and improved with locally run Qwen
 # GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
 # Date: 2025-03-14 (Refactored Date)
 # Version: 2.0

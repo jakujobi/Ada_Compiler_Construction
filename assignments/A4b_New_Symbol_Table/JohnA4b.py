@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # JohnA4b.py
-# Author: AI Assistant
+# Author: John Akujobi and improved together with locally run Qwen
 # Date: 2025-03-14
 # Version: 1.0
 """
