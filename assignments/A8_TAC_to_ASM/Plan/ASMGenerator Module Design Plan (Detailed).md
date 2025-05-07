@@ -39,7 +39,7 @@ This document provides a detailed plan for the 8086 assembly code generation mod
     * **Action:**
       1. Strip leading/trailing whitespace. Ignore empty lines or comment lines (if any defined).
       2. Check for and extract a leading label (e.g., L1:). Store label without the colon.
-      3. **(Crucial!)** Based on the **actual, observed format** of your A7 TAC output (delimiters, operand order), split the remaining string into components.
+      3. **(Crucial!)** Based on the **actual, observed format** of your A7 TAC output (delimiters, operand order), split the remaining string into components. (Refer to `A8_Prep_Findings.md`, Section 2, for specific observed formats including `START PROC Name` and operand representation like `_BP-N` vs. `[bp+/-N]`.)
       4. Identify the opcode (usually the first component after the label, or the first component if no label).
       5. Map the remaining components to op1, op2, dest based on the *known format* of the specific opcode. Define expected patterns clearly (e.g., for `dest = op1 op op2`, order might be dest, op1, op2 after `=`; for `wrs Label`, just op1=Label; for `proc Name`, dest=Name).
       6. Handle instructions with varying numbers of operands gracefully (e.g., `wrln` has none, `push @Var` has one, `add` has three).
@@ -178,7 +178,7 @@ This document provides a detailed plan for the 8086 assembly code generation mod
       * Return [f" mov dx, {label_op}", f" call writestr"]
     * **translate_wri(self, instr, formatter):**
       * address_op = formatter.format_operand(instr.op1, ...) # e.g., "[bp-6]"
-      * register = "dx" # **Confirm this from io.asm!** Assume DX for now.
+      * register = "ax" # Confirmed from io.asm conventions (expects integer in AX).
       * Return [f" mov {register}, {address_op}", f" call writeint"]
     * **translate_rdi(self, instr, formatter):**
       * address_op = formatter.format_operand(instr.dest, ...) # e.g., "[bp-2]"
