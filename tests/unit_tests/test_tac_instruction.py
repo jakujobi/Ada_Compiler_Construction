@@ -33,7 +33,6 @@ class TestTACOpcode(unittest.TestCase):
         self.assertEqual(TACOpcode.from_string('rem'), TACOpcode.REM)
         self.assertEqual(TACOpcode.from_string('uminus'), TACOpcode.UMINUS)
         self.assertEqual(TACOpcode.from_string('if_eq'), TACOpcode.IF_EQ) 
-        # Add more direct mappings that represent actual values in TAC files.
 
     def test_from_string_invalid(self):
         self.assertEqual(TACOpcode.from_string('invalid_op'), TACOpcode.UNKNOWN)

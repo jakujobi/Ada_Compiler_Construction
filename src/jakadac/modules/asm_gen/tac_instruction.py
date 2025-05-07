@@ -22,6 +22,7 @@ class TACOpcode(Enum):
 
     # Unary Operations
     UMINUS = "uminus"   # result = -arg1 (e.g., x = -y)
+    NOT_OP = "not"      # result = not arg1 (logical not)
     # (Add other unary ops like NOT if needed)
 
     # Control Flow - Unconditional
