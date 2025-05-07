@@ -46,8 +46,7 @@ class TACGenerator:
         self.temp_counter = 0  # For generating temporary variables  
         self.tac_lines: List[Union[str, tuple]] = []    # List of TAC instructions (can be tuple or string)  
         self.start_proc_name = None  # Store the outermost procedure name  
-        self.string_literals: Dict[str, str] = {} # For storing string labels -> values  
-        self.string_label_counter = 0 # For generating unique string labels  
+        self.string_definitions: Dict[str, str] = {} # Maps SymTable label to original string value
         
         # Track procedure declarations for reordering  
         self.proc_declarations = {}  
@@ -360,27 +359,27 @@ class TACGenerator:
         self.logger.info(f"Emitting Write Int: {instruction}")  
         self.emit(instruction)  
       
-    def emitWriteString(self, string_value: str):  
-        """  
-        Emit a write string instruction.  
-        Generates a label, stores the string, and emits 'wrs'.  
-        Format: ('wrs', label)  
-        """  
-        # Generate label  
-        label = f"_S{self.string_label_counter}"  
-        self.string_label_counter += 1  
+    def add_string_definition(self, label: str, original_string_value: str):
+        """
+        Stores a string literal and its SymTable-generated label for later output.
+        Args:
+            label: The unique label for the string (e.g., "_S0").
+            original_string_value: The raw string value (e.g., "Hello World").
+        """
+        if label not in self.string_definitions:
+            self.string_definitions[label] = original_string_value
+            self.logger.debug(f"Stored string definition: {label} -> \"{original_string_value}\"")
+        # If label already exists, we assume it's the same string, so no need to update or warn unless requirements change.
 
-        # Store processed string value with terminator  
-        processed_value = string_value # Assuming parser already processed escapes  
-        if not processed_value.endswith('$'):  
-             processed_value += '$'  
-        self.string_literals[label] = processed_value  
-        self.logger.debug(f"Stored string literal: {label} -> \"{processed_value}\"")  
-
-        # Emit instruction  
-        instruction = ('wrs', label)  
-        self.logger.info(f"Emitting Write String: {instruction}")  
-        self.emit(instruction)  
+    def emit_write_string_by_label(self, label: str):
+        """
+        Emit a write string instruction using its label.
+        Assumes the string definition has already been added via add_string_definition.
+        Format: ('wrs', label)
+        """
+        instruction = ('wrs', label)
+        self.logger.info(f"Emitting Write String by Label: {instruction}")
+        self.emit(instruction)
       
     def emitNewLine(self):  
         """  
@@ -403,45 +402,58 @@ class TACGenerator:
         self.logger.info(f"Program entry point set to: '{main_proc_name}'")  
         # The actual START PROC line is added during writeOutput  
       
-    def get_string_literals(self) -> Dict[str, str]:  
-        """Returns the dictionary of stored string literals (label -> value)."""  
-        return self.string_literals.copy()  
-      
     def writeOutput(self) -> bool:  
         """  
         Write the generated TAC instructions to the output file.  
-        Handles reordering and adding START PROC.  
+        Handles reordering, adding START PROC, and prepending string definitions.
         Returns True on success, False on failure.  
         """  
         self.logger.info(f"Writing TAC output to: {self.output_filename}")  
 
-        # Ensure main procedure (if deferred) is processed  
-        if self.pending_main_proc:  
-             self.logger.warning(f"Main procedure '{self.pending_main_proc}' was started but not ended. Appending instructions.")  
-             # Append an endp if missing?  
-             if not self.main_proc_instructions or self.main_proc_instructions[-1] != ('endp', self.pending_main_proc):  
-                  self.main_proc_instructions.append(('endp', self.pending_main_proc))  
-             self.tac_lines = self.main_proc_instructions + self.tac_lines  
-             self.pending_main_proc = None  
+        final_tac_lines: List[Union[str, tuple]] = []
 
-        # Add START PROC directive at the end if a start procedure was identified  
+        # 1. Add string definitions (e.g., _S0: .ASCIZ "Hello World")
+        if self.string_definitions:
+            for label, str_val in self.string_definitions.items():
+                # Basic escaping for common characters (quotes, newlines, tabs, backslashes)
+                escaped_str_val = str_val.replace('\\', '\\\\').replace('\"', '\\\"').replace('\n', '\\n').replace('\t', '\\t')
+                string_def_line = f"{label}: .ASCIZ \"{escaped_str_val}\""
+                final_tac_lines.append(string_def_line) 
+            final_tac_lines.append('') # Add a blank line for readability after string defs
+
+        # 2. Handle procedure reordering and main procedure instructions
+        # Start with a copy of the main TAC lines collected so far (inner procedures, etc.)
+        processed_tac_lines = list(self.tac_lines) 
+
+        # If main procedure instructions were deferred, prepend them now.
+        if self.pending_main_proc:  
+            self.logger.warning(f"Main procedure '{self.pending_main_proc}' was started but not ended. Appending instructions.")  
+            if not self.main_proc_instructions or self.main_proc_instructions[-1] != ('endp', self.pending_main_proc):  
+                self.main_proc_instructions.append(('endp', self.pending_main_proc))  
+            processed_tac_lines = self.main_proc_instructions + processed_tac_lines
+            self.pending_main_proc = None  
+
+        final_tac_lines.extend(processed_tac_lines)
+
+        # 3. Add START PROC directive at the end if a start procedure was identified  
         if self.start_proc_name:  
             start_instruction = ('START PROC', self.start_proc_name)  
-            self.tac_lines.append(start_instruction)  
+            final_tac_lines.append(start_instruction)  
             self.logger.debug(f"Appended final instruction: {start_instruction}")  
         else:  
             self.logger.warning("No start procedure was designated (emitProgramStart never called).")  
 
+        # Ensure the try-except block is at the same indentation level as the 'if self.start_proc_name:' block
         try:  
             # Ensure output directory exists  
             output_dir = Path(self.output_filename).parent  
             output_dir.mkdir(parents=True, exist_ok=True)  
   
             with open(self.output_filename, 'w') as f:  
-                for instruction in self.tac_lines:  
+                for instruction in final_tac_lines:  
                     formatted_line = self._format_instruction(instruction)  
                     f.write(formatted_line + '\n')  
-            self.logger.info(f"Successfully wrote {len(self.tac_lines)} TAC lines.")  
+            self.logger.info(f"Successfully wrote {len(final_tac_lines)} TAC lines.")  
             return True  
         except IOError as e:  
             self.logger.error(f"Failed to write TAC file '{self.output_filename}': {e}")  
