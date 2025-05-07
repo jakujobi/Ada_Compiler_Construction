@@ -37,25 +37,90 @@ While the tools above provided assistance in specific areas, the following core 
 * **Debugging:** Identifying and resolving logical errors, runtime issues, and algorithmic flaws was primarily my own undertaking, though AI tools occasionally helped identify syntax errors or suggest debugging approaches.
 * **Majority of Code Implementation:** The substantial majority of the functional code across all modules was written and implemented by me. AI-generated snippets were limited to small, well-defined utility functions and were integrated and adapted as needed.
 
+---
+
+
+
+## Example Workflow
+
+### Planning
+
+- I gather all information together and breakdown the requirements.
+
+  - This includes notes, assignment information
+- I make a requirments plan
+- I design an architecture and design plan which contains:
+
+  - the classes needed, their modules
+  - methods in the classes
+  - How the data flows and program works
+
+### Implementation
+
+- Make the files needed and make the structures
+- I write the functions as  pseudocode first
+- Convert some of the pseudocode to python code manually
+- Review plan with local model to see what issues there might be and get an outside perspective
+- I make changes to to plan, architecture and pseudocode if needed
+- Translate snippets and small functions from pseudocode to syntactically correct code with help from locally run model
+
+### Testing
+
+- I design test cases to test the classes and modules
+- Add or improve testcases with the help of locally run model
+- Test the program as i write the code.
+
+### Debugging
+
+Throughout my program, i place log statements using a logger module i created. An instance of it is shared accross modules.
+
+Logs are printed to the terminal and to a file (more verbose). When there are issues:
+
+- I read the logs from the terminal
+- Look through the modules related and do a manual walkthrough
+  - Because of the assistance, errors are very rarely syntactic, so I get to focus on the problem solving, and troubleshooting logical errors
+- Make manual fixes, run tests and repeat.
+
+If fixing fails after several multiple attempts.
+
+- Use the python debugger in VsCode to track the execution
+- If there is a unique problem, search online using Perplexity
+- If the problem is fundamental, make a new branch from a last stable commit and work on it
+
+Assistance from model
+
+- I explain the issue i am having.
+  - Sometimes, i use voice to text while talking with a 3D printed Rabbit on my desk
+- I explain the steps i took to fix it.
+- Add the log file as context of what happened
+- Ask it to provide suggestions, but not to solve it outright
+  - Ask it to provide multiple different perspectives separate from the one i have
+- Look for potential issues with the program
+
+All through this, i commit, test and retry the program
+
+
 ## Other tools
 
 The other tools i used were:
 
-- VS Code
-- Edge browser
-- Git
-- GitHub
-- Obsidian
+- VS Code: IDE
+- Edge browser: Web browsing and accessing D2L
+- Git: Source control
+- GitHub: Hosting code
+- Obsidian: Writing notes in latex and markdown
+- LM Studio: Running local models
+- NotebookLM: For studying with my notes
 
 Operating Systems
 
-- Windows 11
-- Linux Mint
+- Windows 11: Mobile workstation
+- Linux Mint: Home workstation
 
 Extensions:
 
-- autoDocstring
-- Better Comments
+- autoDocstring: auto documenting python
+- Better Comments: Adding todos
 - Blockman
 - Code Runner
 - Code Spell Checker
