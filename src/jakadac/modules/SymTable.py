@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SymTable.py
-# Author: John Akujobi (Refactored by AI Assistant)
+# Author: John Akujobi and improved with locally run Qwen
 # GitHub: https://github.com/jakujobi/Ada_Compiler_Construction
 # Date: 2025-03-14 (Refactored Date)
 # Version: 2.0
@@ -35,61 +35,6 @@ from .Logger import logger
 
 # Always import the shared Token class
 from .Token import Token
-
-# Remove the fallback definition of Token class
-# try:
-#     # Import Token (shared); ignore type mismatches
-#     from .Token import Token  # type: ignore
-# except ImportError:
-#     # Define a dummy Token for standalone testing if needed
-#     class Token:
-#         def __init__(self, token_type, lexeme, line_number, column_number,
-#                     value=None, real_value=None, literal_value=None):
-#             """
-#             Initialize a Token instance.
-#
-#             Parameters:
-#                 token_type: The type of the token (usually from the TokenType enumeration).
-#                 lexeme (str): The actual text matched from the source code.
-#                 line_number (int): The line number in the source code where this token appears.
-#                 column_number (int): The column number in the source code where this token starts.
-#                 value: (Optional) The numeric value if this is an integer token.
-#                 real_value: (Optional) The floating-point value if this is a real number token.
-#                 literal_value: (Optional) The inner text for string or character literals.
-#             """
-#             self.token_type = token_type
-#             self.lexeme = lexeme
-#             self.line_number = line_number
-#             self.column_number = column_number
-#             self.value = value
-#             self.real_value = real_value
-#             self.literal_value = literal_value
-#
-#         def __repr__(self):
-#             """
-#             Return an official string representation of the Token.
-#
-#             This is useful for debugging. It shows the token type, lexeme, value,
-#             and the location (line and column) where it was found.
-#             """
-#             try:
-#                 return (f"Token(type={self.token_type}, lexeme='{self.lexeme}', "
-#                         f"value={self.value}, line={self.line_number}, "
-#                         f"column={self.column_number})")
-#             except Exception:
-#                 # If an error occurs during representation, log it and re-raise.
-#                 logger.error('Error in Token __repr__: %s', self.__dict__)
-#                 raise
-#
-#         def __str__(self):
-#             """
-#             Return a user-friendly string representation of the Token.
-#
-#             For example: <ID, 'myVariable'>
-#             """
-#             # Note: There's a small typo in the attribute name ("self. Lexeme" with a space).
-#             # It should be "self.lexeme".
-#             return f"<{self.token_type}, {self.lexeme}>"
 
 # --- Enumerations ---
 class VarType(Enum):
@@ -143,6 +88,7 @@ class Symbol:
         self.param_modes: Optional[Dict[str, ParameterMode]] = None # Modes for parameters
         self.return_type: Optional[VarType] = None # Return type for FUNCTION
         self.local_size: Optional[int] = None # Size of locals for PROCEDURE/FUNCTION
+        self.param_size: Optional[int] = None # Added: Use for SizeOfParams (total bytes)
         # Add fields for TYPE definitions if needed (e.g., base type, fields)
 
     def set_variable_info(self, var_type: VarType, offset: int, size: int):
@@ -160,15 +106,16 @@ class Symbol:
         self.var_type = const_type
         self.const_value = value
 
-    def set_procedure_info(self, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int):
+    def set_procedure_info(self, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int, param_size: int):
         """Sets attributes specific to PROCEDURE symbols."""
         if self.entry_type != EntryType.PROCEDURE:
             logger.warning(f"Attempting to set procedure info on non-procedure symbol '{self.name}'")
         self.param_list = param_list or []
         self.param_modes = param_modes or {}
         self.local_size = local_size
+        self.param_size = param_size # Store total parameter size
 
-    def set_function_info(self, return_type: VarType, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int):
+    def set_function_info(self, return_type: VarType, param_list: List['Symbol'], param_modes: Dict[str, ParameterMode], local_size: int, param_size: int):
         """Sets attributes specific to FUNCTION symbols."""
         if self.entry_type != EntryType.FUNCTION:
             logger.warning(f"Attempting to set function info on non-function symbol '{self.name}'")
@@ -176,6 +123,7 @@ class Symbol:
         self.param_list = param_list or []
         self.param_modes = param_modes or {}
         self.local_size = local_size
+        self.param_size = param_size # Store total parameter size
 
     def __str__(self) -> str:
         """Provides a concise string representation of the symbol."""
@@ -185,7 +133,10 @@ class Symbol:
         if self.size is not None: details += f", size={self.size}"
         if self.const_value is not None: details += f", value={self.const_value!r}"
         if self.return_type: details += f", return={self.return_type.name}"
-        if self.param_list is not None: details += f", params={len(self.param_list)}"
+        # Display calculated sizes if available
+        if self.local_size is not None: details += f", local_size={self.local_size}"
+        if self.param_size is not None: details += f", param_size={self.param_size}"
+        elif self.param_list is not None: details += f", params={len(self.param_list)}" # Fallback if size not set
         return f"Symbol({details})"
 
     def __repr__(self) -> str:
@@ -223,6 +174,10 @@ class SymbolTable:
         self.enter_scope() # Initialize the global scope
         logger.info("Symbol Table initialized.")
 
+        # For string literal management
+        self.string_literals_map: Dict[str, str] = {} # Maps string value to unique label
+        self.next_string_label_id: int = 0
+
     @property
     def current_depth(self) -> int:
         """Returns the current lexical scope depth."""
@@ -247,7 +202,6 @@ class SymbolTable:
              logger.critical("Symbol table depth inconsistency detected!")
              self._current_depth = -1 # Reset for safety
 
-
     def insert(self, symbol: Symbol):
         """
         Inserts a symbol into the current scope.
@@ -257,12 +211,12 @@ class SymbolTable:
 
         Raises:
             DuplicateSymbolError: If a symbol with the same name already exists
-                                  in the current scope.
+                                in the current scope.
         """
         if not self._scope_stack:
-             logger.error("Cannot insert symbol: No active scope.")
-             # Optionally raise an internal error
-             return
+            logger.error("Cannot insert symbol: No active scope.")
+            # Optionally raise an internal error
+            return
 
         current_scope = self._scope_stack[-1]
         name = symbol.name
@@ -328,6 +282,27 @@ class SymbolTable:
             return {}
         return self._scope_stack[-1].copy() # Return a copy
 
+    def add_string_literal(self, string_value: str) -> str:
+        """
+        Adds a string literal to a global store and returns a unique label for it.
+        If the string already exists, returns its existing label.
+
+        Args:
+            string_value: The processed string value (e.g., "Hello World").
+
+        Returns:
+            A unique label for the string (e.g., "_S0", "_S1").
+        """
+        if string_value in self.string_literals_map:
+            logger.debug(f"String literal '{string_value}' already exists, reusing label '{self.string_literals_map[string_value]}'")
+            return self.string_literals_map[string_value]
+        else:
+            label = f"_S{self.next_string_label_id}"
+            self.string_literals_map[string_value] = label
+            self.next_string_label_id += 1
+            logger.debug(f"Added new string literal '{string_value}' with label '{label}'")
+            return label
+
     def __str__(self) -> str:
         """
         Return a formatted string representation of the current scope's symbol table.
@@ -388,7 +363,7 @@ if __name__ == "__main__":
 
         proc_token = Token("IDENTIFIER", "my_proc", line_number=0, column_number=0)
         my_proc = Symbol("my_proc", proc_token, EntryType.PROCEDURE, symtab.current_depth)
-        my_proc.set_procedure_info([], {}, 0) # No params, 0 local size for example
+        my_proc.set_procedure_info([], {}, 0, 0) # No params, 0 local size, 0 param size for example
         symtab.insert(my_proc)
 
     except DuplicateSymbolError as e:

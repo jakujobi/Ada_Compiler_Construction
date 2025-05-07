@@ -77,6 +77,7 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         self.tac_gen = tac_generator
         self.current_procedure_name: Optional[str] = None
         self.current_procedure_symbol: Optional[Symbol] = None
+        self.current_procedure_depth: Optional[int] = None # ADDED: Track depth of proc being parsed
         self.current_local_offset: int = 0 # Typically starts negative for locals below BP
         self.current_param_offset: int = 0 # Typically starts positive for params above BP
 
@@ -112,6 +113,14 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         
         self.logger.info("Starting parsing: Prog")
         
+        # Store the depth *before* this procedure is declared/entered
+        # For the outermost procedure, this will be -1 (before global scope 0 is active)
+        # For nested procedure P inside Q, this will be the depth of Q.
+        # We add 1 to get the depth *where* the procedure symbol itself lives.
+        procedure_declaration_depth = self.symbol_table.current_depth
+        # Store the depth *of* this procedure's scope (which will be entered soon)
+        procedure_scope_depth = procedure_declaration_depth + 1
+
         # Match procedure keyword
         self.match_leaf(self.defs.TokenType.PROCEDURE, node)
         
@@ -120,7 +129,7 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         start_id_token = self.current_token
         if start_id_token and start_id_token.token_type == self.defs.TokenType.ID:
             procedure_name = start_id_token.lexeme
-            self.logger.info(f"Parsing procedure: {procedure_name}")
+            self.logger.info(f"Parsing procedure: {procedure_name} (Declared at depth {procedure_declaration_depth}, Scope will be {procedure_scope_depth})")
         else:
             # Handle error if ID is missing
             self.report_error("Expected procedure identifier")
@@ -135,12 +144,12 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         is_outermost_procedure = self.symbol_table.current_depth == 0 # Check depth BEFORE inserting/entering scope
         if self.symbol_table and procedure_name != "<unknown>":
              try:
-                 # Create symbol at the current depth
+                 # Create symbol at the current depth (where it's declared)
                  proc_sym = Symbol(
                      procedure_name, 
                      start_id_token, 
                      EntryType.PROCEDURE, 
-                     self.symbol_table.current_depth # Belongs to the scope where it's declared
+                     procedure_declaration_depth # Belongs to the scope where it's declared
                  )
                  # Initialize dummy param info; will be updated after parsing Args
                  proc_sym.param_list = [] 
@@ -156,11 +165,12 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
 
         # --- Emit TAC Proc Start (If generating TAC) --- 
         if self.tac_gen:
-            self.logger.debug(f" Setting current_procedure_name = '{procedure_name}'")
-            # Store the current procedure context (name and symbol)
-            # This might be better handled with a stack if recursion becomes complex
+            self.logger.debug(f" Setting current_procedure context: name='{procedure_name}', depth={procedure_scope_depth}")
+            # Store the current procedure context (name, symbol, AND DEPTH)
             self.current_procedure_name = procedure_name
-            self.current_procedure_symbol = proc_sym 
+            self.current_procedure_symbol = proc_sym
+            self.current_procedure_depth = procedure_scope_depth # STORE DEPTH
+
             self.logger.debug(f" Emitting TAC: proc {procedure_name}")
             self.tac_gen.emitProcStart(procedure_name)
             
@@ -169,7 +179,7 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
                  self.logger.info(f" Procedure '{procedure_name}' identified as outermost (depth 0). Recording for START PROC.")
                  self.tac_gen.emitProgramStart(procedure_name)
             else:
-                 self.logger.debug(f" Procedure '{procedure_name}' is nested (depth {self.symbol_table.current_depth}). Not setting as program start.")
+                 self.logger.debug(f" Procedure '{procedure_name}' is nested (depth {procedure_declaration_depth}). Not setting as program start.")
 
             # Initialize offsets for THIS procedure's scope
             self.current_local_offset = -2 
@@ -178,31 +188,39 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
             
         # --- Enter NEW Scope for procedure body --- 
         if self.symbol_table:
-            self.logger.debug(f"Entering scope for procedure '{procedure_name}'.")
+            self.logger.debug(f"Entering scope for procedure '{procedure_name}' body. New depth: {procedure_scope_depth}")
             self.symbol_table.enter_scope()
-        
+            # Verify depth after entering
+            if self.symbol_table.current_depth != procedure_scope_depth:
+                 self.logger.error(f"Scope depth mismatch after entering! Expected {procedure_scope_depth}, got {self.symbol_table.current_depth}")
+
         # --- Parse Args, IS, Declarations, BEGIN, Body, END --- 
         child = self.parseArgs() 
         self._add_child(node, child)
         # Update proc_sym.param_list/modes based on result of parseArgs
         if self.symbol_table and proc_sym:
-            # Get the current symbol table at the procedure's inner scope
+            # This logic needs refinement. Parameters are inserted within parseArgs/
+            # _parseArgListInfo into the *newly entered* scope (procedure_scope_depth).
+            # We need to retrieve them from that scope and attach them to the proc_sym
+            # which exists in the *outer* scope (procedure_declaration_depth).
+            param_symbols_in_body_scope = []
+            param_modes_in_body_scope = {}
+            # Get symbols from the current scope (which is the procedure's body scope)
             current_scope_symbols = self.symbol_table.get_current_scope_symbols()
-            param_symbols = []
-            param_modes = {}
-            
-            # Find all PARAMETER symbols in the current scope
             for sym_name, sym in current_scope_symbols.items():
-                if sym.entry_type == EntryType.PARAMETER:
-                    param_symbols.append(sym)
-                    # Default to IN mode if not specified
-                    param_modes[sym_name] = getattr(sym, 'mode', ParameterMode.IN)
-            
-            # Update the procedure symbol
-            if param_symbols:  # Only update if we found parameters
-                proc_sym.param_list = param_symbols
-                proc_sym.param_modes = param_modes
-                self.logger.debug(f" Updated procedure '{proc_sym.name}' with {len(param_symbols)} parameters")
+                 if sym.entry_type == EntryType.PARAMETER:
+                     param_symbols_in_body_scope.append(sym)
+                     # Assume mode was stored correctly during parseArgs
+                     # If mode isn't on the symbol, this needs adjustment in parseArgs
+                     param_modes_in_body_scope[sym_name] = getattr(sym, 'mode', ParameterMode.IN)
+
+            # Update the procedure symbol (which lives in the outer scope)
+            if param_symbols_in_body_scope:
+                proc_sym.param_list = param_symbols_in_body_scope
+                proc_sym.param_modes = param_modes_in_body_scope
+                self.logger.debug(f" Updated procedure symbol '{proc_sym.name}' (at depth {proc_sym.depth}) with {len(param_symbols_in_body_scope)} parameters found in scope {self.symbol_table.current_depth}.")
+            else:
+                self.logger.debug(f"No parameter symbols found in scope {self.symbol_table.current_depth} to update procedure symbol '{proc_sym.name}'.")
         
         self.match_leaf(self.defs.TokenType.IS, node)
         
@@ -227,31 +245,27 @@ class RDParserExtExt(DeclarationsMixin, StatementsMixin, ExpressionsMixin, RDPar
         self.match_leaf(self.defs.TokenType.SEMICOLON, node)
 
         # --- Emit TAC Proc End --- 
-        # *** FIX 2: Use the procedure_name captured at the start ***
-        if self.tac_gen and procedure_name != "<unknown>": # Use local var procedure_name
-             self.logger.info(f" Emitting TAC: endp {procedure_name}") # Use local var
-             self.tac_gen.emitProcEnd(procedure_name) # Use local var
-             # --- Reset context? ---
-             # Consider if self.current_procedure_name needs resetting here,
-             # For now, assume the next call to parseProg will overwrite it correctly.
+        if self.tac_gen and procedure_name != "<unknown>":
+             self.logger.info(f" Emitting TAC: endp {procedure_name}")
+             self.tac_gen.emitProcEnd(procedure_name)
 
         # --- Exit Scope --- 
         if self.symbol_table:
-            self.logger.debug(f" Checking for outermost procedure '{procedure_name}'. Current depth BEFORE exit: {self.symbol_table.current_depth}")
-            # if self.symbol_table.current_depth == 1: # Exiting the scope of the outermost procedure
-            #     self.logger.info(f" Outermost procedure '{procedure_name}' finished.")
-            #     # Any final actions needed after the main procedure?
-
-            self.logger.debug(f"Exiting scope for procedure '{procedure_name}'.")
+            self.logger.debug(f"Exiting scope {self.symbol_table.current_depth} for procedure '{procedure_name}'.")
             self.symbol_table.exit_scope()
 
-        # Reset parser state if needed (though maybe handled by caller or implicitly)
-        # If this was the top-level call, state should be clean. If recursive, caller manages.
-        self.logger.debug(f"Reset parser state after finishing '{procedure_name}'.")
-        # self.current_procedure_name = None # Maybe? Or managed by caller context?
-        # self.current_procedure_symbol = None
-    
-        self.logger.info(f"Finished parsing procedure: {procedure_name}") # Use local var
+        # Restore outer procedure context if this was nested
+        # This requires maintaining a stack of procedure contexts
+        # Simple approach for now: Reset depth if not nested (could be improved)
+        if is_outermost_procedure:
+             self.current_procedure_depth = None
+             self.current_procedure_name = None
+             self.current_procedure_symbol = None
+             self.logger.debug("Reset procedure context after outermost procedure.")
+        # Else: If nested, the caller's context should be restored implicitly by call stack
+        # Needs verification if nesting > 1 level works correctly.
+
+        self.logger.info(f"Finished parsing procedure: {procedure_name}")
 
         if self.build_parse_tree:
             return node

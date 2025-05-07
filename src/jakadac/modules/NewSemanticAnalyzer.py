@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # NewSemanticAnalyzer.py
 # type: ignore
-# Author: AI Assistant
+# Author: John Akujobi and improved together with locally run Qwen
 # Version: 1.0
 """
 Semantic Analyzer for Ada Compiler
@@ -24,6 +24,7 @@ from .SymTable import (
 )
 from .Logger import logger
 from .RDParser import ParseTreeNode
+from .Token import Token
 
 class NewSemanticAnalyzer:
     def __init__(
@@ -48,6 +49,7 @@ class NewSemanticAnalyzer:
         self.offsets: Dict[int, int] = {}
         # next free positive offset for parameters
         self.param_offsets: Dict[int, int] = {}
+        self.string_label_counter: int = 0 # Added for unique string labels
 
     def analyze(self) -> bool:
         """
@@ -103,27 +105,46 @@ class NewSemanticAnalyzer:
             return
         # Enter new scope for procedure body
         self.symtab.enter_scope()
+        current_scope_depth = self.symtab.current_depth
         # Initialize offsets at new depth for locals and parameters
-        self.offsets[self.symtab.current_depth] = 0
-        self.param_offsets[self.symtab.current_depth] = 0
+        self.offsets[current_scope_depth] = 0
+        self.param_offsets[current_scope_depth] = 0 # This might not be used if offsets calculated in _visit_formals
+        
         # Handle formal parameters (inserted at this new scope depth)
         param_list, param_modes = self._visit_formals(node)
+        # Calculate total parameter size
+        total_param_size = sum(p.size for p in param_list if p.size is not None)
+
         # Declarations (constants & variables)
         decls_node = node.find_child_by_name("DeclarativePart")
         self._visit_declarative_part(decls_node)
+        # Get size of declared locals from offset counter
+        declared_local_size = self.offsets[current_scope_depth]
+
         # Nested procedures
         procs_node = node.find_child_by_name("Procedures")
         if procs_node:
             for child in procs_node.children:
                 if child.name == "Prog":
                     self._visit_program(child)
-        # Check statements for undeclared identifier uses
+
+        # Check statements for undeclared identifier uses and handle string literals
         stmts_node = node.find_child_by_name("SeqOfStatements")
         if stmts_node:
-            self._visit_statements(stmts_node)
-        # Record local size and update procedure info
-        local_size = self.offsets[self.symtab.current_depth]
-        proc_symbol.set_procedure_info(param_list, param_modes, local_size)
+            self._visit_statements(stmts_node) # Pass symtab to allow global string insertion
+
+        # Record sizes and update procedure info
+        # Note: local_size here only includes declared locals, not temps.
+        # Temps size needs to be handled later (e.g., by ASMGenerator based on TAC).
+        if proc_symbol:
+             if proc_symbol.entry_type == EntryType.PROCEDURE:
+                 proc_symbol.set_procedure_info(param_list, param_modes, declared_local_size, total_param_size)
+                 logger.info(f"Updated procedure '{proc_symbol.name}': local_size={declared_local_size}, param_size={total_param_size}")
+             elif proc_symbol.entry_type == EntryType.FUNCTION: # Assuming FUNCTION processing is similar
+                 # Ensure return_type is set appropriately elsewhere if needed
+                 proc_symbol.set_function_info(proc_symbol.return_type, param_list, param_modes, declared_local_size, total_param_size)
+                 logger.info(f"Updated function '{proc_symbol.name}': local_size={declared_local_size}, param_size={total_param_size}")
+
         # Dump and exit this scope
         self._dump_scope(self.symtab.current_depth)
         self.symtab.exit_scope()
@@ -344,25 +365,150 @@ class NewSemanticAnalyzer:
 
     def _visit_statements(self, node: ParseTreeNode) -> None:
         """
-        Check each statement for undeclared identifier uses.
+        Traverse SeqOfStatements nodes, checking for undeclared IDs
+        and handling string literals within I/O calls.
         """
+        # Example: This needs to be adapted based on *your specific parse tree structure* for I/O statements.
+        # Assume a structure like: Statement -> IOStat -> PutStat -> WriteList -> WriteToken -> LITERAL
         def dfs(n: ParseTreeNode):
-            # Only need to explicitly check assignment LHS here.
-            # Other undeclared IDs will be caught when visiting expression nodes.
-            if n.name == "AssignStat":
+            if n.name == "IOStat": # Check the container first
+                # Look for PutStat or PutLnStat inside IOStat
+                put_stat = n.find_child_by_name("PutStat")
+                putln_stat = n.find_child_by_name("PutLnStat")
+                target_stat = put_stat or putln_stat
+
+                if target_stat:
+                    # Find the literal argument directly within Put(Ln)Stat if it exists
+                    # Assumes WriteArg -> LITERAL or WriteArg -> Expr structure is simplified,
+                    # and LITERAL is a direct child if present.
+                    literal_node = target_stat.find_child_by_name("LITERAL")
+                    if literal_node:
+                        self.logger.debug(f"Found LITERAL node in {target_stat.name}: {literal_node.token}")
+                        # Call handler. The label isn't used here, but symbol is inserted.
+                        self._handle_string_literal(literal_node)
+                    # else: Handle expression case if needed (e.g., check identifiers within Expr)
+
+            elif n.name == "AssignStat": # Check assignment statement LHS and RHS IDs
                 self._visit_assign_stat(n)
-            for c in n.children:
-                dfs(c)
-        dfs(node)
+            elif n.name == "GetStat": # Check identifier used in GET
+                self._visit_get_stat(n)
+            elif n.name == "ProcCall": # Check identifiers used as parameters
+                self._visit_proc_call(n)
+            # Add checks for other statement types (IF, LOOP, etc.) if they use identifiers
+
+            # Recurse
+            for child in getattr(n, 'children', []):
+                dfs(child)
+
+        if node:
+            dfs(node)
 
     def _visit_assign_stat(self, node: ParseTreeNode) -> None:
-        """Check that the variable on the left side of an assignment is declared."""
-        # The first ID child in an AssignStat node is the LHS
+        """Check that the variable on the left side of an assignment is declared.
+           Also checks identifiers used on the right side expression."""
+        # Check LHS
         id_node = node.find_child_by_name("ID")
         if id_node and id_node.token:
-            lex = id_node.token.lexeme
-            try:
-                self.symtab.lookup(lex)
-            except SymbolNotFoundError:
-                line = getattr(id_node.token, 'line_number', -1)
-                self._error(f"Undeclared identifier '{lex}' used in assignment at line {line}")
+            self._check_identifier_declared(id_node.token)
+        # Recursively check RHS Expression
+        expr_node = node.find_child_by_name("Expr") # Adjust if node name is different
+        if expr_node:
+            self._check_expr_identifiers(expr_node)
+
+    def _visit_get_stat(self, node: ParseTreeNode) -> None:
+        """Check that the identifier used in a GET statement is declared and valid."""
+        id_node = node.find_child_by_name("ID")
+        if id_node and id_node.token:
+            self._check_identifier_declared(id_node.token, check_assignable=True)
+
+    def _visit_proc_call(self, node: ParseTreeNode) -> None:
+        """Check identifiers used as actual parameters in a procedure call."""
+        # Check procedure name itself
+        proc_id_node = node.find_child_by_name("ID")
+        if proc_id_node and proc_id_node.token:
+            self._check_identifier_declared(proc_id_node.token, check_callable=True)
+        # Check parameters within Params -> Expr
+        params_node = node.find_child_by_name("Params")
+        if params_node:
+             for expr_node in params_node.find_children_by_name("Expr"):
+                  self._check_expr_identifiers(expr_node)
+
+    def _check_expr_identifiers(self, node: ParseTreeNode) -> None:
+        """Recursively checks all ID nodes within an expression subtree."""
+        if node.name == "ID" and node.token:
+             self._check_identifier_declared(node.token)
+        for child in getattr(node, 'children', []):
+             self._check_expr_identifiers(child)
+
+    def _check_identifier_declared(self, token: Token, check_assignable: bool = False, check_callable: bool = False) -> None:
+        """Helper to check if an identifier is declared in the symbol table."""
+        lex = token.lexeme
+        line = getattr(token, 'line_number', -1)
+        col = getattr(token, 'column_number', -1)
+        try:
+            symbol = self.symtab.lookup(lex)
+            # Optional additional checks
+            if check_assignable:
+                 if symbol.entry_type == EntryType.CONSTANT:
+                      self._error(f"Cannot assign to constant '{lex}' at line {line}")
+                 elif symbol.entry_type in (EntryType.PROCEDURE, EntryType.FUNCTION):
+                      self._error(f"Cannot assign to procedure/function '{lex}' at line {line}")
+            if check_callable:
+                 if symbol.entry_type not in (EntryType.PROCEDURE, EntryType.FUNCTION):
+                      self._error(f"Identifier '{lex}' is not callable at line {line}")
+
+        except SymbolNotFoundError:
+            self._error(f"Undeclared identifier '{lex}' used at line {line}")
+
+    def _handle_string_literal(self, string_node: ParseTreeNode) -> Optional[str]:
+        """
+        Generates a unique label for a string literal, adds it to the global
+        symbol table scope (depth 0) as a constant, and returns the label.
+        Ensures the string value has a '$' terminator.
+        """
+        if not (string_node.token and string_node.token.token_type == self.defs.TokenType.LITERAL):
+            logger.error("Node passed to _handle_string_literal is not a string literal.")
+            return None
+
+        # Get value, remove quotes, ensure $ terminator
+        # Assuming literal_value holds the content without outer quotes
+        original_value = getattr(string_node.token, 'literal_value', string_node.token.lexeme)
+        # Strip outer quotes if lexeme was used
+        if original_value.startswith('"') and original_value.endswith('"'):
+             string_value = original_value[1:-1]
+        else:
+             string_value = original_value
+        # Replace Ada doubled quotes "" with single quote " for ASM
+        string_value = string_value.replace('""', '"')
+             
+        if not string_value.endswith('$'):
+            string_value += '$'
+
+        # Generate unique label
+        label = f"_S{self.string_label_counter}"
+        self.string_label_counter += 1
+
+        # Create symbol (use string_node's token for location info)
+        # Store at depth 0 (global scope)
+        str_sym = Symbol(label, string_node.token, EntryType.CONSTANT, 0) 
+        str_sym.const_value = string_value
+        str_sym.var_type = None # Or potentially a new VarType.STRING_LITERAL?
+        
+        # Insert into GLOBAL scope (depth 0)
+        try:
+             global_scope = self.symtab._scope_stack[0]
+             if label in global_scope:
+                  logger.warning(f"String label '{label}' somehow already exists. Reusing.")
+                  return label # Avoid inserting duplicate label
+             global_scope[label] = str_sym # Insert directly into depth 0
+             logger.info(f"Inserted string literal symbol: {str_sym} into global scope.")
+        except IndexError:
+             logger.error("Cannot access global scope (depth 0) to insert string literal.")
+             self._error(f"Internal error: Could not access global scope for string '{label}'.")
+             return None
+        except Exception as e:
+             logger.error(f"Unexpected error inserting string literal '{label}': {e}")
+             self._error(f"Failed to insert string literal '{label}' due to {e}")
+             return None
+             
+        return label

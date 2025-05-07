@@ -41,7 +41,7 @@ class Definitions:
                 # Existing tokens
                 'PROCEDURE', 'MODULE', 'IS', 'BEGIN', 'END',
                 'IF', 'THEN', 'ELSE', 'ELSIF', 'WHILE', 'LOOP',
-                'INTEGER', 'FLOAT', 'CHAR', 'GET', 'PUT', 'ID', 'NUM', 'REAL',
+                'INTEGER', 'FLOAT', 'CHAR', 'ID', 'NUM', 'REAL',
                 'LITERAL', 'CHAR_LITERAL', 'RELOP', 'ADDOP', 'MULOP', 'ASSIGN',
                 'LPAREN', 'RPAREN', 'COMMA', 'COLON', 'SEMICOLON',
                 'DOT', 'EOF', 'CONCAT', 'IN', 'OUT',
@@ -63,6 +63,8 @@ class Definitions:
                 'INTEGERT', 'REALT', 'CHART', 'CONST',
                 # Added new token types (removed duplicate CONSTANT):
                 'CONSTANT', 'INOUT',
+                # Added for A8 Input/Output
+                'GET', 'PUT', 'PUTLN',
             ]
         )
 
@@ -84,8 +86,6 @@ class Definitions:
             "INTEGER": self.TokenType.INTEGERT,  # Map INTEGER to INTEGERT
             "REAL": self.TokenType.REALT,       # Map REAL to REALT
             "CHAR": self.TokenType.CHART,       # Map CHAR to CHART
-            "GET": self.TokenType.GET,
-            "PUT": self.TokenType.PUT,
             "END": self.TokenType.END,
             "IN": self.TokenType.IN,
             "OUT": self.TokenType.OUT,
@@ -151,7 +151,10 @@ class Definitions:
             "USE": self.TokenType.USE,
             "WHEN": self.TokenType.WHEN,
             "WITH": self.TokenType.WITH,
-            "XOR": self.TokenType.XOR
+            "XOR": self.TokenType.XOR,
+            "GET": self.TokenType.GET,
+            "PUT": self.TokenType.PUT,
+            "PUTLN": self.TokenType.PUTLN
         }
 
         # The token_patterns dictionary holds compiled regular expressions for each token type.
@@ -279,6 +282,42 @@ class Definitions:
         -------
         """
         return getattr(self.TokenType, token_type_str, None)
+
+      
+    def map_ada_op_to_tac(self, ada_op: str) -> str:  
+        """  
+        Map Ada operators (lexemes) to TAC operator strings.  
+          
+        Args:  
+            ada_op: The Ada operator lexeme (e.g., '+', 'mod', 'and')  
+              
+        Returns:  
+            The corresponding TAC operator string (e.g., 'ADD', 'MOD', 'AND').  
+            Returns the original operator if no mapping is found.  
+        """  
+        ada_op_lower = ada_op.lower()  # Ensure case-insensitivity for keywords  
+        mapping = {  
+            '+': 'ADD',  
+            '-': 'SUB',  
+            '*': 'MUL',  
+            '/': 'DIV',    # Floating point or integer division? Assumed context-dependent for now.  
+            'div': 'IDIV', # Explicit integer division if lexer distinguishes  
+            'mod': 'MOD',  
+            'rem': 'REM',  
+            'and': 'AND',  
+            'or': 'OR',  
+            'not': 'NOT',  
+            # Relational operators might map differently (e.g., to conditional jumps)  
+            # For direct boolean result TAC:  
+            '=': 'EQ',  
+            '/=': 'NE',  
+            '<': 'LT',  
+            '<=': 'LE',  
+            '>': 'GT',  
+            '>=': 'GE'  
+        }  
+        tac_op = mapping.get(ada_op_lower, ada_op)  # Default to original if no map  
+        return tac_op
 
 ###############################################################################
 # Full Documentation for Definitions Class

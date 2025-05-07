@@ -33,6 +33,7 @@ class DeclarationsMixin:
     current_local_offset: int
     current_param_offset: int
     current_procedure_name: Optional[str]
+    current_procedure_depth: int
     
     # Base/Core methods expected on self
     advance: Callable[[], None]
@@ -124,6 +125,7 @@ class DeclarationsMixin:
             self.logger.debug(" Found initialization assignment (:=)")
             self.match(self.defs.TokenType.ASSIGN)
             
+            # Pass the current procedure depth to parseExpr if needed by its children (e.g., parseFactor)
             expr_result = self.parseExpr() # Returns Node or Str or None
             
             if self.tac_gen and isinstance(expr_result, str):
@@ -132,12 +134,12 @@ class DeclarationsMixin:
                 # Try to get a literal value for symbol table if possible (only for constants)
                 if is_constant and initial_value_for_symbol is None:
                      try: initial_value_for_symbol = int(initial_value_expr_place)
-                     except (ValueError, TypeError): 
+                     except (ValueError, TypeError):
                           try: initial_value_for_symbol = float(initial_value_expr_place)
-                          except (ValueError, TypeError): 
+                          except (ValueError, TypeError):
                               # If it's not a direct literal, we can't store const value now
                               self.logger.warning(f"Cannot determine compile-time constant value from expression place '{initial_value_expr_place}'")
-                              initial_value_for_symbol = None 
+                              initial_value_for_symbol = None
             elif self.build_parse_tree and isinstance(expr_result, ParseTreeNode):
                  initial_value_expr_node = expr_result
                  # Value for constant in tree mode might need later analysis
@@ -201,12 +203,14 @@ class DeclarationsMixin:
                     else: # Variable
                          if var_type is not None:
                             self.logger.info(f" Declaring VARIABLE: {idt_name} : {var_type}")
+                            # Calculate offset relative to start of this scope's locals
+                            # self.current_local_offset should start at -2 for the first local
                             offset = self.current_local_offset
                             sym.set_variable_info(var_type=var_type, offset=offset, size=size)
                             success = True
-                            # Update offset only if symbol insertion is likely to succeed (type known)
+                            # Update offset for the *next* local in this scope
                             self.current_local_offset -= size 
-                            self.logger.debug(f" Updated current_local_offset = {self.current_local_offset}")
+                            self.logger.debug(f" Updated current_local_offset for next var = {self.current_local_offset}")
                          # Error reported above if var_type is None
 
                     # Insert into symbol table if info was set successfully
@@ -216,7 +220,8 @@ class DeclarationsMixin:
                             self.logger.debug(f" Inserted symbol: {sym}")
                             # Emit TAC for variable initialization if present (Constants use getPlace)
                             if not is_constant and self.tac_gen and initial_value_expr_place:
-                                 target_place = self.tac_gen.getPlace(sym)
+                                 # Use self.current_procedure_depth for context
+                                 target_place = self.tac_gen.getPlace(sym, current_proc_depth=self.current_procedure_depth)
                                  self.logger.debug(f" Emitting VARIABLE init TAC: {target_place} = {initial_value_expr_place}")
                                  self.tac_gen.emitAssignment(target_place, initial_value_expr_place)
                          except DuplicateSymbolError as e:
@@ -340,7 +345,9 @@ class DeclarationsMixin:
                         # Assign offset and update next offset
                         param_symbol.set_variable_info(param_type, current_param_offset, param_size)
                         self.logger.debug(f" Assigning offset {current_param_offset} to param '{param_name}'")
-                        current_param_offset += param_size 
+                        # FIXED: Decrement parameter offset instead of incrementing
+                        # Parameters should be assigned decreasing offsets (4, 2) rather than (4, 6)
+                        current_param_offset -= param_size
                         
                         proc_symbol_params.append(param_symbol) # Store symbol for later?
                         proc_symbol_modes[param_name] = param_mode
@@ -378,36 +385,67 @@ class DeclarationsMixin:
     def _parseModeInfo(self) -> ParameterMode:
         mode = ParameterMode.IN # Default mode is IN
         if self.current_token:
-            if self.current_token.token_type == self.defs.TokenType.IN:
+            # Check for explicit mode keywords
+            # Use lexeme comparison for case-insensitivity if needed, or ensure tokens are consistent
+            token_type = self.current_token.token_type
+            if token_type == self.defs.TokenType.IN:
                 mode = ParameterMode.IN
-                self.advance()
-            elif self.current_token.token_type == self.defs.TokenType.OUT:
+                self.advance() # Consume the mode keyword
+            elif token_type == self.defs.TokenType.OUT:
                 mode = ParameterMode.OUT
                 self.advance()
-            elif self.current_token.token_type == self.defs.TokenType.INOUT:
+            elif token_type == self.defs.TokenType.INOUT:
                 mode = ParameterMode.INOUT
                 self.advance()
-            # Else: Epsilon case, mode remains IN
+            # Else: Epsilon case - no keyword found, mode remains IN
         return mode
 
     # Helper to parse one argument spec: Mode IdentifierList : TypeMark
     # Returns: List of tuples: [(name: str, token: Token, type: VarType, mode: ParameterMode)]
     def _parseOneArgSpecInfo(self) -> List[tuple[str, Token, Optional[VarType], ParameterMode]]:
         arg_info_list = []
+        # --- Parse Mode FIRST --- 
         mode = self._parseModeInfo()
+        self.logger.debug(f"Parsed parameter mode: {mode.name}")
+
+        # --- Parse Identifier List --- 
         id_tokens = self._parseIdentifierListTokens()
+        if not id_tokens:
+             # Error already reported by _parseIdentifierListTokens
+             # Need to recover gracefully here, perhaps consume until SEMICOLON or RPAREN?
+             # For now, return empty list to prevent further errors down the chain.
+             self.logger.error("No identifiers found in parameter spec after mode.")
+             return arg_info_list
+        self.logger.debug(f"Parsed parameter identifiers: {[t.lexeme for t in id_tokens]}")
+
+        # --- Match Colon --- 
         if not self.current_token or self.current_token.token_type != self.defs.TokenType.COLON:
             self.report_error("Expected ':' after identifier list in parameter specification")
-            return arg_info_list # Return empty on error
+            # Attempt recovery: Consume until SEMICOLON or RPAREN?
+            # Return what we have so far might lead to cascading type errors.
+            # Maybe return empty list to signal failure?
+            return [] # Return empty on error
         self.advance() # Consume COLON
 
+        # --- Parse TypeMark --- 
         var_type, const_value = self._parseTypeMarkInfo() # TypeMark determines type
-        if const_value is not None:
-            # This shouldn't happen if _parseTypeMarkInfo is updated
-            self.report_error("Constant value assignment not allowed in parameter specification type mark")
+        if var_type is None:
+             # Report error if type couldn't be determined
+             # Use the first identifier token for location context
+             err_token = id_tokens[0]
+             self.report_semantic_error(f"Could not determine type for parameters '{[t.lexeme for t in id_tokens]}'", err_token.line_number, err_token.column_number)
+             # Cannot proceed without type, return empty
+             return []
+        self.logger.debug(f"Parsed parameter type: {var_type.name}")
 
+        if const_value is not None:
+            # This shouldn't happen if _parseTypeMarkInfo is correct for types
+            self.report_error("Constant value assignment not allowed in parameter specification type mark")
+            # Continue anyway, but type might be wrong
+
+        # --- Create list of tuples --- 
         for id_token in id_tokens:
-             # Add tuple (type might be None if _parseTypeMarkInfo failed)
+             # Add tuple (type should be valid here)
              arg_info_list.append((id_token.lexeme, id_token, var_type, mode))
 
         return arg_info_list
@@ -415,23 +453,42 @@ class DeclarationsMixin:
     # Helper to parse ArgList returning combined info
     def _parseArgListInfo(self) -> List[tuple[str, Token, Optional[VarType], ParameterMode]]:
         all_args_info = []
+        # Check for empty list: If next token is RPAREN, it's an empty ArgList
         if not self.current_token or self.current_token.token_type == self.defs.TokenType.RPAREN:
-             # Handle empty ArgList immediately
+             self.logger.debug("Parsing ArgList (ε - empty list)")
              return all_args_info
-             
+
+        self.logger.debug("Parsing first argument specification")
         # Parse first spec
-        all_args_info.extend(self._parseOneArgSpecInfo())
+        first_spec_info = self._parseOneArgSpecInfo()
+        if not first_spec_info:
+             # Error occurred in first spec, stop parsing ArgList
+             self.logger.error("Failed to parse first argument specification.")
+             # Attempt recovery? Consume until RPAREN?
+             # For now, return empty to prevent cascading errors.
+             return []
+        all_args_info.extend(first_spec_info)
+
         # Parse MoreArgs ( ; ArgList )
         while self.current_token and self.current_token.token_type == self.defs.TokenType.SEMICOLON:
             self.advance() # Consume SEMICOLON
             # Check if another spec follows or if it's just a trailing semicolon before RPAREN
             if self.current_token and self.current_token.token_type != self.defs.TokenType.RPAREN:
-                 all_args_info.extend(self._parseOneArgSpecInfo())
+                 self.logger.debug("Parsing next argument specification after ';'")
+                 next_spec_info = self._parseOneArgSpecInfo()
+                 if not next_spec_info:
+                      # Error in subsequent spec
+                      self.logger.error("Failed to parse argument specification after semicolon.")
+                      # Recovery: maybe break and return what we have?
+                      break # Stop processing more args
+                 all_args_info.extend(next_spec_info)
             else:
-                 # Trailing semicolon might be error depending on strictness
+                 # Trailing semicolon might be an error depending on strictness
+                 # Or it could be the end of the list before RPAREN
                  if self.current_token and self.current_token.token_type != self.defs.TokenType.RPAREN:
-                      self.report_error("Expected parameter specification after ';'")
-                 break 
+                      self.report_error("Expected parameter specification after ';' or ')'")
+                 break # Stop parsing list
+        self.logger.debug(f"Finished parsing ArgList, found {len(all_args_info)} parameters.")
         return all_args_info
 
     # --- End of Declarations/Args Parsing Methods ---

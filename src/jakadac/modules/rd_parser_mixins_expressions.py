@@ -38,6 +38,7 @@ class ExpressionsMixin:
     symbol_table: Optional[SymbolTable]
     defs: Definitions
     current_procedure_symbol: Optional[Symbol]
+    current_procedure_depth: Optional[int]
 
     # Methods from base class assumed to exist:
     # advance: () -> None
@@ -207,7 +208,8 @@ class ExpressionsMixin:
                      return "ERROR_PLACE"
                 
                 result_place = self.tac_gen.newTemp()
-                tac_op = self.tac_gen.map_ada_op_to_tac(op)
+                # Use the original operator lexeme directly
+                tac_op = op 
                 self.tac_gen.emitBinaryOp(tac_op, result_place, left_place, right_place)
                 left_place = result_place
 
@@ -281,7 +283,8 @@ class ExpressionsMixin:
                      return "ERROR_PLACE"
                      
                 result_place = self.tac_gen.newTemp()
-                tac_op = self.tac_gen.map_ada_op_to_tac(op)
+                # Use the original operator lexeme directly
+                tac_op = op 
                 self.tac_gen.emitBinaryOp(tac_op, result_place, left_place, right_place)
                 left_place = result_place
 
@@ -356,19 +359,22 @@ class ExpressionsMixin:
         elif self.tac_gen:
             # --- TAC Generation ---
             self.logger.debug("Parsing Factor (TAC)")
-            if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
-                id_token = self.current_token
+            if not self.current_token:
+                 self.report_error("Unexpected end of input in Factor")
+                 return "ERROR_PLACE"
+                 
+            token_type = self.current_token.token_type
+            id_token = self.current_token # Store potential ID token for error reporting
+
+            if token_type == self.defs.TokenType.ID:
                 self.advance() # Consume identifier
                 if self.symbol_table:
                     try:
                         symbol = self.symbol_table.lookup(id_token.lexeme)
-                        # --- TAC Place Calculation ---
+                        # --- TAC Place Calculation --- 
                         if self.tac_gen:
-                            # Determine current procedure depth for context
-                            current_proc_depth = self.current_procedure_symbol.depth if self.current_procedure_symbol else 0
-                            # Pass current depth to getPlace
-                            place = self.tac_gen.getPlace(symbol, current_proc_depth=current_proc_depth) 
-                        # --- End TAC Place Calculation ---
+                            # Pass the current procedure depth for context
+                            place = self.tac_gen.getPlace(symbol, current_proc_depth=self.current_procedure_depth)
                         else:
                             place = id_token.lexeme # Fallback if no TAC generator
                     except SymbolNotFoundError:
@@ -378,14 +384,13 @@ class ExpressionsMixin:
                 else:
                     # No symbol table, assume lexeme is the place (for basic testing)
                     place = id_token.lexeme
-                return place # Return place string
-            # --- End TAC Generation ---
+                # No return here, place is set
 
-            elif self.current_token and self.current_token.token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
+            elif token_type in {self.defs.TokenType.NUM, self.defs.TokenType.REAL}:
                 place = self.current_token.lexeme # Literals are their own place
                 self.advance()
 
-            elif self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+            elif token_type == self.defs.TokenType.LPAREN:
                 self.advance() # Consume LPAREN
                 place = self.parseExpr() # Returns str (place)
                 if not self.current_token or self.current_token.token_type != self.defs.TokenType.RPAREN:
@@ -393,49 +398,53 @@ class ExpressionsMixin:
                 else:
                      self.advance() # Consume RPAREN
 
-            elif self.current_token and self.current_token.token_type == self.defs.TokenType.NOT:
+            elif token_type == self.defs.TokenType.NOT:
                 self.advance() # Consume NOT
                 operand_place = self.parseFactor() # Returns str
                 if isinstance(operand_place, str):
                      result_place = self.tac_gen.newTemp()
-                     self.tac_gen.emitUnaryOp("NOT", result_place, operand_place)
+                     self.tac_gen.emitUnaryOp("not", result_place, operand_place)
                      place = result_place
                 else:
                      place = "ERROR_PLACE" # Error in operand
 
-            elif self.current_token and self.is_signopt(self.current_token.token_type):
+            elif self.is_signopt(token_type):
                 sign = self.current_token.lexeme
                 self.advance() # Consume sign
                 operand_place = self.parseFactor() # Returns str
 
                 if isinstance(operand_place, str):
-                     if sign == '+':
-                         # Check if operand is numeric literal to avoid TAC like _t1 = + 5
-                         try:
-                             _ = float(operand_place) # Check if it looks like a number
-                             place = operand_place # If literal, unary plus is identity
-                         except ValueError:
-                             # If not a literal (var/temp), emit UPLUS for clarity or specific backend needs
-                             result_place = self.tac_gen.newTemp()
-                             self.tac_gen.emitUnaryOp("UPLUS", result_place, operand_place)
-                             place = result_place
+                     # Only generate unary op TAC if operand is not a simple literal
+                     # (e.g., avoid _t1 = - 5, just use -5)
+                     is_literal = False
+                     try:
+                          float(operand_place) # Check if it looks like a number
+                          is_literal = True
+                     except ValueError:
+                          is_literal = False
+                     
+                     if is_literal:
+                          place = sign + operand_place # Combine sign and literal
+                     elif sign == '+':
+                          # Unary plus on non-literal is identity for TAC place
+                          place = operand_place
                      else: # Unary minus
                         result_place = self.tac_gen.newTemp()
-                        self.tac_gen.emitUnaryOp("UMINUS", result_place, operand_place)
+                        self.tac_gen.emitUnaryOp("-", result_place, operand_place)
                         place = result_place
                 else:
                      place = "ERROR_PLACE" # Error in operand
 
             else:
-                self.report_error(f"Expected an identifier, number, '(', 'not', or sign")
+                self.report_error(f"Expected an identifier, number, '(', 'not', or sign, found {id_token.lexeme}")
                 # place remains "ERROR_PLACE"
 
             return place # Return the place string
             # --- End TAC Generation ---
+
         else:
             # --- Non-Tree, Non-TAC ---
             self.logger.debug("Parsing Factor (non-tree)")
-            # Keep original non-tree logic (just consume tokens)
             if self.current_token and self.current_token.token_type == self.defs.TokenType.ID:
                  id_token = self.current_token # Save for semantic check
                  self.advance() # Use advance in non-tree mode
@@ -465,7 +474,9 @@ class ExpressionsMixin:
                 self.parseFactor() # Recursive call returns None
             
             else:
-                 self.report_error(f"Expected an identifier, number, '(', 'not', or sign")
+                 id_token = self.current_token # Get token for error message
+                 err_lexeme = id_token.lexeme if id_token else 'EOF'
+                 self.report_error(f"Expected an identifier, number, '(', 'not', or sign, found {err_lexeme}")
             
             return None # Return None for non-tree, non-TAC branch
             # --- End Non-Tree, Non-TAC ---
