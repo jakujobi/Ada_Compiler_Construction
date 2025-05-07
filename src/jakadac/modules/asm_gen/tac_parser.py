@@ -229,7 +229,7 @@ class TACParser:
         elif opcode == TACOpcode.RETRIEVE: # Form: retrieve dest_var
             # Note: "dest = retrieve" is handled by simple_assign_match section
             if arg_parts: dest = self._parse_operand(arg_parts[0])
-        elif opcode in [TACOpcode.IF_EQ, TACOpcode.IF_NE, TACOpcode.IF_LT, TACOpcode.IF_LE, TACOpcode.IF_GT, TACOpcode.IF_GE]:
+        elif opcode in [TACOpcode.IF_EQ_GOTO, TACOpcode.IF_NE_GOTO, TACOpcode.IF_LT_GOTO, TACOpcode.IF_LE_GOTO, TACOpcode.IF_GT_GOTO, TACOpcode.IF_GE_GOTO]:
             if len(arg_parts) >= 3: # if_op op1, op2, label_target
                 op1 = self._parse_operand(arg_parts[0])
                 op2 = self._parse_operand(arg_parts[1])
