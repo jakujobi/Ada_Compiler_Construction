@@ -1,9 +1,7 @@
 proc two
-_t1 = 5
-a = _t1
-_t2 = 10
-b = _t2
-_t3 = _BP-2 * _BP-4
-c = _t3
+a = 5
+b = 10
+_t1 = a * b
+c = _t1
 endp two
-START	PROC	two
+START PROC two

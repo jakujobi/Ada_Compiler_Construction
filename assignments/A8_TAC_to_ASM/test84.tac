@@ -1,16 +1,12 @@
 proc four
 proc one
-_t1 = 5
-C = _t1
-_t2 = 10
-D = _t2
-_t3 = A + B
-D = _t3
+C = 5
+D = 10
+_t1 = A + B
+D = _t1
 endp one
-_t4 = 1
-A = _t4
-_t5 = 2
-B = _t5
+A = 1
+B = 2
 call one
 endp four
-START	PROC	four
+START PROC four
