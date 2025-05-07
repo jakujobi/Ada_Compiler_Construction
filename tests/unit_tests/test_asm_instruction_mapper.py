@@ -313,26 +313,33 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_ge_goto_imm_mem(self):
+        # TAC: IF_GE_GOTO GE_LABEL, op1 (5), op2 ([SI])
+        # op1 >= op2. With CMP op2, op1 this becomes: op2 <= op1 (JLE)
+        op1_val, op2_val = "5", "[SI]" # Mocked values for op1_asm_val, op2_asm_val
         self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
-            "op1": "5", "op2": "[SI]"
+            "op1": op1_val, "op2": op2_val
         }.get(op.value, "unexpected_op_in_if_ge_goto_imm_mem")
-        tac_if_ge_imm_mem = self._create_tac(TACOpcode.IF_GE_GOTO, dest="GE_LABEL", op1="op1", op2="op2")
-        # Expected: CMP [SI], 5; JGE GE_LABEL (assuming immediate is op1 for CMP mem, imm)
-        expected_asm = [
-            "CMP [SI], 5",
-            "JGE GE_LABEL"
-        ]
-        result_asm = self.mapper.translate(tac_if_ge_imm_mem)
-        self.assertEqual(result_asm, expected_asm)
-
-        # Check if the specific log message is in the call list
-        expected_log_message = f"  IF_GE_GOTO 5, [SI], GE_LABEL -> CMP [SI], 5; JGE GE_LABEL"
         
-        found_log = any(
-            call_args[0][0] == expected_log_message 
-            for call_args in self.mapper.logger.debug.call_args_list
-        )
-        self.assertTrue(found_log, f"Expected log message '{expected_log_message}' not found. Actual calls: {self.mapper.logger.debug.call_args_list}")
+        tac_if_ge_imm_mem = self._create_tac(TACOpcode.IF_GE_GOTO, dest="GE_LABEL", op1="op1", op2="op2")
+        
+        expected_asm = [
+            f"CMP {op2_val}, {op1_val}", # CMP [SI], 5
+            f"JLE GE_LABEL"              # Jump if op2 <= op1 (which is op1 >= op2)
+        ]
+        expected_log_message = f"Comparing immediate {op1_val} with memory/register {op2_val}, swapping for optimal CMP and inverting jump."
+
+        with self.assertLogs(self.mapper.logger, level='DEBUG') as log_watcher:
+            result_asm = self.mapper.translate(tac_if_ge_imm_mem)
+        
+        self.assertEqual(result_asm, expected_asm, f"Expected ASM {expected_asm} but got {result_asm}")
+        
+        # Check if the specific log message is present in the output
+        found_log = False
+        for record in log_watcher.records:
+            if expected_log_message in record.getMessage():
+                found_log = True
+                break
+        self.assertTrue(found_log, f"Expected log message '{expected_log_message}' not found. Logs: {log_watcher.output}")
 
     # Test IF_NE_GOTO variants
     def test_translate_if_ne_goto_reg_reg(self):
@@ -436,7 +443,7 @@ class TestASMInstructionMapper(unittest.TestCase):
     def test_translate_array_assign_from(self):
         self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "idx": "idx_asm", "val": "val_asm", "arr": "arr_asm"
-        }.get(op.value, "unexpected_op_in_array_assign_from")
+        }.get(op.value if isinstance(op, TACOperand) else op, "unexpected_op_in_array_assign_from")
         tac_array_assign_from = self._create_tac(TACOpcode.ARRAY_ASSIGN_FROM, dest="arr", op1="idx", op2="val")
         # arr[idx] := val  =>  MOV AX, idx_asm; MOV BX, val_asm; MOV [arr_asm+AX], BX
         expected_asm = [
@@ -450,7 +457,7 @@ class TestASMInstructionMapper(unittest.TestCase):
     def test_translate_array_assign_to(self):
         self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "idx": "idx_asm", "val": "val_asm", "arr": "arr_asm"
-        }.get(op.value, "unexpected_op_in_array_assign_to")
+        }.get(op.value if isinstance(op, TACOperand) else op, "unexpected_op_in_array_assign_to")
         tac_array_assign_to = self._create_tac(TACOpcode.ARRAY_ASSIGN_TO, dest="val", op1="arr", op2="idx")
         # val := arr[idx]  =>  MOV AX, idx_asm; MOV BX, [arr_asm+AX]; MOV val_asm, BX
         expected_asm = [

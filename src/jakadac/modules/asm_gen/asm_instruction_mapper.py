@@ -67,8 +67,17 @@ class ASMInstructionMapper:
         return asm_lines
 
     def _translate_unknown(self, tac_instruction: ParsedTACInstruction) -> List[str]:
-        self.logger.warning(f"No specific translator for TAC opcode: {tac_instruction.opcode.name if isinstance(tac_instruction.opcode, TACOpcode) else tac_instruction.opcode} at line {tac_instruction.line_number}")
-        return [f"; UNHANDLED TAC Opcode: {tac_instruction.opcode.name if isinstance(tac_instruction.opcode, TACOpcode) else tac_instruction.opcode} (Operands: D:{tac_instruction.dest}, O1:{tac_instruction.op1}, O2:{tac_instruction.op2})"]
+        opcode_name = tac_instruction.opcode.name if hasattr(tac_instruction.opcode, 'name') else str(tac_instruction.opcode)
+        dest_str = str(tac_instruction.dest) if tac_instruction.dest and hasattr(tac_instruction.dest, 'value') else "None"
+        op1_str = str(tac_instruction.op1) if tac_instruction.op1 and hasattr(tac_instruction.op1, 'value') else "None"
+        op2_str = str(tac_instruction.op2) if tac_instruction.op2 and hasattr(tac_instruction.op2, 'value') else "None"
+        line_num = tac_instruction.line_number if hasattr(tac_instruction, 'line_number') else 'N/A'
+        
+        # Match the log format from test_translate_unknown_opcode
+        self.logger.warning(f"No specific translator for TAC opcode: {opcode_name} at line {line_num}")
+        
+        # Match the return string format from test_translate_unknown_opcode
+        return [f"; UNHANDLED TAC Opcode: {opcode_name} (Operands: D:{dest_str}, O1:{op1_str}, O2:{op2_str})"]
 
     # --- Specific TAC Opcode Translators ---
 
@@ -522,6 +531,63 @@ class ASMInstructionMapper:
         return asm_lines
 
 
+    def _translate_conditional_jump(self, tac_instruction: ParsedTACInstruction, jump_instruction: str) -> List[str]:
+        asm_lines = []
+        op1_asm_val = self.asm_generator.get_operand_asm(tac_instruction.op1, tac_instruction.opcode)
+        op2_asm_val = self.asm_generator.get_operand_asm(tac_instruction.op2, tac_instruction.opcode) 
+        label_asm = self.asm_generator.get_operand_asm(tac_instruction.dest, tac_instruction.opcode) # Label is in dest
+
+        # Optimization: if op1 is immediate and op2 is register/memory, 
+        # prefer 'CMP reg/mem, imm' and invert jump condition.
+        if self.asm_generator.is_immediate(op1_asm_val) and \
+           not self.asm_generator.is_immediate(op2_asm_val) and \
+           (self.asm_generator.is_register(op2_asm_val) or op2_asm_val.startswith("[")):
+            
+            self.logger.debug(f"Comparing immediate {op1_asm_val} with memory/register {op2_asm_val}, swapping for optimal CMP and inverting jump.")
+            asm_lines.append(f"CMP {op2_asm_val}, {op1_asm_val}")
+
+            opposite_jump_map = {
+                "JE": "JE", "JNE": "JNE",   # Equal/Not Equal are symmetric
+                "JL": "JG",                 # op1 < op2  (tac_instruction) -> op2 > op1 (CMP operands swapped)
+                "JLE": "JGE",               # op1 <= op2 (tac_instruction) -> op2 >= op1 (CMP operands swapped)
+                "JG": "JL",                 # op1 > op2  (tac_instruction) -> op2 < op1 (CMP operands swapped)
+                "JGE": "JLE"                # op1 >= op2 (tac_instruction) -> op2 <= op1 (CMP operands swapped)
+            }
+            actual_jump_instruction = opposite_jump_map.get(jump_instruction)
+
+            if not actual_jump_instruction:
+                self.logger.warning(f"Could not find opposite jump for {jump_instruction} during optimization of {tac_instruction}, falling back.")
+                # Fallback to original non-optimized behavior for this specific sub-case if map fails
+                asm_lines = [f"MOV AX, {op1_asm_val}", f"CMP AX, {op2_asm_val}"] # Re-initialize asm_lines
+                actual_jump_instruction = jump_instruction
+            
+            asm_lines.append(f"{actual_jump_instruction} {label_asm}")
+
+        elif not self.asm_generator.is_immediate(op1_asm_val) and self.asm_generator.is_immediate(op2_asm_val):
+            # op1 is not immediate, op2 is. This is the preferred 'CMP reg/mem, imm'
+            asm_lines.append(f"CMP {op1_asm_val}, {op2_asm_val}")
+            asm_lines.append(f"{jump_instruction} {label_asm}")
+        elif self.asm_generator.is_immediate(op1_asm_val) and self.asm_generator.is_immediate(op2_asm_val):
+            # Both are immediate. MOV op1 to AX, then CMP AX, op2
+            asm_lines.append(f"MOV AX, {op1_asm_val}")
+            asm_lines.append(f"CMP AX, {op2_asm_val}")
+            asm_lines.append(f"{jump_instruction} {label_asm}")
+        else:
+            # Neither is immediate (e.g. reg, reg or mem, mem or reg, mem or mem, reg)
+            # Or op1 is immediate, but op2 is not suitable for direct CMP (e.g. complex expression not starting with '[')
+            # Standard: MOV AX, op1_asm_val; CMP AX, op2_asm_val unless one is already AX
+            if op1_asm_val == "AX":
+                asm_lines.append(f"CMP AX, {op2_asm_val}")
+            elif op2_asm_val == "AX": # Should be CMP op1, AX
+                asm_lines.append(f"CMP {op1_asm_val}, AX")
+            else: # Default general case
+                asm_lines.append(f"MOV AX, {op1_asm_val}")
+                asm_lines.append(f"CMP AX, {op2_asm_val}")
+            asm_lines.append(f"{jump_instruction} {label_asm}")
+        
+        self.logger.debug(f"Translated conditional jump {tac_instruction.opcode.name if hasattr(tac_instruction.opcode, 'name') else tac_instruction.opcode}: {tac_instruction} -> {asm_lines}")
+        return asm_lines
+
     def _translate_mul(self, tac_instruction: ParsedTACInstruction) -> List[str]:
         """Translates TAC MUL: dest := op1 * op2"""
         dest = tac_instruction.dest
@@ -529,10 +595,10 @@ class ASMInstructionMapper:
         op2 = tac_instruction.op2
 
         if not dest or not op1 or not op2:
-            self.logger.error(f"MUL TAC at line {tac_instruction.line_number} is missing operands or destination.")
+            self.logger.error(f"MUL TAC at line {tac_instruction.line_number} is missing operands.")
             return [f"; ERROR: Malformed MUL TAC at line {tac_instruction.line_number}"]
 
-        dest_asm = self.asm_generator.get_operand_asm(dest, tac_instruction.opcode, is_destination=True)
+        dest_asm = self.asm_generator.get_operand_asm(dest, tac_instruction.opcode)
         op1_asm = self.asm_generator.get_operand_asm(op1, tac_instruction.opcode)
         op2_asm = self.asm_generator.get_operand_asm(op2, tac_instruction.opcode)
 
@@ -591,50 +657,176 @@ class ASMInstructionMapper:
 
     def _translate_div(self, tac_instruction: ParsedTACInstruction) -> List[str]:
         """Translates TAC DIV: dest := op1 / op2"""
-        self.logger.info(f"Handling DIV TAC: {tac_instruction}")
-        # For division, op1 is dividend (in AX, DX:AX if double word), op2 is divisor.
-        # Result quotient in AX, remainder in DX.
-        # This is a simplified version, actual implementation needs care with DX and operand sizes.
-        op1_asm = self.asm_generator.get_operand_asm(tac_instruction.op1, tac_instruction.opcode, is_destination=False)
-        op2_asm = self.asm_generator.get_operand_asm(tac_instruction.op2, tac_instruction.opcode, is_destination=False)
-        dest_asm = self.asm_generator.get_operand_asm(tac_instruction.dest, tac_instruction.opcode, is_destination=True)
+        dest_operand = tac_instruction.dest
+        op1_operand = tac_instruction.op1
+        op2_operand = tac_instruction.op2
+        asm_lines = []
 
-        asm_lines = [
-            f"MOV AX, {op1_asm}",         # Load dividend into AX
-            "CWD",                       # Convert Word to Double Word (sign-extend AX into DX:AX)
-            f"MOV CX, {op2_asm}",         # Load divisor into CX (cannot be immediate for IDIV)
-            "IDIV CX",                   # AX = DX:AX / CX, DX = Remainder
-            f"MOV {dest_asm}, AX"         # Store quotient in destination
-        ]
-        return [f"; HANDLED DIV: {tac_instruction.dest} := {tac_instruction.op1} / {tac_instruction.op2}"] # Placeholder
+        if not dest_operand or not op1_operand or not op2_operand or \
+           not hasattr(dest_operand, 'value') or \
+           not hasattr(op1_operand, 'value') or \
+           not hasattr(op2_operand, 'value'):
+            self.logger.error(f"DIV TAC at line {tac_instruction.line_number} is missing operands or destination.")
+            return [f"; ERROR: Malformed DIV TAC at line {tac_instruction.line_number}"]
+
+        dest_asm = self.asm_generator.get_operand_asm(dest_operand, tac_instruction.opcode, is_destination=True)
+        op1_asm = self.asm_generator.get_operand_asm(op1_operand, tac_instruction.opcode)
+        op2_asm = self.asm_generator.get_operand_asm(op2_operand, tac_instruction.opcode)
+
+        # Load dividend (op1) into AX
+        if op1_asm != "AX":
+            asm_lines.append(f"MOV AX, {op1_asm}")
+        
+        # Load divisor (op2) into a register (BX by default)
+        # Ensure op2 is not AX if op1 was AX. If op2 is AX, this implies op1 was not AX.
+        # If op2_asm is already a register other than AX, use it.
+        # If op2_asm is memory or immediate, load to BX.
+        # If op2_asm is AX (meaning op1 was not AX and already moved to AX), then we're good.
+        
+        divisor_reg = "BX" # Default register for divisor
+        if self.asm_generator.is_register(op2_asm):
+            if op2_asm == "AX": # op1 was moved to AX earlier. Now op2 is also AX.
+                                # This shouldn't happen if op1 was AX to begin with. 
+                                # But if op1 was moved to AX, and op2_asm is AX then we need to move op2 out of AX.
+                asm_lines.append(f"MOV {divisor_reg}, AX") # Use BX for op2_asm
+            else:
+                divisor_reg = op2_asm # op2_asm is already a suitable register (e.g. BX, CX, DX)
+        else: # op2_asm is memory or immediate
+            asm_lines.append(f"MOV {divisor_reg}, {op2_asm}")
+
+        # Prepare DX:AX for division (DX must be zero for unsigned 16-bit dividend in AX)
+        asm_lines.append("XOR DX, DX")
+        
+        # Perform division
+        asm_lines.append(f"DIV {divisor_reg}")
+        
+        # Store quotient (in AX) to destination
+        if dest_asm != "AX":
+            asm_lines.append(f"MOV {dest_asm}, AX")
+        elif dest_operand.value != "AX": # If dest is 'AX' (string) but not actually the AX register in assembly form
+             asm_lines.append(f"MOV {dest_asm}, AX")
+
+        self.logger.debug(f"Translated DIV {tac_instruction} -> {asm_lines}")    
+        return asm_lines
 
     def _translate_call(self, tac_instruction: ParsedTACInstruction) -> List[str]:
-        """Translates TAC CALL: dest := proc_label, num_params OR CALL proc_label, num_params"""
-        self.logger.info(f"Handling CALL TAC: {tac_instruction}")
-        # proc_label = tac_instruction.op1.value (already a string label)
-        # num_params = tac_instruction.op2.value (integer)
-        # dest = tac_instruction.dest (TACOperand, for return value)
-        return [f"; HANDLED CALL: {tac_instruction.op1.value if tac_instruction.op1 else 'None'}"] # Placeholder
+        """Translates TAC CALL: dest := CALL proc_label, num_params"""
+        asm_lines = []
+        proc_label_operand = tac_instruction.op1
+        num_params_operand = tac_instruction.op2 # This is TACOperand(value=count)
+        return_dest_operand = tac_instruction.dest
+
+        if not proc_label_operand or not hasattr(proc_label_operand, 'value'):
+            self.logger.error(f"CALL TAC at line {tac_instruction.line_number} is missing procedure label.")
+            return [f"; ERROR: Malformed CALL TAC (missing label) at line {tac_instruction.line_number}"]
+
+        proc_label_asm = str(proc_label_operand.value) # Labels are typically direct strings
+
+        asm_lines.append(f"CALL {proc_label_asm}")
+
+        num_params = 0
+        if num_params_operand and hasattr(num_params_operand, 'value') and isinstance(num_params_operand.value, int):
+            num_params = num_params_operand.value
+        
+        if num_params > 0:
+            # Clean up stack after call if there were parameters
+            # Each parameter is assumed to be a word (2 bytes)
+            stack_cleanup_bytes = num_params * 2 
+            asm_lines.append(f"ADD SP, {stack_cleanup_bytes}")
+
+        if return_dest_operand and hasattr(return_dest_operand, 'value'):
+            dest_asm = self.asm_generator.get_operand_asm(return_dest_operand, tac_instruction.opcode, is_destination=True)
+            asm_lines.append(f"MOV {dest_asm}, AX")
+            self.logger.debug(f"CALL to {proc_label_asm} with {num_params} params, returning to {dest_asm}")
+        else:
+            self.logger.debug(f"CALL to {proc_label_asm} with {num_params} params, no return value assigned.")
+
+        self.logger.debug(f"Translated CALL {tac_instruction} -> {asm_lines}")    
+        return asm_lines
 
     def _translate_param(self, tac_instruction: ParsedTACInstruction) -> List[str]:
         """Translates TAC PARAM: op1"""
-        self.logger.info(f"Handling PARAM TAC: {tac_instruction}")
-        # op1 = tac_instruction.op1 (TACOperand)
-        return [f"; HANDLED PARAM: {tac_instruction.op1.value if tac_instruction.op1 else 'None'}"] # Placeholder
+        param_operand = tac_instruction.op1
+        asm_lines = []
+
+        if not param_operand or not hasattr(param_operand, 'value'):
+            self.logger.error(f"PARAM TAC at line {tac_instruction.line_number} is missing operand.")
+            return [f"; ERROR: Malformed PARAM TAC at line {tac_instruction.line_number}"]
+
+        param_asm = self.asm_generator.get_operand_asm(param_operand, tac_instruction.opcode)
+        asm_lines.append(f"PUSH {param_asm}")
+        
+        self.logger.debug(f"Translated PARAM {tac_instruction} -> {asm_lines}")
+        return asm_lines
 
     def _translate_array_assign_from(self, tac_instruction: ParsedTACInstruction) -> List[str]:
         """Translates TAC ARRAY_ASSIGN_FROM: dest_array_base[index_op] := source_op"""
-        # TAC: (ARRAY_ASSIGN_FROM, dest_array_base, index_op, source_op)
-        # dest = base, op1 = index, op2 = source
-        self.logger.info(f"Handling ARRAY_ASSIGN_FROM TAC: {tac_instruction}")        
-        return [f"; HANDLED ARRAY_ASSIGN_FROM: {tac_instruction.dest.value if tac_instruction.dest else 'None'}[{tac_instruction.op1.value if tac_instruction.op1 else 'None'}] := {tac_instruction.op2.value if tac_instruction.op2 else 'None'}"] # Placeholder
+        # TAC: dest=array_base, op1=index, op2=source_value
+        array_base_operand = tac_instruction.dest
+        index_operand = tac_instruction.op1
+        source_value_operand = tac_instruction.op2
+        asm_lines = []
+
+        if not (array_base_operand and hasattr(array_base_operand, 'value') and 
+                index_operand and hasattr(index_operand, 'value') and 
+                source_value_operand and hasattr(source_value_operand, 'value')):
+            self.logger.error(f"ARRAY_ASSIGN_FROM TAC at line {tac_instruction.line_number} is missing operands.")
+            return [f"; ERROR: Malformed ARRAY_ASSIGN_FROM TAC at line {tac_instruction.line_number}"]
+
+        array_base_asm = self.asm_generator.get_operand_asm(array_base_operand, tac_instruction.opcode, is_destination=False) # Base address is a source for addressing
+        index_asm = self.asm_generator.get_operand_asm(index_operand, tac_instruction.opcode, is_destination=False)
+        source_value_asm = self.asm_generator.get_operand_asm(source_value_operand, tac_instruction.opcode, is_destination=False)
+
+        # ASM: MOV AX, idx_asm; MOV BX, src_val_asm; MOV [arr_base_asm+AX], BX
+        # Assuming idx_asm needs to be in AX for addressing, and src_val_asm in BX.
+        # No explicit scaling of index_asm here, as per test expectations.
+        
+        if index_asm != "AX":
+            asm_lines.append(f"MOV AX, {index_asm}")
+        # If index_asm is already AX, this MOV is skipped (minor optimization)
+        
+        if source_value_asm != "BX":
+            asm_lines.append(f"MOV BX, {source_value_asm}")
+        # If source_value_asm is already BX, this MOV is skipped.
+
+        asm_lines.append(f"MOV [{array_base_asm}+AX], BX")
+
+        self.logger.debug(f"Translated ARRAY_ASSIGN_FROM {tac_instruction} -> {asm_lines}")
+        return asm_lines
 
     def _translate_array_assign_to(self, tac_instruction: ParsedTACInstruction) -> List[str]:
         """Translates TAC ARRAY_ASSIGN_TO: dest_op := source_array_base[index_op]"""
-        # TAC: (ARRAY_ASSIGN_TO, dest_op, source_array_base, index_op)
-        # dest = dest_op, op1 = base, op2 = index
-        self.logger.info(f"Handling ARRAY_ASSIGN_TO TAC: {tac_instruction}")
-        return [f"; HANDLED ARRAY_ASSIGN_TO: {tac_instruction.dest.value if tac_instruction.dest else 'None'} := {tac_instruction.op1.value if tac_instruction.op1 else 'None'}[{tac_instruction.op2.value if tac_instruction.op2 else 'None'}"] # Placeholder
+        # TAC: dest=dest_var, op1=array_base, op2=index
+        dest_operand = tac_instruction.dest
+        array_base_operand = tac_instruction.op1
+        index_operand = tac_instruction.op2
+        asm_lines = []
+
+        if not (dest_operand and hasattr(dest_operand, 'value') and 
+                array_base_operand and hasattr(array_base_operand, 'value') and 
+                index_operand and hasattr(index_operand, 'value')):
+            self.logger.error(f"ARRAY_ASSIGN_TO TAC at line {tac_instruction.line_number} is missing operands.")
+            return [f"; ERROR: Malformed ARRAY_ASSIGN_TO TAC at line {tac_instruction.line_number}"]
+
+        dest_asm = self.asm_generator.get_operand_asm(dest_operand, tac_instruction.opcode, is_destination=True)
+        array_base_asm = self.asm_generator.get_operand_asm(array_base_operand, tac_instruction.opcode, is_destination=False)
+        index_asm = self.asm_generator.get_operand_asm(index_operand, tac_instruction.opcode, is_destination=False)
+
+        # ASM: MOV AX, idx_asm; MOV BX, [arr_base_asm+AX]; MOV dest_var_asm, BX
+        # Assuming idx_asm needs to be in AX for addressing.
+        # The value from memory will be loaded into BX.
+        
+        if index_asm != "AX":
+            asm_lines.append(f"MOV AX, {index_asm}")
+        
+        asm_lines.append(f"MOV BX, [{array_base_asm}+AX]")
+        
+        if dest_asm != "BX":
+            asm_lines.append(f"MOV {dest_asm}, BX")
+        # If dest_asm is already BX, this MOV is skipped.
+
+        self.logger.debug(f"Translated ARRAY_ASSIGN_TO {tac_instruction} -> {asm_lines}")
+        return asm_lines
     
     #endregion
 
@@ -648,8 +840,17 @@ class ASMInstructionMapper:
 
     #region Unhandled/Error
     def _translate_unknown(self, tac_instruction: ParsedTACInstruction) -> List[str]:
-        self.logger.warning(f"No specific translator for TAC opcode: {tac_instruction.opcode.name if isinstance(tac_instruction.opcode, TACOpcode) else tac_instruction.opcode} at line {tac_instruction.line_number}")
-        return [f"; UNHANDLED TAC Opcode: {tac_instruction.opcode.name if isinstance(tac_instruction.opcode, TACOpcode) else tac_instruction.opcode} (Operands: D:{tac_instruction.dest}, O1:{tac_instruction.op1}, O2:{tac_instruction.op2})"]
+        opcode_name = tac_instruction.opcode.name if hasattr(tac_instruction.opcode, 'name') else str(tac_instruction.opcode)
+        dest_str = str(tac_instruction.dest) if tac_instruction.dest and hasattr(tac_instruction.dest, 'value') else "None"
+        op1_str = str(tac_instruction.op1) if tac_instruction.op1 and hasattr(tac_instruction.op1, 'value') else "None"
+        op2_str = str(tac_instruction.op2) if tac_instruction.op2 and hasattr(tac_instruction.op2, 'value') else "None"
+        line_num = tac_instruction.line_number if hasattr(tac_instruction, 'line_number') else 'N/A'
+        
+        # Match the log format from test_translate_unknown_opcode
+        self.logger.warning(f"No specific translator for TAC opcode: {opcode_name} at line {line_num}")
+        
+        # Match the return string format from test_translate_unknown_opcode
+        return [f"; UNHANDLED TAC Opcode: {opcode_name} (Operands: D:{dest_str}, O1:{op1_str}, O2:{op2_str})"]
 
     #endregion
 
