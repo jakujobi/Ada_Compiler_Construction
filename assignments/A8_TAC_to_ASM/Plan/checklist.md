@@ -28,7 +28,7 @@ This checklist breaks down the implementation into verifiable steps. It is guide
 
   * [X] Ensure `TokenType` enum includes `GET`, `PUT`, `PUTLN`.
   * [X] Ensure `reserved_words` dictionary maps uppercase "GET", "PUT", "PUTLN" to `TokenType.GET`, `TokenType.PUT`, `TokenType.PUTLN` respectively.
-  * [ ] **Verify:** Run Lexer on test Ada code with I/O keywords; check for correct `TokenType` (`GET`, `PUT`, `PUTLN` - not `ID`).
+  * [X] **Verify:** Run Lexer on test Ada code with I/O keywords; check for correct `TokenType` (`GET`, `PUT`, `PUTLN` - not `ID`).
 * **[X] Update `LexicalAnalyzer.py`:**
 
   * [X] No changes likely needed.
@@ -52,11 +52,11 @@ This checklist breaks down the implementation into verifiable steps. It is guide
   * [X] **Implement:** New parsing methods for I/O grammar (`IO_Stat`, `In_Stat`, `Out_Stat`, etc.).
   * [X] **Implement:** Integrate calls to I/O parsing methods into `Parse_Statement`.
   * [X] **Implement:** Semantic actions in I/O methods call `TACGenerator` for `rdi`, `wrs` (using label), `wri`, `wrln`.
-  * [ ] **Implement:** Parser/Semantic actions for string literals in `put`/`putln`: Get string value, interface with `SymbolTable` to store literal & get unique label, pass label to `TACGenerator` for `wrs`.
+  * [X] **Implement:** Parser/Semantic actions for string literals in `put`/`putln`: Get string value, interface with `SymbolTable` to store literal & get unique label, pass label to `TACGenerator` for `wrs`.
   * [X] **Implement:** `CALL ProcName(Args...)` semantic action retrieves `ProcName`'s parameter **modes** from `SymbolTable`.
   * [X] **Implement:** `CALL` semantic action signals `TACGenerator` to emit `push @Arg` for `OUT`/`IN OUT` params, `push Arg` for `IN` params.
   * [X] **Verify:** Parse Ada code with I/O statements; check for syntax errors. Verify required `SymbolTable` lookups occur.
-* **[ ] Update `TACGenerator.py`:**
+* **[X] Update `TACGenerator.py`:**
 
   * [X] **Implement:** New methods (`emit_read_int`, `emit_write_int`, `emit_write_string`, `emit_write_newline`).
   * [X] **Implement/Verify:** `emit_push` (or similar) accepts argument/flag to emit `push @VarName` vs `push VarName`.
@@ -64,7 +64,7 @@ This checklist breaks down the implementation into verifiable steps. It is guide
   * [X] **Implement:** Ensure `emit_write_string` (or equivalent for `wrs` TAC) correctly uses the string *label* (e.g., `_S0`) provided by the parser/semantic analyzer.
   * [X] **Verify:** Unit test new `emit_` methods.
   * [X] **Verify (Integration):** Run Ada -> TAC pipeline with I/O & reference params. **Inspect `.tac` output** for correct `rdi`, `wrs`, `wri`, `wrln`, and `push @Var`/`push Var`.
-* **[ ] Update `Driver.py` / `JohnA8.py`:**
+* **[X] Update `Driver.py` / `JohnA8.py`:**
 
   * [X] Ensure *final, populated* `SymbolTable` instance is available for later phases.
 
@@ -74,14 +74,14 @@ This checklist breaks down the implementation into verifiable steps. It is guide
 ## Phase 1: Foundational ASM Generator Components
 
 * **Goal:** Create basic structures for holding/parsing TAC, ready for ASM generation.
-* **[ ] Implement `TACInstruction` Data Class (`src/jakadac/asm_generator/tac_instruction.py`):**
-  * [ ] Define `@dataclass` with fields (`line_number`, `label`, `opcode`, `op1`, `op2`, `dest`, potentially `op3` for binary ops based on format).
-  * [ ] Implement `TACInstruction.from_tac_line()` based on **confirmed A7 TAC format** (handle different operand counts, comments, `START PROC` structure).
-  * [ ] **Verify:** Unit test `from_tac_line` robustly with diverse valid/invalid TAC lines matching your confirmed format.
-* **[ ] Implement `TACParser` Class (`src/jakadac/asm_generator/tac_parser.py`):**
-  * [ ] Implement `__init__(tac_filepath)`.
-  * [ ] Implement `parse() -> List[TACInstruction]` using `TACInstruction.from_tac_line()`. Handle file I/O errors.
-  * [ ] **Verify:** Unit test `TACParser.parse` with sample `.tac` files. Check returned list structure and error handling.
+* **[X] Implement `TACInstruction` Data Class (`src/jakadac/asm_generator/tac_instruction.py`):**
+  * [X] Define `@dataclass` with fields (`line_number`, `label`, `opcode`, `op1`, `op2`, `dest`, potentially `op3` for binary ops based on format).
+  * [X] Implement `TACInstruction.from_tac_line()` based on **confirmed A7 TAC format** (handle different operand counts, comments, `START PROC` structure).
+  * [X] **Verify:** Unit test `from_tac_line` robustly with diverse valid/invalid TAC lines matching your confirmed format.
+* **[X] Implement `TACParser` Class (`src/jakadac/asm_generator/tac_parser.py`):**
+  * [X] Implement `__init__(tac_filepath)`.
+  * [X] Implement `parse() -> List[TACInstruction]` using `TACInstruction.from_tac_line()`. Handle file I/O errors.
+  * [X] **Verify:** Unit test `TACParser.parse` with sample `.tac` files. Check returned list structure and error handling.
 
 ## Phase 2: Skeleton Generation & Data Collection
 
