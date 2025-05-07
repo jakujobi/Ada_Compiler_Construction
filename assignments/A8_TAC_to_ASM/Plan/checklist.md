@@ -55,13 +55,13 @@ This checklist breaks down the implementation into verifiable steps. It is guide
   * [ ] **Implement:** Parser/Semantic actions for string literals in `put`/`putln`: Get string value, interface with `SymbolTable` to store literal & get unique label, pass label to `TACGenerator` for `wrs`.
   * [X] **Implement:** `CALL ProcName(Args...)` semantic action retrieves `ProcName`'s parameter **modes** from `SymbolTable`.
   * [X] **Implement:** `CALL` semantic action signals `TACGenerator` to emit `push @Arg` for `OUT`/`IN OUT` params, `push Arg` for `IN` params.
-  * [ ] **Verify:** Parse Ada code with I/O statements; check for syntax errors. Verify required `SymbolTable` lookups occur.
+  * [X] **Verify:** Parse Ada code with I/O statements; check for syntax errors. Verify required `SymbolTable` lookups occur.
 * **[ ] Update `TACGenerator.py`:**
 
   * [X] **Implement:** New methods (`emit_read_int`, `emit_write_int`, `emit_write_string`, `emit_write_newline`).
   * [X] **Implement/Verify:** `emit_push` (or similar) accepts argument/flag to emit `push @VarName` vs `push VarName`.
-  * [ ] **Implement:** Handle `START ProcName` TAC from parser, possibly setting up for main procedure in ASM.
-  * [ ] **Implement:** Ensure `emit_write_string` (or equivalent for `wrs` TAC) correctly uses the string *label* (e.g., `_S0`) provided by the parser/semantic analyzer.
+  * [X] **Implement:** Handle `START ProcName` TAC from parser, possibly setting up for main procedure in ASM.
+  * [X] **Implement:** Ensure `emit_write_string` (or equivalent for `wrs` TAC) correctly uses the string *label* (e.g., `_S0`) provided by the parser/semantic analyzer.
   * [X] **Verify:** Unit test new `emit_` methods.
   * [X] **Verify (Integration):** Run Ada -> TAC pipeline with I/O & reference params. **Inspect `.tac` output** for correct `rdi`, `wrs`, `wri`, `wrln`, and `push @Var`/`push Var`.
 * **[ ] Update `Driver.py` / `JohnA8.py`:**
@@ -69,6 +69,7 @@ This checklist breaks down the implementation into verifiable steps. It is guide
   * [X] Ensure *final, populated* `SymbolTable` instance is available for later phases.
 
   * *Note: Adding the `ASMGenerator` call happens later (Phase 1/2).*
+  * Done
 
 ## Phase 1: Foundational ASM Generator Components
 
