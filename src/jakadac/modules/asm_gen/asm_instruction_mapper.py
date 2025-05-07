@@ -96,15 +96,15 @@ class ASMInstructionMapper:
             # Memory to Memory: MOV mem, mem (not allowed)
             asm_lines.append(f"MOV AX, {op1_asm}")
             asm_lines.append(f"MOV {dest_asm}, AX")
-            self.logger.debug(f"  ASSIGN {tac_instruction.dest} := {tac_instruction.op1} -> MOV AX, {op1_asm}; MOV {dest_asm}, AX")
+            self.logger.debug(f"ASSIGN {tac_instruction.dest} := {tac_instruction.op1} -> MOV AX, {op1_asm}; MOV {dest_asm}, AX")
         elif dest_asm.startswith("[") and is_op1_literal:
             # Literal to Memory: MOV mem, literal (allowed)
             asm_lines.append(f"MOV WORD PTR {dest_asm}, {op1_asm}") # Assuming WORD for now, could be BYTE
-            self.logger.debug(f"  ASSIGN {tac_instruction.dest} := {tac_instruction.op1} -> MOV WORD PTR {dest_asm}, {op1_asm}")
+            self.logger.debug(f"ASSIGN {tac_instruction.dest} := {tac_instruction.op1} -> MOV WORD PTR {dest_asm}, {op1_asm}")
         else:
             # Register to Memory, Memory to Register, Register to Register, Literal to Register
             asm_lines.append(f"MOV {dest_asm}, {op1_asm}")
-            self.logger.debug(f"  ASSIGN {tac_instruction.dest} := {tac_instruction.op1} -> MOV {dest_asm}, {op1_asm}")
+            self.logger.debug(f"ASSIGN {tac_instruction.dest} := {tac_instruction.op1} -> MOV {dest_asm}, {op1_asm}")
             
         return asm_lines
 
@@ -130,12 +130,12 @@ class ASMInstructionMapper:
 
         if dest_asm == op1_asm:
             asm_lines.append(f"ADD {dest_asm}, {op2_asm}")
-            self.logger.debug(f"  ADD {tac_instruction.dest} := {tac_instruction.op1} + {tac_instruction.op2} -> ADD {dest_asm}, {op2_asm}")
+            self.logger.debug(f"ADD {tac_instruction.dest} := {tac_instruction.op1} + {tac_instruction.op2} -> ADD {dest_asm}, {op2_asm}")
         else:
             asm_lines.append(f"MOV AX, {op1_asm}")
             asm_lines.append(f"ADD AX, {op2_asm}")
             asm_lines.append(f"MOV {dest_asm}, AX")
-            self.logger.debug(f"  ADD {tac_instruction.dest} := {tac_instruction.op1} + {tac_instruction.op2} -> MOV AX, {op1_asm}; ADD AX, {op2_asm}; MOV {dest_asm}, AX")
+            self.logger.debug(f"ADD {tac_instruction.dest} := {tac_instruction.op1} + {tac_instruction.op2} -> MOV AX, {op1_asm}; ADD AX, {op2_asm}; MOV {dest_asm}, AX")
         return asm_lines
 
     def _translate_program_start(self, tac_instruction: ParsedTACInstruction) -> List[str]:
@@ -162,9 +162,9 @@ class ASMInstructionMapper:
         local_var_size = getattr(proc_entry, 'local_vars_total_size', 0)
         if local_var_size > 0:
             asm_lines.append(f"SUB SP, {local_var_size}")
-            self.logger.debug(f"  PROGRAM_START {proc_name}: Allocated {local_var_size} bytes for locals.")
+            self.logger.debug(f"PROGRAM_START {proc_name}: Allocated {local_var_size} bytes for locals.")
         else:
-            self.logger.debug(f"  PROGRAM_START {proc_name}: No local variable space allocated (size 0).")
+            self.logger.debug(f"PROGRAM_START {proc_name}: No local variable space allocated (size 0).")
             
         return asm_lines
 
@@ -190,9 +190,9 @@ class ASMInstructionMapper:
         local_var_size = getattr(proc_entry, 'local_vars_total_size', 0)
         if local_var_size > 0:
             asm_lines.append(f"SUB SP, {local_var_size}")
-            self.logger.debug(f"  PROC_BEGIN {proc_name}: Allocated {local_var_size} bytes for locals.")
+            self.logger.debug(f"PROC_BEGIN {proc_name}: Allocated {local_var_size} bytes for locals.")
         else:
-            self.logger.debug(f"  PROC_BEGIN {proc_name}: No local variable space allocated (size 0).")
+            self.logger.debug(f"PROC_BEGIN {proc_name}: No local variable space allocated (size 0).")
 
         return asm_lines
 
@@ -230,7 +230,7 @@ class ASMInstructionMapper:
         # The A7 TAC generator should be generating explicit RETURNs for procedures.
 
         asm_lines.append(f"{proc_name} ENDP")
-        self.logger.debug(f"  PROC_END {proc_name}: Generated stack cleanup and ENDP.")
+        self.logger.debug(f"PROC_END {proc_name}: Generated stack cleanup and ENDP.")
         return asm_lines
 
     def _translate_return(self, tac_instruction: ParsedTACInstruction) -> List[str]:
@@ -243,11 +243,11 @@ class ASMInstructionMapper:
             # Check if op1_asm is already AX to avoid MOV AX, AX
             if op1_asm.upper() != "AX":
                 asm_lines.append(f"MOV AX, {op1_asm}")
-                self.logger.debug(f"  RETURN {tac_instruction.op1} -> MOV AX, {op1_asm}")
+                self.logger.debug(f"RETURN {tac_instruction.op1} -> MOV AX, {op1_asm}")
             else:
-                self.logger.debug(f"  RETURN {tac_instruction.op1}: Value already in AX.")
+                self.logger.debug(f"RETURN {tac_instruction.op1}: Value already in AX.")
         else:
-            self.logger.debug(f"  RETURN (procedure return, no value)")
+            self.logger.debug(f"RETURN (procedure return, no value)")
 
         # The stack frame (BP, SP adjustment for locals) is handled by PROC_END.
         # RETURN just issues the RET instruction.
@@ -260,7 +260,7 @@ class ASMInstructionMapper:
         """Translates TAC LABEL: dest_label."""
         target_label = tac_instruction.dest
         if target_label:
-            # self.logger.debug(f"  LABEL {target_label} -> {target_label}:")
+            # self.logger.debug(f"LABEL {target_label} -> {target_label}:")
             return [f"{target_label}:"]
         else:
             self.logger.error(f"LABEL TAC at line {tac_instruction.line_number} is missing label name (dest operand).")
@@ -273,7 +273,7 @@ class ASMInstructionMapper:
             self.logger.error(f"GOTO TAC at line {tac_instruction.line_number} is missing target label (dest operand).")
             return [f"; ERROR: Malformed GOTO TAC at line {tac_instruction.line_number}"]
         
-        self.logger.debug(f"  GOTO {target_label} -> JMP {target_label}")
+        self.logger.debug(f"GOTO {target_label} -> JMP {target_label}")
         return [f"JMP {target_label}"]
 
     def _translate_if_false_goto(self, tac_instruction: ParsedTACInstruction) -> List[str]:
@@ -304,7 +304,7 @@ class ASMInstructionMapper:
             asm_lines.append(f"CMP {cond_asm}, 0")
         
         asm_lines.append(f"JE {target_label}")
-        self.logger.debug(f"  IF_FALSE_GOTO {condition_operand}, {target_label} -> CMP {cond_asm}, 0; JE {target_label}")
+        self.logger.debug(f"IF_FALSE_GOTO {cond_asm}, {target_label} -> CMP {cond_asm}, 0; JE {target_label}")
         return asm_lines
 
     def _translate_if_eq_goto(self, tac_instruction: ParsedTACInstruction) -> List[str]:
@@ -330,16 +330,17 @@ class ASMInstructionMapper:
         if op1_asm.startswith("[") and op2_asm.startswith("["):
             asm_lines.append(f"MOV AX, {op1_asm}") 
             asm_lines.append(f"CMP AX, {op2_asm}")
-            self.logger.debug(f"  IF_EQ_GOTO {op1}, {op2}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JE {target_label}")
+            self.logger.debug(f"IF_EQ_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JE {target_label}")
         elif op1_asm.isdigit() and op2_asm.startswith("["):
             asm_lines.append(f"CMP {op2_asm}, {op1_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_EQ_GOTO {op1}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JE {target_label}")
+            self.logger.debug(f"IF_EQ_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JE {target_label}")
         elif op1_asm.startswith("[") and op2_asm.isdigit():
-            asm_lines.append(f"CMP {op1_asm}, {op2_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_EQ_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JE {target_label}")
+            asm_lines.append(f"MOV AX, {op1_asm}") 
+            asm_lines.append(f"CMP AX, {op2_asm}")
+            self.logger.debug(f"IF_EQ_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JE {target_label}")
         else:
             asm_lines.append(f"CMP {op1_asm}, {op2_asm}")
-            self.logger.debug(f"  IF_EQ_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JE {target_label}")
+            self.logger.debug(f"IF_EQ_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op1_asm}, {op2_asm}; JE {target_label}")
 
         asm_lines.append(f"JE {target_label}") # Jump if Equal
         return asm_lines
@@ -365,16 +366,17 @@ class ASMInstructionMapper:
         if op1_asm.startswith("[") and op2_asm.startswith("["):
             asm_lines.append(f"MOV AX, {op1_asm}") 
             asm_lines.append(f"CMP AX, {op2_asm}")
-            self.logger.debug(f"  IF_NE_GOTO {op1}, {op2}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JNE {target_label}")
+            self.logger.debug(f"IF_NE_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JNE {target_label}")
         elif op1_asm.isdigit() and op2_asm.startswith("["):
             asm_lines.append(f"CMP {op2_asm}, {op1_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_NE_GOTO {op1}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JNE {target_label}")
+            self.logger.debug(f"IF_NE_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JNE {target_label}")
         elif op1_asm.startswith("[") and op2_asm.isdigit():
-            asm_lines.append(f"CMP {op1_asm}, {op2_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_NE_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JNE {target_label}")
+            asm_lines.append(f"MOV AX, {op1_asm}") 
+            asm_lines.append(f"CMP AX, {op2_asm}")
+            self.logger.debug(f"IF_NE_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JNE {target_label}")
         else:
             asm_lines.append(f"CMP {op1_asm}, {op2_asm}")
-            self.logger.debug(f"  IF_NE_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JNE {target_label}")
+            self.logger.debug(f"IF_NE_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op1_asm}, {op2_asm}; JNE {target_label}")
 
         asm_lines.append(f"JNE {target_label}") # Jump if Not Equal
         return asm_lines
@@ -399,16 +401,17 @@ class ASMInstructionMapper:
         if op1_asm.startswith("[") and op2_asm.startswith("["):
             asm_lines.append(f"MOV AX, {op1_asm}") 
             asm_lines.append(f"CMP AX, {op2_asm}")
-            self.logger.debug(f"  IF_LT_GOTO {op1}, {op2}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JL {target_label}")
+            self.logger.debug(f"IF_LT_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JL {target_label}")
         elif op1_asm.isdigit() and op2_asm.startswith("["):
             asm_lines.append(f"CMP {op2_asm}, {op1_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_LT_GOTO {op1}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JL {target_label}")
+            self.logger.debug(f"IF_LT_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JL {target_label}")
         elif op1_asm.startswith("[") and op2_asm.isdigit():
-            asm_lines.append(f"CMP {op1_asm}, {op2_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_LT_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JL {target_label}")
+            asm_lines.append(f"MOV AX, {op1_asm}") 
+            asm_lines.append(f"CMP AX, {op2_asm}")
+            self.logger.debug(f"IF_LT_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JL {target_label}")
         else:
             asm_lines.append(f"CMP {op1_asm}, {op2_asm}")
-            self.logger.debug(f"  IF_LT_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JL {target_label}")
+            self.logger.debug(f"IF_LT_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op1_asm}, {op2_asm}; JL {target_label}")
 
         asm_lines.append(f"JL {target_label}") # Jump if Less (signed)
         return asm_lines
@@ -433,16 +436,17 @@ class ASMInstructionMapper:
         if op1_asm.startswith("[") and op2_asm.startswith("["):
             asm_lines.append(f"MOV AX, {op1_asm}") 
             asm_lines.append(f"CMP AX, {op2_asm}")
-            self.logger.debug(f"  IF_LE_GOTO {op1}, {op2}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JLE {target_label}")
+            self.logger.debug(f"IF_LE_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JLE {target_label}")
         elif op1_asm.isdigit() and op2_asm.startswith("["):
             asm_lines.append(f"CMP {op2_asm}, {op1_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_LE_GOTO {op1}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JLE {target_label}")
+            self.logger.debug(f"IF_LE_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JLE {target_label}")
         elif op1_asm.startswith("[") and op2_asm.isdigit():
-            asm_lines.append(f"CMP {op1_asm}, {op2_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_LE_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JLE {target_label}")
+            asm_lines.append(f"MOV AX, {op1_asm}") 
+            asm_lines.append(f"CMP AX, {op2_asm}")
+            self.logger.debug(f"IF_LE_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JLE {target_label}")
         else:
             asm_lines.append(f"CMP {op1_asm}, {op2_asm}")
-            self.logger.debug(f"  IF_LE_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JLE {target_label}")
+            self.logger.debug(f"IF_LE_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op1_asm}, {op2_asm}; JLE {target_label}")
 
         asm_lines.append(f"JLE {target_label}") # Jump if Less or Equal (signed)
         return asm_lines
@@ -467,16 +471,17 @@ class ASMInstructionMapper:
         if op1_asm.startswith("[") and op2_asm.startswith("["):
             asm_lines.append(f"MOV AX, {op1_asm}") 
             asm_lines.append(f"CMP AX, {op2_asm}")
-            self.logger.debug(f"  IF_GT_GOTO {op1}, {op2}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JG {target_label}")
+            self.logger.debug(f"IF_GT_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JG {target_label}")
         elif op1_asm.isdigit() and op2_asm.startswith("["):
             asm_lines.append(f"CMP {op2_asm}, {op1_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_GT_GOTO {op1}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JG {target_label}")
+            self.logger.debug(f"IF_GT_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JG {target_label}")
         elif op1_asm.startswith("[") and op2_asm.isdigit():
-            asm_lines.append(f"CMP {op1_asm}, {op2_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_GT_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JG {target_label}")
+            asm_lines.append(f"MOV AX, {op1_asm}") 
+            asm_lines.append(f"CMP AX, {op2_asm}")
+            self.logger.debug(f"IF_GT_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JG {target_label}")
         else:
             asm_lines.append(f"CMP {op1_asm}, {op2_asm}")
-            self.logger.debug(f"  IF_GT_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JG {target_label}")
+            self.logger.debug(f"IF_GT_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op1_asm}, {op2_asm}; JG {target_label}")
 
         asm_lines.append(f"JG {target_label}") # Jump if Greater (signed)
         return asm_lines
@@ -501,16 +506,17 @@ class ASMInstructionMapper:
         if op1_asm.startswith("[") and op2_asm.startswith("["):
             asm_lines.append(f"MOV AX, {op1_asm}") 
             asm_lines.append(f"CMP AX, {op2_asm}")
-            self.logger.debug(f"  IF_GE_GOTO {op1}, {op2}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JGE {target_label}")
+            self.logger.debug(f"IF_GE_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JGE {target_label}")
         elif op1_asm.isdigit() and op2_asm.startswith("["):
             asm_lines.append(f"CMP {op2_asm}, {op1_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_GE_GOTO {op1}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JGE {target_label}")
+            self.logger.debug(f"IF_GE_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op2_asm}, {op1_asm}; JGE {target_label}")
         elif op1_asm.startswith("[") and op2_asm.isdigit():
-            asm_lines.append(f"CMP {op1_asm}, {op2_asm}") # CMP [mem], imm
-            self.logger.debug(f"  IF_GE_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JGE {target_label}")
+            asm_lines.append(f"MOV AX, {op1_asm}") 
+            asm_lines.append(f"CMP AX, {op2_asm}")
+            self.logger.debug(f"IF_GE_GOTO {op1_asm}, {op2_asm}, {target_label} -> MOV AX, {op1_asm}; CMP AX, {op2_asm}; JGE {target_label}")
         else:
             asm_lines.append(f"CMP {op1_asm}, {op2_asm}")
-            self.logger.debug(f"  IF_GE_GOTO {op1}, {op2}, {target_label} -> CMP {op1_asm}, {op2_asm}; JGE {target_label}")
+            self.logger.debug(f"IF_GE_GOTO {op1_asm}, {op2_asm}, {target_label} -> CMP {op1_asm}, {op2_asm}; JGE {target_label}")
 
         asm_lines.append(f"JGE {target_label}") # Jump if Greater or Equal (signed)
         return asm_lines
@@ -550,7 +556,7 @@ class ASMInstructionMapper:
         
         asm_lines.append(f"MOV {dest_asm}, AX")
 
-        self.logger.debug(f"  MUL {dest}, {op1}, {op2} -> Generated MUL sequence, result in AX to {dest_asm}")
+        self.logger.debug(f"MUL {dest}, {op1}, {op2} -> Generated MUL sequence, result in AX to {dest_asm}")
         return asm_lines
 
     def _translate_sub(self, tac_instruction: ParsedTACInstruction) -> List[str]:
@@ -580,8 +586,72 @@ class ASMInstructionMapper:
         if dest_asm.upper() != "AX":
             asm_lines.append(f"MOV {dest_asm}, AX")
         
-        self.logger.debug(f"  SUB {dest} := {op1} - {op2} -> MOV AX, {op1_asm}; SUB AX, {op2_asm}; MOV {dest_asm}, AX (optimized for AX moves)")
+        self.logger.debug(f"SUB {dest} := {op1} - {op2} -> MOV AX, {op1_asm}; SUB AX, {op2_asm}; MOV {dest_asm}, AX (optimized for AX moves)")
         return asm_lines
+
+    def _translate_div(self, tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates TAC DIV: dest := op1 / op2"""
+        self.logger.info(f"Handling DIV TAC: {tac_instruction}")
+        # For division, op1 is dividend (in AX, DX:AX if double word), op2 is divisor.
+        # Result quotient in AX, remainder in DX.
+        # This is a simplified version, actual implementation needs care with DX and operand sizes.
+        op1_asm = self.asm_generator.get_operand_asm(tac_instruction.op1, tac_instruction.opcode, is_destination=False)
+        op2_asm = self.asm_generator.get_operand_asm(tac_instruction.op2, tac_instruction.opcode, is_destination=False)
+        dest_asm = self.asm_generator.get_operand_asm(tac_instruction.dest, tac_instruction.opcode, is_destination=True)
+
+        asm_lines = [
+            f"MOV AX, {op1_asm}",         # Load dividend into AX
+            "CWD",                       # Convert Word to Double Word (sign-extend AX into DX:AX)
+            f"MOV CX, {op2_asm}",         # Load divisor into CX (cannot be immediate for IDIV)
+            "IDIV CX",                   # AX = DX:AX / CX, DX = Remainder
+            f"MOV {dest_asm}, AX"         # Store quotient in destination
+        ]
+        return [f"; HANDLED DIV: {tac_instruction.dest} := {tac_instruction.op1} / {tac_instruction.op2}"] # Placeholder
+
+    def _translate_call(self, tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates TAC CALL: dest := proc_label, num_params OR CALL proc_label, num_params"""
+        self.logger.info(f"Handling CALL TAC: {tac_instruction}")
+        # proc_label = tac_instruction.op1.value (already a string label)
+        # num_params = tac_instruction.op2.value (integer)
+        # dest = tac_instruction.dest (TACOperand, for return value)
+        return [f"; HANDLED CALL: {tac_instruction.op1.value if tac_instruction.op1 else 'None'}"] # Placeholder
+
+    def _translate_param(self, tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates TAC PARAM: op1"""
+        self.logger.info(f"Handling PARAM TAC: {tac_instruction}")
+        # op1 = tac_instruction.op1 (TACOperand)
+        return [f"; HANDLED PARAM: {tac_instruction.op1.value if tac_instruction.op1 else 'None'}"] # Placeholder
+
+    def _translate_array_assign_from(self, tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates TAC ARRAY_ASSIGN_FROM: dest_array_base[index_op] := source_op"""
+        # TAC: (ARRAY_ASSIGN_FROM, dest_array_base, index_op, source_op)
+        # dest = base, op1 = index, op2 = source
+        self.logger.info(f"Handling ARRAY_ASSIGN_FROM TAC: {tac_instruction}")        
+        return [f"; HANDLED ARRAY_ASSIGN_FROM: {tac_instruction.dest.value if tac_instruction.dest else 'None'}[{tac_instruction.op1.value if tac_instruction.op1 else 'None'}] := {tac_instruction.op2.value if tac_instruction.op2 else 'None'}"] # Placeholder
+
+    def _translate_array_assign_to(self, tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates TAC ARRAY_ASSIGN_TO: dest_op := source_array_base[index_op]"""
+        # TAC: (ARRAY_ASSIGN_TO, dest_op, source_array_base, index_op)
+        # dest = dest_op, op1 = base, op2 = index
+        self.logger.info(f"Handling ARRAY_ASSIGN_TO TAC: {tac_instruction}")
+        return [f"; HANDLED ARRAY_ASSIGN_TO: {tac_instruction.dest.value if tac_instruction.dest else 'None'} := {tac_instruction.op1.value if tac_instruction.op1 else 'None'}[{tac_instruction.op2.value if tac_instruction.op2 else 'None'}"] # Placeholder
+    
+    #endregion
+
+    #region Unhandled/Error
+    def _translate_mod(self, tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates TAC MOD: dest := op1 % op2"""
+        self.logger.error(f"MOD TAC at line {tac_instruction.line_number} is not implemented.")
+        return [f"; ERROR: MOD TAC at line {tac_instruction.line_number} is not implemented."]
+
+    #endregion
+
+    #region Unhandled/Error
+    def _translate_unknown(self, tac_instruction: ParsedTACInstruction) -> List[str]:
+        self.logger.warning(f"No specific translator for TAC opcode: {tac_instruction.opcode.name if isinstance(tac_instruction.opcode, TACOpcode) else tac_instruction.opcode} at line {tac_instruction.line_number}")
+        return [f"; UNHANDLED TAC Opcode: {tac_instruction.opcode.name if isinstance(tac_instruction.opcode, TACOpcode) else tac_instruction.opcode} (Operands: D:{tac_instruction.dest}, O1:{tac_instruction.op1}, O2:{tac_instruction.op2})"]
+
+    #endregion
 
 # Future methods like:
 # def _translate_assign(self, tac_instruction: ParsedTACInstruction) -> str:

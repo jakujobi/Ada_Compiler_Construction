@@ -1,7 +1,10 @@
 # tests/unit_tests/test_asm_generator.py
 
 import unittest
-from unittest.mock import MagicMock, patch, mock_open
+import sys
+import os
+from unittest.mock import MagicMock, patch, call, mock_open
+from pathlib import Path
 
 # --- Adjust path to import modules from src ---
 repo_root = Path(__file__).resolve().parent.parent.parent

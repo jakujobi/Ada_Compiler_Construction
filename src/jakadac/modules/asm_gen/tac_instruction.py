@@ -25,6 +25,10 @@ class TACOpcode(Enum):
     NOT_OP = "not"      # result = not arg1 (logical not)
     # (Add other unary ops like NOT if needed)
 
+    # Array Operations
+    ARRAY_ASSIGN_FROM = "array_assign_from" # e.g. x = a[i]
+    ARRAY_ASSIGN_TO = "array_assign_to"     # e.g. a[i] = x
+
     # Control Flow - Unconditional
     GOTO = "goto"       # goto label
     LABEL = "label"     # L1: (represented by defining a label)
@@ -33,17 +37,19 @@ class TACOpcode(Enum):
     # These usually take the form: if arg1 op arg2 goto label
     # For simplicity, we can have specific opcodes or a generic 'IF_GOTO'
     # For example:
-    IF_EQ = "if_eq"     # if arg1 == arg2 goto label
-    IF_NE = "if_ne"     # if arg1 != arg2 goto label
-    IF_LT = "if_lt"     # if arg1 <  arg2 goto label
-    IF_LE = "if_le"     # if arg1 <= arg2 goto label
-    IF_GT = "if_gt"     # if arg1 >  arg2 goto label
-    IF_GE = "if_ge"     # if arg1 >= arg2 goto label
+    IF_FALSE_GOTO = "if_false_goto" # if_false_goto label, condition_var
+    IF_EQ_GOTO = "if_eq_goto"     # if arg1 == arg2 goto label
+    IF_NE_GOTO = "if_ne_goto"     # if arg1 != arg2 goto label
+    IF_LT_GOTO = "if_lt_goto"     # if arg1 <  arg2 goto label
+    IF_LE_GOTO = "if_le_goto"     # if arg1 <= arg2 goto label
+    IF_GT_GOTO = "if_gt_goto"     # if arg1 >  arg2 goto label
+    IF_GE_GOTO = "if_ge_goto"     # if arg1 >= arg2 goto label
     # A more generic form could be:
     # IF_COND_GOTO = "if_cond_goto" # result (label), arg1, arg2, condition_op
 
     # Procedure Call Mechanism
     PUSH = "push"       # push param_value_or_addr
+    PARAM = "param"     # define a parameter (distinct from push for call arguments)
     CALL = "call"       # call proc_name, num_params (optional: num_params for stack cleanup)
     RETURN = "return"   # return [value]
     RETRIEVE = "retrieve" # result = retrieve (for function return values)
@@ -115,7 +121,7 @@ class ParsedTACInstruction:
     line_number: int
     raw_line: str
     label: Optional[str] = None
-    opcode: TACOpcode = TACOpcode.UNKNOWN
+    opcode: Union[TACOpcode, str] = TACOpcode.UNKNOWN
     destination: Optional[TACOperand] = None  # Also used for jump targets in IF_GOTO
     operand1: Optional[TACOperand] = None
     operand2: Optional[TACOperand] = None
@@ -123,12 +129,22 @@ class ParsedTACInstruction:
     # For PROC_BEGIN, could store size_locals, size_params
 
     def __str__(self) -> str:
+        """Returns a string representation of the TAC instruction."""
         parts = []
         if self.label:
             parts.append(f"{self.label}:")
-        
-        parts.append(self.opcode.name)
-        
+
+        # Handle opcode representation carefully
+        opcode_str = ""
+        if isinstance(self.opcode, TACOpcode):
+            opcode_str = self.opcode.name # Or self.opcode.value if preferred for output
+        elif isinstance(self.opcode, str):
+            opcode_str = self.opcode # Use the string directly if it's not an enum
+        else:
+            opcode_str = "[unknown_opcode_type]"
+        parts.append(opcode_str)
+
+        # Append operands if they exist
         if self.destination:
             parts.append(str(self.destination))
         if self.operand1:

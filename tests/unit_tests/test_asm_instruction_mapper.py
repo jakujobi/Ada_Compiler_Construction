@@ -10,7 +10,7 @@ if str(src_root) not in sys.path:
     sys.path.insert(0, str(src_root))
 
 from jakadac.modules.asm_gen.asm_instruction_mapper import ASMInstructionMapper
-from jakadac.modules.asm_gen.tac_instruction import ParsedTACInstruction, TACOpcode
+from jakadac.modules.asm_gen.tac_instruction import ParsedTACInstruction, TACOpcode, TACOperand
 from jakadac.modules.SymTable import Symbol, EntryType, SymbolTable
 
 class TestASMInstructionMapper(unittest.TestCase):
@@ -19,7 +19,8 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.mock_asm_generator = Mock()
         self.mock_asm_generator.logger = Mock() 
         self.mock_asm_generator.symbol_table = Mock(spec=SymbolTable)
-        self.mock_asm_generator.get_operand_asm = Mock(side_effect=lambda op, opcode: str(op) + "_asm" if op else "")
+        # Update the side_effect to accept 'is_destination'
+        self.mock_asm_generator.get_operand_asm = Mock(side_effect=lambda op, opcode, is_destination=False: str(op.value) + "_asm" if op and hasattr(op, 'value') else (str(op) + "_asm" if op else ""))
         self.mock_current_procedure_context = Mock(spec=Symbol)
         self.mock_current_procedure_context.name = "test_proc"
         self.mock_current_procedure_context.local_vars_total_size = 0 
@@ -34,12 +35,16 @@ class TestASMInstructionMapper(unittest.TestCase):
 
     def _create_tac(self, opcode, dest=None, op1=None, op2=None, label=None, line_number=1, raw_line="mock_raw_tac_line"):
         """Helper to create ParsedTACInstruction instances for tests."""
-        # Create a basic mock instruction
         instr = ParsedTACInstruction(line_number=line_number, label=label, raw_line=raw_line)
         instr.opcode = opcode
-        instr.dest = dest
-        instr.op1 = op1
-        instr.op2 = op2
+
+        # Wrap string/numeric operands in TACOperand objects if they are not None
+        instr.dest = TACOperand(value=dest) if dest is not None else None
+        instr.op1 = TACOperand(value=op1) if op1 is not None else None
+        instr.op2 = TACOperand(value=op2) if op2 is not None else None
+        # Note: TACOperand's 'value' field is Union[str, int, float].
+        # The tests currently pass strings or numbers (e.g. op2=0 in test_translate_call_with_ret),
+        # which is compatible with TACOperand's definition.
         return instr
 
     def test_translate_unknown_opcode(self):
@@ -63,7 +68,7 @@ class TestASMInstructionMapper(unittest.TestCase):
         )
 
     def test_translate_assign_simple(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "var_x": "var_x_asm", 
             "var_y": "[BP-2]"
         }.get(op.value, "unexpected_op_in_assign_simple")
@@ -78,7 +83,7 @@ class TestASMInstructionMapper(unittest.TestCase):
 
     def test_translate_assign_op1_is_ax(self):
         # Test case: X := AX (where X is var_x_asm)
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "var_x": "var_x_asm",
             "AX": "AX"
         }.get(op.value, "unexpected_op_in_assign_op1_is_ax")
@@ -89,7 +94,7 @@ class TestASMInstructionMapper(unittest.TestCase):
 
     def test_translate_assign_dest_is_ax(self):
         # Test case: AX := Y (where Y is [BP-2])
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "AX": "AX",
             "var_y": "[BP-2]"
         }.get(op.value, "unexpected_op_in_assign_dest_is_ax")
@@ -100,7 +105,7 @@ class TestASMInstructionMapper(unittest.TestCase):
 
     def test_translate_assign_both_ax(self):
         # Test case: AX := AX (should be optimized to nothing)
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "AX": "AX"
         }.get(op.value, "unexpected_op_in_assign_both_ax")
         tac_assign = self._create_tac(TACOpcode.ASSIGN, dest="AX", op1="AX")
@@ -109,9 +114,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_add_simple(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "res": "res_asm", "val1": "val1_asm", "val2": "val2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_add_simple")
         tac_add = self._create_tac(TACOpcode.ADD, dest="res", op1="val1", op2="val2")
         expected_asm = [
             "MOV AX, val1_asm",
@@ -122,9 +127,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_sub_simple(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "res": "res_asm", "val1": "val1_asm", "val2": "val2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_sub_simple")
         tac_sub = self._create_tac(TACOpcode.SUB, dest="res", op1="val1", op2="val2")
         expected_asm = [
             "MOV AX, val1_asm", 
@@ -135,9 +140,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_mul_simple(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "res": "res_asm", "val1": "val1_asm", "val2": "val2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_mul_simple")
         tac_mul = self._create_tac(TACOpcode.MUL, dest="res", op1="val1", op2="val2")
         expected_asm = [
             "MOV AX, val1_asm", 
@@ -149,9 +154,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_div_simple(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "res": "res_asm", "val1": "val1_asm", "val2": "val2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_div_simple")
         tac_div = self._create_tac(TACOpcode.DIV, dest="res", op1="val1", op2="val2")
         expected_asm = [
             "MOV AX, val1_asm", 
@@ -177,9 +182,9 @@ class TestASMInstructionMapper(unittest.TestCase):
 
     # Conditional Jumps
     def test_translate_if_eq_goto(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "op1_asm", "op2": "op2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_eq_goto")
         tac_if_eq = self._create_tac(TACOpcode.IF_EQ_GOTO, dest="L1_LABEL", op1="op1", op2="op2")
         # Expected: CMP op1_asm, op2_asm; JE L1_LABEL
         expected_asm = [
@@ -190,9 +195,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_eq_goto_op1_imm(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "5", "op2": "op2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_eq_goto_op1_imm")
         tac_if_eq = self._create_tac(TACOpcode.IF_EQ_GOTO, dest="L1_LABEL", op1="op1", op2="op2")
         # Expected: CMP op2_asm, 5; JE L1_LABEL (immediate first in CMP if possible)
         expected_asm = [
@@ -203,9 +208,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_eq_goto_op2_imm(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "op1_asm", "op2": "10"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_eq_goto_op2_imm")
         tac_if_eq = self._create_tac(TACOpcode.IF_EQ_GOTO, dest="L1_LABEL", op1="op1", op2="op2")
         # Expected: CMP op1_asm, 10; JE L1_LABEL
         expected_asm = [
@@ -216,9 +221,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_eq_goto_both_imm(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "5", "op2": "10"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_eq_goto_both_imm")
         tac_if_eq = self._create_tac(TACOpcode.IF_EQ_GOTO, dest="L1_LABEL", op1="op1", op2="op2")
         # Expected: MOV AX, 5; CMP AX, 10; JE L1_LABEL 
         expected_asm = [
@@ -230,9 +235,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_false_goto(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "op1_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_false_goto")
         tac_if_false = self._create_tac(TACOpcode.IF_FALSE_GOTO, dest="L1_LABEL", op1="op1")
         # Expected: CMP op1_asm, 0; JE L1_LABEL (or similar logic)
         expected_asm = [
@@ -243,9 +248,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_ne_goto(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "op1_asm", "op2": "op2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_ne_goto")
         tac_if_ne = self._create_tac(TACOpcode.IF_NE_GOTO, dest="L2_LABEL", op1="op1", op2="op2")
         # Expected: CMP op1_asm, op2_asm; JNE L2_LABEL
         expected_asm = [
@@ -256,9 +261,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_lt_goto(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "op1_asm", "op2": "op2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_lt_goto")
         tac_if_lt = self._create_tac(TACOpcode.IF_LT_GOTO, dest="L3_LABEL", op1="op1", op2="op2")
         # Expected: CMP op1_asm, op2_asm; JL L3_LABEL
         expected_asm = [
@@ -269,9 +274,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_le_goto(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "op1_asm", "op2": "op2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_le_goto")
         tac_if_le = self._create_tac(TACOpcode.IF_LE_GOTO, dest="L4_LABEL", op1="op1", op2="op2")
         # Expected: CMP op1_asm, op2_asm; JLE L4_LABEL
         expected_asm = [
@@ -282,9 +287,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_gt_goto(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "op1_asm", "op2": "op2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_gt_goto")
         tac_if_gt = self._create_tac(TACOpcode.IF_GT_GOTO, dest="L5_LABEL", op1="op1", op2="op2")
         # Expected: CMP op1_asm, op2_asm; JG L5_LABEL
         expected_asm = [
@@ -295,9 +300,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_ge_goto(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "op1_asm", "op2": "op2_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_ge_goto")
         tac_if_ge = self._create_tac(TACOpcode.IF_GE_GOTO, dest="L6_LABEL", op1="op1", op2="op2")
         # Expected: CMP op1_asm, op2_asm; JGE L6_LABEL
         expected_asm = [
@@ -308,9 +313,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_if_ge_goto_imm_mem(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "op1": "5", "op2": "[SI]"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_if_ge_goto_imm_mem")
         tac_if_ge_imm_mem = self._create_tac(TACOpcode.IF_GE_GOTO, dest="GE_LABEL", op1="op1", op2="op2")
         # Expected: CMP [SI], 5; JGE GE_LABEL (assuming immediate is op1 for CMP mem, imm)
         expected_asm = [
@@ -319,14 +324,34 @@ class TestASMInstructionMapper(unittest.TestCase):
         ]
         result_asm = self.mapper.translate(tac_if_ge_imm_mem)
         self.assertEqual(result_asm, expected_asm)
-        self.mapper.logger.debug.assert_called_with(
-            f"  IF_GE_GOTO 5, [SI], GE_LABEL -> CMP [SI], 5; JGE GE_LABEL"
+
+        # Check if the specific log message is in the call list
+        expected_log_message = f"  IF_GE_GOTO 5, [SI], GE_LABEL -> CMP [SI], 5; JGE GE_LABEL"
+        
+        found_log = any(
+            call_args[0][0] == expected_log_message 
+            for call_args in self.mapper.logger.debug.call_args_list
         )
+        self.assertTrue(found_log, f"Expected log message '{expected_log_message}' not found. Actual calls: {self.mapper.logger.debug.call_args_list}")
+
+    # Test IF_NE_GOTO variants
+    def test_translate_if_ne_goto_reg_reg(self):
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
+            "op1": "AX", "op2": "BX"
+        }.get(op.value, "unexpected_op_in_if_ne_goto_reg_reg")
+        tac_if_ne = self._create_tac(TACOpcode.IF_NE_GOTO, dest="L2_LABEL", op1="op1", op2="op2")
+        # Expected: CMP AX, BX; JNE L2_LABEL
+        expected_asm = [
+            "CMP AX, BX",
+            "JNE L2_LABEL"
+        ]
+        result_asm = self.mapper.translate(tac_if_ne)
+        self.assertEqual(result_asm, expected_asm)
 
     def test_translate_param(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "param_val": "param_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_param")
         tac_param = self._create_tac(TACOpcode.PARAM, op1="param_val")
         expected_asm = ["PUSH param_asm"] # ASM for op1
         result_asm = self.mapper.translate(tac_param)
@@ -339,9 +364,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_call_with_ret(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "ret_var": "ret_var_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_call_with_ret")
         tac_call = self._create_tac(TACOpcode.CALL, dest="ret_var", op1="proc_label_ret", op2=0)
         expected_asm = [
             "CALL proc_label_ret",
@@ -351,9 +376,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_call_with_params_and_ret(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "ret_val": "ret_val_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_call_with_params_and_ret")
         tac_call = self._create_tac(TACOpcode.CALL, dest="ret_val", op1="proc_with_params", op2=2)
         expected_asm = [
             "CALL proc_with_params",
@@ -371,9 +396,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_return_value(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "return_val": "return_val_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_return_value")
         tac_return = self._create_tac(TACOpcode.RETURN, op1="return_val")
         expected_asm = [
             "MOV AX, return_val_asm", 
@@ -409,9 +434,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.mock_current_procedure_context.exit_procedure.assert_called_once()
 
     def test_translate_array_assign_from(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "idx": "idx_asm", "val": "val_asm", "arr": "arr_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_array_assign_from")
         tac_array_assign_from = self._create_tac(TACOpcode.ARRAY_ASSIGN_FROM, dest="arr", op1="idx", op2="val")
         # arr[idx] := val  =>  MOV AX, idx_asm; MOV BX, val_asm; MOV [arr_asm+AX], BX
         expected_asm = [
@@ -423,9 +448,9 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_array_assign_to(self):
-        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode: {
+        self.mock_asm_generator.get_operand_asm.side_effect = lambda op, opcode, is_destination=False: {
             "idx": "idx_asm", "val": "val_asm", "arr": "arr_asm"
-        }.get(op)
+        }.get(op.value, "unexpected_op_in_array_assign_to")
         tac_array_assign_to = self._create_tac(TACOpcode.ARRAY_ASSIGN_TO, dest="val", op1="arr", op2="idx")
         # val := arr[idx]  =>  MOV AX, idx_asm; MOV BX, [arr_asm+AX]; MOV val_asm, BX
         expected_asm = [
