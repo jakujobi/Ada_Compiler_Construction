@@ -307,8 +307,7 @@ class StatementsMixin:
         WriteArg -> Expr | LITERAL (String literal)
         """
         node: Optional[ParseTreeNode] = None
-        if self.build_parse_tree:
-            node = ParseTreeNode("IOStat")
+        if self.build_parse_tree: node = ParseTreeNode("IOStat")
         
         self.logger.debug("Entering parseIOStat")
         if not self.current_token:
@@ -358,80 +357,133 @@ class StatementsMixin:
             if self.build_parse_tree and node and get_node: self._add_child(node, get_node)
             # --- End Parse GET ---
 
-        elif token_type in {self.defs.TokenType.PUT, self.defs.TokenType.PUTLN}:
-            is_putln = (token_type == self.defs.TokenType.PUTLN)
-            stmt_type = "PUTLN" if is_putln else "PUT"
-            self.logger.info(f"Parsing {stmt_type} statement")
-            # --- Parse PUT / PUTLN ---
+        elif token_type == self.defs.TokenType.PUT:
+            self.logger.info("Parsing PUT statement")
             put_node: Optional[ParseTreeNode] = None
-            if self.build_parse_tree: put_node = ParseTreeNode("PutLnStat" if is_putln else "PutStat")
+            if self.build_parse_tree: put_node = ParseTreeNode("PutStat")
 
-            self.match_leaf(token_type, put_node) # Match PUT or PUTLN
+            self.match_leaf(self.defs.TokenType.PUT, put_node)
             self.match_leaf(self.defs.TokenType.LPAREN, put_node)
 
-            # Parse WriteArg (Expr or Literal)
-            expr_node: Optional[ParseTreeNode] = None
-            expr_place: Optional[str] = None
-            literal_token: Optional[Token] = None
+            # --- Parse WriteArg (Literal or Expression) for PUT ---
+            expr_node_put: Optional[ParseTreeNode] = None # Renamed to avoid clash if factored
+            expr_place_put: Optional[str] = None
+            literal_token_put: Optional[Token] = None
 
-            if self.current_token and self.current_token.token_type == self.defs.TokenType.LITERAL:
-                 # --- Handle String Literal ---
-                 self.logger.debug("Parsing PUT/PUTLN with string literal")
-                 literal_token = self.current_token
-                 self.match_leaf(self.defs.TokenType.LITERAL, put_node)
-                 if self.tac_gen and literal_token:
-                     # Process string literal: remove outer quotes, handle Ada "" escape
-                     raw_string = literal_token.lexeme
-                     if len(raw_string) >= 2 and raw_string.startswith('"') and raw_string.endswith('"'):
-                          processed_string = raw_string[1:-1].replace('""', '"')
-                          self.logger.debug(f" Emitting TAC: wrs \"{processed_string}\" (via string value)")
-                          # Assuming TACGenerator handles label generation internally
-                          self.tac_gen.emitWriteString(processed_string)
-                     else:
-                          self.logger.error(f"Invalid string literal format: {raw_string}")
-                          self.report_error(f"Invalid string literal format: {raw_string}")
-                 # --- End String Literal ---
+            current_put_token = self.current_token
+            if current_put_token and current_put_token.token_type == self.defs.TokenType.LITERAL:
+                self.logger.debug("Parsing PUT with string literal")
+                literal_token_put = current_put_token
+                self.match_leaf(self.defs.TokenType.LITERAL, put_node)
+                if self.tac_gen and literal_token_put:
+                    raw_string = literal_token_put.lexeme
+                    if len(raw_string) >= 2 and raw_string.startswith('"') and raw_string.endswith('"'):
+                        processed_string = raw_string[1:-1].replace('""', '"')
+                        self.logger.debug(f" Emitting TAC: wrs \"{processed_string}\" (via string value) for PUT")
+                        self.tac_gen.emitWriteString(processed_string)
+                    else:
+                        self.logger.error(f"Invalid string literal format: {raw_string}")
+                        self.report_error(f"Invalid string literal format: {raw_string}")
             else:
-                 # --- Handle Expression ---
-                 self.logger.debug("Parsing PUT/PUTLN with expression")
-                 expr_result = self.parseExpr()
-                 if self.build_parse_tree and put_node and isinstance(expr_result, ParseTreeNode):
-                      expr_node = expr_result
-                      self._add_child(put_node, expr_node) # Add Expr node to PutStat/PutLnStat
-                 elif self.tac_gen and isinstance(expr_result, str):
-                      expr_place = expr_result
-                      self.logger.debug(f" Emitting TAC: write {expr_place}")
-                      try:
-                           self.tac_gen.emitWrite(expr_place) # Assume emitWrite exists
-                      except AttributeError as e:
-                           self.logger.error(f"Attribute error during {stmt_type} TAC generation: {e}")
-                 elif self.tac_gen:
-                      self.logger.error(f"Could not get TAC place for {stmt_type} expression (got type {type(expr_result)}).")
-                      self.report_error(f"Invalid expression in {stmt_type} statement.")
-                 # --- End Expression ---
+                self.logger.debug("Parsing PUT with expression")
+                expr_result_put = self.parseExpr()
+                if self.build_parse_tree and put_node and isinstance(expr_result_put, ParseTreeNode):
+                    expr_node_put = expr_result_put
+                    self._add_child(put_node, expr_node_put)
+                elif self.tac_gen and isinstance(expr_result_put, str):
+                    expr_place_put = expr_result_put
+                    self.logger.debug(f" Emitting TAC: write {expr_place_put} for PUT")
+                    try:
+                        self.tac_gen.emitWrite(expr_place_put)
+                    except AttributeError as e:
+                        self.logger.error(f"Attribute error during PUT TAC generation: {e}")
+                elif self.tac_gen:
+                    self.logger.error(f"Could not get TAC place for PUT expression (got type {type(expr_result_put)}).")
+                    self.report_error(f"Invalid expression in PUT statement.")
+            # --- End Parse WriteArg for PUT ---
 
             self.match_leaf(self.defs.TokenType.RPAREN, put_node)
-
-            # Handle PUTLN newline
-            if is_putln:
-                 if self.build_parse_tree and put_node:
-                      # Optionally add a specific node for the newline action
-                      pass # Or add a 'NewLine' leaf?
-                 if self.tac_gen:
-                      self.logger.debug(" Emitting TAC: wrln")
-                      try:
-                           self.tac_gen.emitNewLine() # Assume emitNewLine exists
-                      except AttributeError as e:
-                           self.logger.error(f"Attribute error during PUTLN newline TAC generation: {e}")
-
             if self.build_parse_tree and node and put_node: self._add_child(node, put_node)
-            # --- End Parse PUT / PUTLN ---
 
-        else:
+        elif token_type == self.defs.TokenType.PUTLN:
+            self.logger.info("Parsing PUTLN statement")
+            putln_node: Optional[ParseTreeNode] = None
+            if self.build_parse_tree: putln_node = ParseTreeNode("PutLnStat")
+
+            self.match_leaf(self.defs.TokenType.PUTLN, putln_node)
+
+            # Check for parameterless PUTLN; vs PUTLN ( WriteArg )
+            if self.current_token and self.current_token.token_type == self.defs.TokenType.LPAREN:
+                # This is PUTLN ( WriteArg )
+                self.match_leaf(self.defs.TokenType.LPAREN, putln_node)
+                
+                # --- Parse WriteArg (Literal or Expression) for PUTLN ---
+                expr_node_putln: Optional[ParseTreeNode] = None # Renamed
+                expr_place_putln: Optional[str] = None
+                literal_token_putln: Optional[Token] = None
+
+                current_putln_token = self.current_token
+                if current_putln_token and current_putln_token.token_type == self.defs.TokenType.LITERAL:
+                    self.logger.debug("Parsing PUTLN with string literal")
+                    literal_token_putln = current_putln_token
+                    self.match_leaf(self.defs.TokenType.LITERAL, putln_node)
+                    if self.tac_gen and literal_token_putln:
+                        raw_string = literal_token_putln.lexeme
+                        if len(raw_string) >= 2 and raw_string.startswith('"') and raw_string.endswith('"'):
+                            processed_string = raw_string[1:-1].replace('""', '"')
+                            self.logger.debug(f" Emitting TAC: wrs \"{processed_string}\" (via string value) for PUTLN")
+                            self.tac_gen.emitWriteString(processed_string)
+                        else:
+                            self.logger.error(f"Invalid string literal format: {raw_string}")
+                            self.report_error(f"Invalid string literal format: {raw_string}")
+                else:
+                    self.logger.debug("Parsing PUTLN with expression")
+                    expr_result_putln = self.parseExpr()
+                    if self.build_parse_tree and putln_node and isinstance(expr_result_putln, ParseTreeNode):
+                        expr_node_putln = expr_result_putln
+                        self._add_child(putln_node, expr_node_putln)
+                    elif self.tac_gen and isinstance(expr_result_putln, str):
+                        expr_place_putln = expr_result_putln
+                        self.logger.debug(f" Emitting TAC: write {expr_place_putln} for PUTLN")
+                        try:
+                            self.tac_gen.emitWrite(expr_place_putln)
+                        except AttributeError as e:
+                            self.logger.error(f"Attribute error during PUTLN expression TAC generation: {e}")
+                    elif self.tac_gen:
+                        self.logger.error(f"Could not get TAC place for PUTLN expression (got type {type(expr_result_putln)}).")
+                        self.report_error(f"Invalid expression in PUTLN statement.")
+                # --- End Parse WriteArg for PUTLN ---
+                
+                self.match_leaf(self.defs.TokenType.RPAREN, putln_node)
+
+                # After argument, emit newline for PUTLN(arg)
+                if self.tac_gen:
+                    self.logger.debug(" Emitting TAC: wrln after PUTLN(arg)")
+                    try:
+                        self.tac_gen.emitNewLine()
+                    except AttributeError as e:
+                        self.logger.error(f"Attribute error during PUTLN(arg) newline TAC generation: {e}")
+            else:
+                # This is parameterless PUTLN; (semicolon handled by caller of parseStatement)
+                self.logger.debug("Parsing parameterless PUTLN;")
+                if self.build_parse_tree and putln_node:
+                    # Optionally add a node to indicate it's parameterless
+                    # For example: self._add_child(putln_node, ParseTreeNode("Parameterless")) 
+                    pass 
+                if self.tac_gen:
+                    self.logger.debug(" Emitting TAC: wrln for PUTLN;")
+                    try:
+                        self.tac_gen.emitNewLine()
+                    except AttributeError as e:
+                        self.logger.error(f"Attribute error during PUTLN; newline TAC generation: {e}")
+        
+            if self.build_parse_tree and node and putln_node: self._add_child(node, putln_node)
+    
+        else: # This 'else' corresponds to the main if/elif for GET/PUT/PUTLN
             # Handle potential empty IOStat or error if grammar requires GET/PUT/PUTLN
             self.report_error(f"Expected GET, PUT, or PUTLN, found {self.current_token.lexeme if self.current_token else 'EOF'}")
             self.panic_recovery({self.defs.TokenType.SEMICOLON, self.defs.TokenType.END})
-            pass
+            # pass # 'pass' is not needed here as report_error and panic_recovery are called
         self.logger.debug("Exiting parseIOStat")
         return node # Return IOStat node if building tree, else None
 
