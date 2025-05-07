@@ -256,6 +256,11 @@ class Logger:
         kwargs.setdefault("stacklevel", 3)
         self._logger.critical(msg, *args, **kwargs)
 
+    def exception(self, msg, *args, **kwargs):
+        # The 'exception' method implicitly sets exc_info=True
+        kwargs.setdefault("stacklevel", 3) # Consistent with other methods
+        self._logger.exception(msg, *args, **kwargs)
+
     def set_level(self, level, handler_type="both"):
         """
         Change the logging level for the console and/or file handlers.
@@ -351,7 +356,7 @@ Key Features:
 Usage:
   1. Import and create a logger instance:
          from Logger import Logger
-         logger = Logger(log_level_console=logging.INFO)
+         logger = Logger()
   2. Use the logger methods in your code:
          logger.debug("This is a debug message.")
          logger.info("This is an info message.")
