@@ -3,13 +3,15 @@ from unittest.mock import Mock, call, patch
 import sys
 from pathlib import Path
 
-repo_root = Path(__file__).resolve().parent.parent
-project_root = repo_root.parent 
-src_root = project_root / "src"
-if str(src_root) not in sys.path:
-    sys.path.insert(0, str(src_root))
+# Correctly calculate the project's src directory and add it to sys.path
+_current_file_path = Path(__file__).resolve()
+# ..\..\..\.. gets to the project root (Ada_Compiler_Construction) from the test file location
+_project_root_actual = _current_file_path.parent.parent.parent.parent
+_src_dir_actual = _project_root_actual / "src"
+if str(_src_dir_actual) not in sys.path:
+    sys.path.insert(0, str(_src_dir_actual))
 
-from jakadac.modules.asm_gen.asm_im_io_translators import IOTranslators
+from jakadac.modules.asm_gen.instruction_translators.asm_im_io_translators import IOTranslators
 from jakadac.modules.asm_gen.tac_instruction import ParsedTACInstruction, TACOpcode, TACOperand
 from jakadac.modules.Logger import Logger
 
