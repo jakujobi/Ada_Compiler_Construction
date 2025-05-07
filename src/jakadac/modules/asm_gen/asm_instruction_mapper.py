@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 from .tac_instruction import ParsedTACInstruction, TACOpcode
 
 # Import the translator mixin classes
-from .asm_im_data_mov_translators import DataMovTranslators
-from .asm_im_arithmetic_translators import ArithmeticTranslators
-from .asm_im_procedure_translators import ProcedureTranslators
-from .asm_im_control_flow_translators import ControlFlowTranslators
-from .asm_im_array_translators import ArrayTranslators
-from .asm_im_io_translators import IOTranslators
-from .asm_im_special_translators import SpecialTranslators
+from .instruction_translators.asm_im_data_mov_translators import DataMovTranslators
+from .instruction_translators.asm_im_arithmetic_translators import ArithmeticTranslators
+from .instruction_translators.asm_im_procedure_translators import ProcedureTranslators
+from .instruction_translators.asm_im_control_flow_translators import ControlFlowTranslators
+from .instruction_translators.asm_im_array_translators import ArrayTranslators
+from .instruction_translators.asm_im_io_translators import IOTranslators
+from .instruction_translators.asm_im_special_translators import SpecialTranslators
 
 
 class ASMInstructionMapper(

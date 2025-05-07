@@ -1,14 +1,14 @@
-# src/jakadac/modules/asm_gen/asm_im_special_translators.py
+# src/jakadac/modules/asm_gen/instruction_translators/asm_im_special_translators.py
 
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
-    from .asm_generator import ASMGenerator
-    from ..Logger import Logger
-    from ..SymTable import SymbolTable # Added for self.symbol_table hint
+    from ..asm_generator import ASMGenerator
+    from ...Logger import Logger
+    from ...SymTable import SymbolTable # Added for self.symbol_table hint
     from .asm_im_arithmetic_translators import ArithmeticTranslators # For _translate_rem
 
-from .tac_instruction import ParsedTACInstruction, TACOpcode
+from ..tac_instruction import ParsedTACInstruction, TACOpcode
 
 class SpecialTranslators:
     # self will be an instance of ASMInstructionMapper

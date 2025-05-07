@@ -1,13 +1,13 @@
-# src/jakadac/modules/asm_gen/asm_im_procedure_translators.py
+# src/jakadac/modules/asm_gen/instruction_translators/asm_im_procedure_translators.py
 
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
-    from .asm_generator import ASMGenerator
-    from ..SymTable import Symbol, SymbolTable
-    from ..Logger import Logger
+    from ..asm_generator import ASMGenerator
+    from ...SymTable import Symbol, SymbolTable
+    from ...Logger import Logger
 
-from .tac_instruction import ParsedTACInstruction, TACOpcode
+from ..tac_instruction import ParsedTACInstruction, TACOpcode
 
 class ProcedureTranslators:
     # self will be an instance of ASMInstructionMapper
