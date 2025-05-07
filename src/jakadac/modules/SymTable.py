@@ -229,6 +229,10 @@ class SymbolTable:
         self.enter_scope() # Initialize the global scope
         logger.info("Symbol Table initialized.")
 
+        # For string literal management
+        self.string_literals_map: Dict[str, str] = {} # Maps string value to unique label
+        self.next_string_label_id: int = 0
+
     @property
     def current_depth(self) -> int:
         """Returns the current lexical scope depth."""
@@ -253,7 +257,6 @@ class SymbolTable:
              logger.critical("Symbol table depth inconsistency detected!")
              self._current_depth = -1 # Reset for safety
 
-
     def insert(self, symbol: Symbol):
         """
         Inserts a symbol into the current scope.
@@ -263,12 +266,12 @@ class SymbolTable:
 
         Raises:
             DuplicateSymbolError: If a symbol with the same name already exists
-                                  in the current scope.
+                                in the current scope.
         """
         if not self._scope_stack:
-             logger.error("Cannot insert symbol: No active scope.")
-             # Optionally raise an internal error
-             return
+            logger.error("Cannot insert symbol: No active scope.")
+            # Optionally raise an internal error
+            return
 
         current_scope = self._scope_stack[-1]
         name = symbol.name
@@ -333,6 +336,27 @@ class SymbolTable:
         if not self._scope_stack:
             return {}
         return self._scope_stack[-1].copy() # Return a copy
+
+    def add_string_literal(self, string_value: str) -> str:
+        """
+        Adds a string literal to a global store and returns a unique label for it.
+        If the string already exists, returns its existing label.
+
+        Args:
+            string_value: The processed string value (e.g., "Hello World").
+
+        Returns:
+            A unique label for the string (e.g., "_S0", "_S1").
+        """
+        if string_value in self.string_literals_map:
+            self.logger.debug(f"String literal '{string_value}' already exists, reusing label '{self.string_literals_map[string_value]}'")
+            return self.string_literals_map[string_value]
+        else:
+            label = f"_S{self.next_string_label_id}"
+            self.string_literals_map[string_value] = label
+            self.next_string_label_id += 1
+            self.logger.debug(f"Added new string literal '{string_value}' with label '{label}'")
+            return label
 
     def __str__(self) -> str:
         """
