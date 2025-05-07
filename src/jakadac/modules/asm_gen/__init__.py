@@ -5,7 +5,7 @@ from .tac_instruction import ParsedTACInstruction, TACOpcode, TACOperand
 from .data_segment_manager import DataSegmentManager
 from .asm_operand_formatter import ASMOperandFormatter
 from .asm_instruction_mapper import ASMInstructionMapper
-# from .asm_generator import ASMGenerator
+from .asm_generator import ASMGenerator
 
 __all__ = [
     "TACParser",
@@ -13,7 +13,7 @@ __all__ = [
     "DataSegmentManager",
     "ASMOperandFormatter",
     "ASMInstructionMapper",
-    # "ASMGenerator",
+    "ASMGenerator",
 ]
 
 # logger.info("ASM Generation package initialized.")

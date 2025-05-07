@@ -319,7 +319,7 @@ class TestASMInstructionMapper(unittest.TestCase):
         ]
         result_asm = self.mapper.translate(tac_if_ge_imm_mem)
         self.assertEqual(result_asm, expected_asm)
-        self.mock_asm_generator.logger.debug.assert_called_with(
+        self.mapper.logger.debug.assert_called_with(
             f"  IF_GE_GOTO 5, [SI], GE_LABEL -> CMP [SI], 5; JGE GE_LABEL"
         )
 
