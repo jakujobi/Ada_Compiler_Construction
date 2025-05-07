@@ -46,6 +46,8 @@ class TestTACParser(unittest.TestCase):
 
     def tearDown(self):
         """Remove the temporary TAC file."""
+        if hasattr(self, 'parser'):
+            del self.parser # Attempt to release resources
         if os.path.exists(self.temp_tac_file):
             os.remove(self.temp_tac_file)
 
