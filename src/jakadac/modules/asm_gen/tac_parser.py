@@ -136,7 +136,7 @@ class TACParser:
 
         # 3. Try to parse assignment-like structures first (dest = ... forms)
         #    dest = op1 BIN_OP op2 (e.g., t1 = a + b)
-        bin_assign_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_@\.\+\-]*)\s*=\s*([a-zA-Z_][a-zA-Z0-9_@\.\+\-]*)\s*([+\-*/]|mod|rem)\s*([a-zA-Z_][a-zA-Z0-9_@\.\+\-]*)', instruction_part, re.IGNORECASE)
+        bin_assign_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_@\.\-]*)\s*=\s*(\d+(?:\.\d+)?|[a-zA-Z_][a-zA-Z0-9_@\.\-]*)\s*([+\-*/]|mod|rem)\s*(\d+(?:\.\d+)?|[a-zA-Z_][a-zA-Z0-9_@\.\-]*)', instruction_part, re.IGNORECASE)
         if bin_assign_match:
             dest_str, op1_str, op_str, op2_str = map(clean_comment, bin_assign_match.groups())
             opcode = TACOpcode.from_string(op_str)
@@ -159,7 +159,8 @@ class TACParser:
         #    dest = op1 (simple assignment, e.g., t1 = a  OR _t4 = retrieve)
         #    Regex for op1 should not be too greedy for keywords like 'retrieve' if they are meant to be opcodes.
         #    However, 'retrieve' is unique as it's an op that *returns a value into* a destination.
-        simple_assign_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_@\.\+\-]*)\s*=\s*([a-zA-Z_][a-zA-Z0-9_@\.\+\-\"\']*)', instruction_part)
+        # simple_assign_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_@\.\+\-]*)\s*=\s*([a-zA-Z_][a-zA-Z0-9_@\.\+\-\"\']*)', instruction_part)
+        simple_assign_match = re.match(r'([a-zA-Z_][a-zA-Z0-9_@\.\-]*)\s*=\s*(\d+(?:\.\d+)?|[a-zA-Z_][a-zA-Z0-9_@\.\-]*|\"[^\"]*\"|\'[^\']*\')', instruction_part)
         if simple_assign_match:
             dest_str, op1_str_candidate = map(clean_comment, simple_assign_match.groups())
             
