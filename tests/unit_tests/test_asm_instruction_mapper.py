@@ -170,7 +170,7 @@ class TestASMInstructionMapper(unittest.TestCase):
         self.assertEqual(result_asm, expected_asm)
 
     def test_translate_label(self):
-        tac_label = self._create_tac(TACOpcode.LABEL, label="L1")
+        tac_label = self._create_tac(TACOpcode.LABEL, dest="L1")
         expected_asm = ["L1:"]
         result_asm = self.mapper.translate(tac_label)
         self.assertEqual(result_asm, expected_asm)
