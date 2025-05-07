@@ -375,12 +375,15 @@ class StatementsMixin:
                 self.logger.debug("Parsing PUT with string literal")
                 literal_token_put = current_put_token
                 self.match_leaf(self.defs.TokenType.LITERAL, put_node)
-                if self.tac_gen and literal_token_put:
+                if self.tac_gen and self.symbol_table and literal_token_put:
                     raw_string = literal_token_put.lexeme
                     if len(raw_string) >= 2 and raw_string.startswith('"') and raw_string.endswith('"'):
                         processed_string = raw_string[1:-1].replace('""', '"')
-                        self.logger.debug(f" Emitting TAC: wrs \"{processed_string}\" (via string value) for PUT")
-                        self.tac_gen.emitWriteString(processed_string)
+                        # New string handling logic for PUT
+                        label = self.symbol_table.add_string_literal(processed_string)
+                        self.tac_gen.add_string_definition(label, processed_string)
+                        self.logger.debug(f" Emitting TAC: wrs {label} (string: \"{processed_string}\") for PUT")
+                        self.tac_gen.emit_write_string_by_label(label) # Use new method
                     else:
                         self.logger.error(f"Invalid string literal format: {raw_string}")
                         self.report_error(f"Invalid string literal format: {raw_string}")
@@ -427,12 +430,15 @@ class StatementsMixin:
                     self.logger.debug("Parsing PUTLN with string literal")
                     literal_token_putln = current_putln_token
                     self.match_leaf(self.defs.TokenType.LITERAL, putln_node)
-                    if self.tac_gen and literal_token_putln:
+                    if self.tac_gen and self.symbol_table and literal_token_putln:
                         raw_string = literal_token_putln.lexeme
                         if len(raw_string) >= 2 and raw_string.startswith('"') and raw_string.endswith('"'):
                             processed_string = raw_string[1:-1].replace('""', '"')
-                            self.logger.debug(f" Emitting TAC: wrs \"{processed_string}\" (via string value) for PUTLN")
-                            self.tac_gen.emitWriteString(processed_string)
+                            # New string handling logic for PUTLN
+                            label = self.symbol_table.add_string_literal(processed_string)
+                            self.tac_gen.add_string_definition(label, processed_string)
+                            self.logger.debug(f" Emitting TAC: wrs {label} (string: \"{processed_string}\") for PUTLN")
+                            self.tac_gen.emit_write_string_by_label(label) # Use new method
                         else:
                             self.logger.error(f"Invalid string literal format: {raw_string}")
                             self.report_error(f"Invalid string literal format: {raw_string}")

@@ -349,13 +349,13 @@ class SymbolTable:
             A unique label for the string (e.g., "_S0", "_S1").
         """
         if string_value in self.string_literals_map:
-            self.logger.debug(f"String literal '{string_value}' already exists, reusing label '{self.string_literals_map[string_value]}'")
+            logger.debug(f"String literal '{string_value}' already exists, reusing label '{self.string_literals_map[string_value]}'")
             return self.string_literals_map[string_value]
         else:
             label = f"_S{self.next_string_label_id}"
             self.string_literals_map[string_value] = label
             self.next_string_label_id += 1
-            self.logger.debug(f"Added new string literal '{string_value}' with label '{label}'")
+            logger.debug(f"Added new string literal '{string_value}' with label '{label}'")
             return label
 
     def __str__(self) -> str:
