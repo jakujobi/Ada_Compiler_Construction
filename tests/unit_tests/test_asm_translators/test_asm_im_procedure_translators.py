@@ -26,7 +26,9 @@ class TestProcedureTranslators(unittest.TestCase, ProcedureTranslators):
         self.asm_generator.symbol_table = self.symbol_table 
 
         self.asm_generator.get_operand_asm = Mock(
-            side_effect=lambda op_val_str, tac_opcode: str(op_val_str) + "_asm" if op_val_str is not None else ""
+            side_effect=lambda op_val_str, tac_opcode: 
+                str(op_val_str) if tac_opcode == TACOpcode.CALL and op_val_str is not None else 
+                (str(op_val_str) + "_asm" if op_val_str is not None else "")
         )
         
         self.mock_proc_sym = Mock(spec=Symbol)
@@ -101,14 +103,20 @@ class TestProcedureTranslators(unittest.TestCase, ProcedureTranslators):
         self.assertEqual(result, expected)
 
     def test_translate_proc_end_with_locals_context_mismatch_resolved(self):
-        proc_name = "CalcProc"
+        proc_name = "CleanupProc"
         # Simulate current context is for another procedure
-        other_proc_sym = Mock(spec=Symbol, name="OtherProc", local_size=2)
+        other_proc_sym = Mock()  
+        other_proc_sym.name = "OtherProc"
+        other_proc_sym.local_size = 2
+        # other_proc_sym.entry_type = EntryType.PROCEDURE # Not strictly needed for this mock's role here
         self.asm_generator.current_procedure_context = other_proc_sym
-        
-        # Setup lookup_globally to return the correct proc info for "CalcProc"
-        calc_proc_sym = Mock(spec=Symbol, name=proc_name, local_size=6, entry_type=EntryType.PROCEDURE)
-        self.symbol_table.lookup_globally.return_value = calc_proc_sym
+
+        # Setup lookup_globally to return the correct proc info for "CleanupProc"
+        correct_proc_sym = Mock()  
+        correct_proc_sym.name = proc_name
+        correct_proc_sym.local_size = 4
+        correct_proc_sym.entry_type = EntryType.PROCEDURE
+        self.symbol_table.lookup_globally.return_value = correct_proc_sym
 
         tac = self._create_tac(TACOpcode.PROC_END, dest=proc_name)
         result = self._translate_proc_end(tac)
@@ -130,6 +138,7 @@ class TestProcedureTranslators(unittest.TestCase, ProcedureTranslators):
         self.assertEqual(result, expected)
 
     def test_translate_return_value_is_ax(self):
+        self.asm_generator.get_operand_asm.side_effect = None # Clear side_effect from setUp
         self.asm_generator.get_operand_asm.return_value = "AX" 
         tac = self._create_tac(TACOpcode.RETURN, op1="ValInAX")
         result = self._translate_return(tac)
@@ -141,28 +150,28 @@ class TestProcedureTranslators(unittest.TestCase, ProcedureTranslators):
     def test_translate_call_no_params_no_ret(self):
         tac = self._create_tac(TACOpcode.CALL, op1="SimpleProc", op2=0)
         result = self._translate_call(tac)
-        self.assertEqual(result, ["CALL SimpleProc_asm"])
+        self.assertEqual(result, ["CALL SimpleProc"])
 
     def test_translate_call_with_params_no_ret(self):
         tac = self._create_tac(TACOpcode.CALL, op1="ProcWithArgs", op2=2) 
         result = self._translate_call(tac)
-        expected = ["CALL ProcWithArgs_asm", "ADD SP, 4"] 
+        expected = ["CALL ProcWithArgs", "ADD SP, 4"] 
         self.assertEqual(result, expected)
 
     def test_translate_call_no_params_with_ret_not_ax(self):
         self.asm_generator.get_operand_asm.side_effect = lambda op_v_s, tc: "ResultVar_asm" if op_v_s == "ResultVar" else (str(op_v_s)+"_asm" if op_v_s else "")
         tac = self._create_tac(TACOpcode.CALL, dest="ResultVar", op1="FuncNoArgs", op2=0)
         result = self._translate_call(tac)
-        expected = ["CALL FuncNoArgs_asm", "MOV ResultVar_asm, AX"]
+        expected = ["CALL FuncNoArgs", "MOV ResultVar_asm, AX"]
         self.assertEqual(result, expected)
 
     def test_translate_call_with_params_with_ret_is_ax(self):
         self.asm_generator.get_operand_asm.side_effect = lambda op_v_s, tc: "AX" if op_v_s == "ResultInAX" else (str(op_v_s)+"_asm" if op_v_s else "")
         tac = self._create_tac(TACOpcode.CALL, dest="ResultInAX", op1="ComplexFunc", op2=1)
         result = self._translate_call(tac)
-        expected = ["CALL ComplexFunc_asm", "ADD SP, 2"] # MOV AX, AX optimized out
+        expected = ["CALL ComplexFunc", "ADD SP, 2"] # MOV AX, AX optimized out
         self.assertEqual(result, expected)
-        self.logger.debug.assert_any_call("CALL to ComplexFunc_asm with 1 params, returning to AX")
+        self.logger.debug.assert_any_call("CALL to ComplexFunc with 1 params, returning to AX")
 
 
     def test_translate_push_value(self):
@@ -185,6 +194,7 @@ class TestProcedureTranslators(unittest.TestCase, ProcedureTranslators):
         tac_operand = TACOperand(value="LocalVar", is_address_of=True)
         tac = self._create_tac(TACOpcode.PUSH)
         tac.operand1 = tac_operand
+        self.asm_generator.get_operand_asm.side_effect = None # Clear side_effect from setUp
         self.asm_generator.get_operand_asm.return_value = "[BP-4]" 
         result = self._translate_push(tac)
         self.assertEqual(result, ["LEA AX, [BP-4]", "PUSH AX"])

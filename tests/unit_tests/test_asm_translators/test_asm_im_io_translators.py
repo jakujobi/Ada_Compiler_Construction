@@ -43,7 +43,7 @@ class TestIOTranslators(unittest.TestCase, IOTranslators):
         self.assertEqual(result, ["CALL READINT", "MOV TargetVar_asm, AX"])
 
     def test_translate_read_int_dest_is_ax(self):
-        self.asm_generator.get_operand_asm.return_value = "AX"
+        self.asm_generator.get_operand_asm.side_effect = lambda op_val_str, tac_opcode: "AX" if op_val_str == "AX_val_placeholder" else str(op_val_str) + "_asm"
         tac = self._create_tac(TACOpcode.READ_INT, dest="AX_val_placeholder") 
         result = self._translate_read_int(tac)
         self.assertEqual(result, ["CALL READINT"]) 
@@ -55,7 +55,7 @@ class TestIOTranslators(unittest.TestCase, IOTranslators):
         self.assertEqual(result, ["MOV AX, SourceVar_asm", "CALL WRITEINT"])
 
     def test_translate_write_int_source_is_ax(self):
-        self.asm_generator.get_operand_asm.return_value = "AX"
+        self.asm_generator.get_operand_asm.side_effect = lambda op_val_str, tac_opcode: "AX" if op_val_str == "AX_val_placeholder" else str(op_val_str) + "_asm"
         tac = self._create_tac(TACOpcode.WRITE_INT, op1="AX_val_placeholder")
         result = self._translate_write_int(tac)
         self.assertEqual(result, ["CALL WRITEINT"]) 
@@ -79,7 +79,7 @@ class TestIOTranslators(unittest.TestCase, IOTranslators):
         # The realistic scenario is get_operand_asm returns "OFFSET _S1", then MOV DX, OFFSET _S1
         # If somehow _get_operand_asm returned "DX" directly (implying it IS the offset string in DX),
         # then MOV DX, DX would be skipped.
-        self.asm_generator.get_operand_asm.return_value = "DX" # Mocking that the operand IS DX.
+        self.asm_generator.get_operand_asm.side_effect = lambda op_val_str, tac_opcode: "DX" if op_val_str == "PreloadedStrOffsetInDX" else str(op_val_str) + "_asm"
         tac = self._create_tac(TACOpcode.WRITE_STR, op1="PreloadedStrOffsetInDX")
         result = self._translate_write_str(tac)
         self.assertEqual(result, ["CALL WRITESTRING"]) # MOV DX, DX optimized out
