@@ -19,13 +19,15 @@ from jakadac.modules.Logger import Logger
 @patch('jakadac.modules.asm_gen.asm_operand_formatter.logger')
 class TestASMOperandFormatter(unittest.TestCase):
 
-    def create_mock_symbol_entry(self, name, entry_type, depth=0, const_value=None, var_type=None):
+    def create_mock_symbol_entry(self, name, entry_type, depth=0, const_value=None, var_type=None, offset=None):
         mock_entry = MagicMock(spec=Symbol)
         mock_entry.name = name
         mock_entry.entry_type = entry_type
         mock_entry.depth = depth
         mock_entry.const_value = const_value
         mock_entry.var_type = var_type if var_type else MagicMock(spec=VarType)
+        mock_entry.offset = offset
+        mock_entry.scope = f"scope_depth_{depth}"
         return mock_entry
 
     def setUp(self):
@@ -39,64 +41,101 @@ class TestASMOperandFormatter(unittest.TestCase):
     def test_format_operand_integer_immediate(self, mock_logger):
         self.assertEqual(self.formatter.format_operand("123"), "123")
         self.assertEqual(self.formatter.format_operand("-5"), "-5")
-        mock_logger.debug.assert_any_call("ASMOperandFormatter: Formatting operand: '123' (context: None)")
-        mock_logger.debug.assert_any_call("Formatted '123' as immediate: 123")
+        mock_logger.debug.assert_any_call("ASMOperandFormatter: Formatting operand: '123' (context: None)", stacklevel=2)
+        mock_logger.debug.assert_any_call("Formatted '123' as immediate integer: 123")
 
     def test_format_operand_global_variable(self, mock_logger):
         global_var_entry = self.create_mock_symbol_entry("MyGlobal", EntryType.VARIABLE, depth=1)
-        self.mock_symbol_table.lookup_any_depth.return_value = global_var_entry
+        self.mock_symbol_table.lookup.return_value = global_var_entry
         
         self.assertEqual(self.formatter.format_operand("MyGlobal"), "MyGlobal")
-        self.mock_symbol_table.lookup_any_depth.assert_called_with("MyGlobal")
-        mock_logger.debug.assert_any_call("Formatted 'MyGlobal' as global variable: MyGlobal")
+        self.mock_symbol_table.lookup.assert_called_with("MyGlobal")
+        mock_logger.debug.assert_any_call("Formatted 'MyGlobal' as global variable/constant: MyGlobal")
+
+    def test_format_operand_global_variable_c(self, mock_logger):
+        global_var_entry = self.create_mock_symbol_entry("c", EntryType.VARIABLE, depth=1)
+        self.mock_symbol_table.lookup.return_value = global_var_entry
+
+        self.assertEqual(self.formatter.format_operand("c"), "cc")
+        self.mock_symbol_table.lookup.assert_called_with("c")
+        mock_logger.debug.assert_any_call("Formatted 'c' as global variable/constant: cc")
 
     def test_format_operand_string_label_wrs_context(self, mock_logger):
-        string_label_entry = self.create_mock_symbol_entry("_S0", EntryType.CONSTANT, const_value="AString")
-        self.mock_symbol_table.lookup_any_depth.return_value = string_label_entry
+        try:
+            from jakadac.modules.asm_gen.tac_instruction import TACOpcode
+            wrs_opcode = TACOpcode.WRITE_STR
+        except ImportError:
+            wrs_opcode = "WRITE_STR"
         
-        self.assertEqual(self.formatter.format_operand("_S0", context_opcode="WRS"), "OFFSET _S0")
-        self.mock_symbol_table.lookup_any_depth.assert_called_with("_S0")
-        mock_logger.debug.assert_any_call("Formatted string label '_S0' as OFFSET _S0")
+        self.assertEqual(self.formatter.format_operand("_S0", context_opcode=wrs_opcode), "OFFSET _S0")
+        mock_logger.debug.assert_any_call("Formatted string label '_S0' as OFFSET _S0 for WRS context.")
 
     def test_format_operand_string_label_no_wrs_context(self, mock_logger):
-        string_label_entry = self.create_mock_symbol_entry("_S1", EntryType.CONSTANT, const_value="Another")
-        self.mock_symbol_table.lookup_any_depth.return_value = string_label_entry
-        
-        self.assertEqual(self.formatter.format_operand("_S1"), "_S1") # Default context
-        self.assertEqual(self.formatter.format_operand("_S1", context_opcode="MOV"), "_S1") # Other context
-        mock_logger.debug.assert_any_call("Formatted string label '_S1' as _S1")
+        self.assertEqual(self.formatter.format_operand("_S1"), "_S1")
+        try:
+            from jakadac.modules.asm_gen.tac_instruction import TACOpcode
+            mov_opcode = TACOpcode.ASSIGN
+        except ImportError:
+            mov_opcode = "ASSIGN"
+            
+        self.assertEqual(self.formatter.format_operand("_S1", context_opcode=mov_opcode), "_S1")
+        mock_logger.debug.assert_any_call("Formatted string label '_S1' as itself (non-WRS context). Potential address needed.")
 
     def test_format_operand_temporary_variable(self, mock_logger):
-        # Temporaries don't typically exist in symbol table as entries we check here, 
-        # but are recognized by name pattern if not found otherwise.
-        self.mock_symbol_table.lookup_any_depth.return_value = None 
-        self.assertEqual(self.formatter.format_operand("_t1"), "_t1")
-        mock_logger.debug.assert_any_call("Operand '_t1' treated as a non-immediate identifier (temp, local, label). Returning as is.")
+        temp_entry = self.create_mock_symbol_entry("_t1", EntryType.VARIABLE, depth=2, offset=0)
+        self.mock_symbol_table.lookup.return_value = temp_entry
+        
+        self.assertEqual(self.formatter.format_operand("_t1"), "[bp-2]")
+        self.mock_symbol_table.lookup.assert_called_with("_t1")
+        mock_logger.debug.assert_any_call("Calculated LOCAL/TEMP variable offset for '_t1' (internal: 0) -> [bp-2]")
 
     def test_format_operand_procedure_label_or_other_identifier(self, mock_logger):
-        # Identifiers not in symbol table and not matching temp pattern are returned as is.
-        self.mock_symbol_table.lookup_any_depth.return_value = None
+        proc_entry = self.create_mock_symbol_entry("MyProc", EntryType.PROCEDURE, depth=0)
+        self.mock_symbol_table.lookup.return_value = proc_entry
         self.assertEqual(self.formatter.format_operand("MyProc"), "MyProc")
+        mock_logger.debug.assert_any_call("Formatted 'MyProc' as procedure/function/type name: MyProc")
+
+        self.mock_symbol_table.lookup.side_effect = SymbolNotFoundError("L1")
         self.assertEqual(self.formatter.format_operand("L1"), "L1")
-        mock_logger.debug.assert_any_call("Operand 'MyProc' treated as a non-immediate identifier (temp, local, label). Returning as is.")
+        mock_logger.debug.assert_any_call("Operand 'L1' not found in symbol table or matched other patterns. Returning as potential label/temp name.")
+        self.mock_symbol_table.lookup.side_effect = None
 
     def test_format_operand_unknown_symbol_fallback(self, mock_logger):
-        self.mock_symbol_table.lookup_any_depth.return_value = None
-        # Assuming 'unknown_op' is not a number, not a _t var, not _S string label
-        # and not found in symbol table
-        self.assertEqual(self.formatter.format_operand("unknown_op@"), "unknown_op@") # Non-identifier
-        mock_logger.warning.assert_called_with("Could not definitively format operand: 'unknown_op@'. Returning as is. This may indicate an unhandled case or an error.")
+        self.mock_symbol_table.lookup.side_effect = SymbolNotFoundError("unknown_op@")
+        self.assertEqual(self.formatter.format_operand("unknown_op@"), "unknown_op@")
+        mock_logger.debug.assert_any_call("Operand 'unknown_op@' not found in symbol table or matched other patterns. Returning as potential label/temp name.")
+        self.mock_symbol_table.lookup.side_effect = None
 
-    def test_format_operand_non_global_variable_as_identifier(self, mock_logger):
-        # For phase 2, non-global variables (depth > 1) or params are not yet [BP+/-offset]
-        # They should be returned as is, like other identifiers, if not an immediate.
-        local_var_entry = self.create_mock_symbol_entry("LocalA", EntryType.VARIABLE, depth=2)
-        self.mock_symbol_table.lookup_any_depth.return_value = local_var_entry
+    def test_format_operand_local_variable(self, mock_logger):
+        local_var_entry = self.create_mock_symbol_entry("LocalA", EntryType.VARIABLE, depth=2, offset=2)
+        self.mock_symbol_table.lookup.return_value = local_var_entry
         
-        # Since the current format_operand specifically checks for depth == 1 for globals,
-        # a depth > 1 variable will fall through to the generic identifier handling if not immediate.
-        self.assertEqual(self.formatter.format_operand("LocalA"), "LocalA")
-        mock_logger.debug.assert_any_call("Operand 'LocalA' treated as a non-immediate identifier (temp, local, label). Returning as is.")
+        self.assertEqual(self.formatter.format_operand("LocalA"), "[bp-4]")
+        self.mock_symbol_table.lookup.assert_called_with("LocalA")
+        mock_logger.debug.assert_any_call("Calculated LOCAL/TEMP variable offset for 'LocalA' (internal: 2) -> [bp-4]")
+
+    def test_format_operand_parameter(self, mock_logger):
+        param_entry = self.create_mock_symbol_entry("ParamX", EntryType.PARAMETER, depth=2, offset=0)
+        self.mock_symbol_table.lookup.return_value = param_entry
+        
+        self.assertEqual(self.formatter.format_operand("ParamX"), "[bp+4]")
+        self.mock_symbol_table.lookup.assert_called_with("ParamX")
+        mock_logger.debug.assert_any_call("Calculated PARAMETER offset for 'ParamX' (internal: 0) -> [bp+4]")
+
+    def test_format_operand_parameter_second(self, mock_logger):
+        param_entry = self.create_mock_symbol_entry("ParamY", EntryType.PARAMETER, depth=2, offset=2)
+        self.mock_symbol_table.lookup.return_value = param_entry
+        
+        self.assertEqual(self.formatter.format_operand("ParamY"), "[bp+6]")
+        self.mock_symbol_table.lookup.assert_called_with("ParamY")
+        mock_logger.debug.assert_any_call("Calculated PARAMETER offset for 'ParamY' (internal: 2) -> [bp+6]")
+
+    def test_format_operand_local_no_offset(self, mock_logger):
+        local_no_offset = self.create_mock_symbol_entry("NoOffsetLocal", EntryType.VARIABLE, depth=2, offset=None)
+        self.mock_symbol_table.lookup.return_value = local_no_offset
+        
+        self.assertEqual(self.formatter.format_operand("NoOffsetLocal"), "<ERROR_NO_OFFSET_NoOffsetLocal>")
+        mock_logger.error.assert_any_call("Local/Param operand 'NoOffsetLocal' (Depth 2) in scope 'scope_depth_2' has no offset.")
 
 if __name__ == '__main__':
     unittest.main()
