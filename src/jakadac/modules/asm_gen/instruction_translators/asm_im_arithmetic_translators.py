@@ -44,30 +44,22 @@ class ArithmeticTranslators:
         else:
             asm.append(f" mov ax, {op1_asm}    ; Load op1 into AX")
 
-        # Load op2 into BX (dereference if needed)
+        # Load op2 into BX (dereference if needed) or determine if direct use
+        was_op2_loaded_to_bx = False
         if is_op2_ref:
-            asm.append(f" mov cx, {op2_asm} ; Load address of op2") # Use CX to avoid conflict if AX holds address
+            asm.append(f" mov cx, {op2_asm} ; Load address of op2") # Use CX
             asm.append(f" mov bx, [cx]      ; Dereference op2 into BX")
-        else:
-            # Avoid memory-to-register arithmetic (ADD AX, memory_op2 is okay)
-            # If op2 is memory and op1 was not a ref param (so AX holds value), we can add directly
-            # If op1 was ref param (AX holds value) and op2 is ref param (BX holds value), add bx is fine
-            # If op1 was ref param and op2 is memory -> need intermediate reg for op2
-            # If op1 is memory and op2 is ref param -> need intermediate reg for op1?
-            # Simplification: Always load op2 into BX if it's not immediate/register
-            if not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm):
-                 asm.append(f" mov bx, {op2_asm}    ; Load op2 into BX")
-                 # Now BX holds the value for adding
-            else:
-                 # op2 is immediate or register, can add directly later
-                 pass # Keep op2_asm as is for the ADD instruction
+            was_op2_loaded_to_bx = True
+        elif not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm): # op2 is memory
+             asm.append(f" mov bx, {op2_asm}    ; Load op2 into BX")
+             was_op2_loaded_to_bx = True
+        # else: op2 is immediate or register, use op2_asm directly
 
         # Perform addition
-        # If op2 was loaded into BX, add BX. Otherwise, add op2_asm directly.
-        if not is_op2_ref and not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm):
-            asm.append(f" add ax, bx        ; Add op2 (from BX) to op1 (in AX)")
+        if was_op2_loaded_to_bx:
+            asm.append(f" add ax, bx        ; Add op2 (from BX) to op1 (in AX)") # Use BX
         else:
-            asm.append(f" add ax, {op2_asm}    ; Add op2 to op1 (in AX)")
+            asm.append(f" add ax, {op2_asm}    ; Add op2 to op1 (in AX)") # Use op2_asm (imm/reg)
 
         # Store result from AX into destination (dereference if needed)
         if is_dest_ref:
@@ -110,21 +102,22 @@ class ArithmeticTranslators:
         else:
             asm.append(f" mov ax, {op1_asm}    ; Load op1 into AX")
 
-        # Load op2 into BX (dereference if needed)
+        # Load op2 into BX (dereference if needed) or determine if direct use
+        was_op2_loaded_to_bx = False
         if is_op2_ref:
             asm.append(f" mov cx, {op2_asm} ; Load address of op2")
             asm.append(f" mov bx, [cx]      ; Dereference op2 into BX")
-        else:
-            if not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm):
-                 asm.append(f" mov bx, {op2_asm}    ; Load op2 into BX")
-            else:
-                 pass # Keep op2_asm as is
+            was_op2_loaded_to_bx = True
+        elif not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm): # op2 is memory
+             asm.append(f" mov bx, {op2_asm}    ; Load op2 into BX")
+             was_op2_loaded_to_bx = True
+        # else: op2 is immediate or register, use op2_asm directly
 
         # Perform subtraction
-        if not is_op2_ref and not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm):
-            asm.append(f" sub ax, bx        ; Subtract op2 (from BX) from op1 (in AX)")
+        if was_op2_loaded_to_bx:
+            asm.append(f" sub ax, bx        ; Subtract op2 (from BX) from op1 (in AX)") # Use BX
         else:
-            asm.append(f" sub ax, {op2_asm}    ; Subtract op2 from op1 (in AX)")
+            asm.append(f" sub ax, {op2_asm}    ; Subtract op2 from op1 (in AX)") # Use op2_asm (imm/reg)
 
         # Store result from AX into destination (dereference if needed)
         if is_dest_ref:
