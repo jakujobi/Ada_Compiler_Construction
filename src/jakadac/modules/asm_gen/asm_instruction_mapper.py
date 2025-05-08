@@ -6,6 +6,7 @@ import re # ADDED: Import regex module
 # Forward declaration for type hinting to avoid circular import
 if TYPE_CHECKING:
     from .asm_generator import ASMGenerator
+    from .asm_operand_formatter import ASMOperandFormatter
     from ..SymTable import SymbolTable
     from ..Logger import Logger # Assuming Logger is a class, logger is an instance
     
