@@ -1,6 +1,7 @@
 # src/jakadac/modules/asm_gen/asm_instruction_mapper.py
 
 from typing import TYPE_CHECKING, List, Any
+import re # ADDED: Import regex module
 
 # Forward declaration for type hinting to avoid circular import
 if TYPE_CHECKING:
@@ -33,8 +34,20 @@ class ASMInstructionMapper(
         self.symbol_table: 'SymbolTable' = symbol_table
         self.logger: 'Logger' = logger_instance 
         self.asm_generator: 'ASMGenerator' = asm_generator_instance
+        self.formatter = ASMOperandFormatter(symbol_table)
+        self.generator = asm_generator_instance # Reference to the generator for calling helpers
         
         self.logger.debug("ASMInstructionMapper initialized with all translator mixins.")
+
+        # Dispatch dictionary mapping opcodes to translator methods
+        # ... existing code ...
+
+        # Precompile regex for efficiency
+        self._param_addr_regex = re.compile(r'^\[bp\+(\d+)\]$')
+
+    def _is_param_address(self, operand_asm: str) -> bool:
+        """Checks if a formatted operand string represents a parameter address ([bp+N])."""
+        return bool(self._param_addr_regex.match(operand_asm))
 
     def translate(self, tac_instruction: ParsedTACInstruction) -> List[str]:
         """
