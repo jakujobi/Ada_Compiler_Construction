@@ -1,16 +1,19 @@
 # src/jakadac/modules/asm_gen/asm_instruction_mapper.py
 
-from typing import TYPE_CHECKING, List, Any
+from typing import TYPE_CHECKING, Dict, Callable, List, Optional, Tuple, Union
 import re # ADDED: Import regex module
+# from ..SymTable import SymbolTable, Symbol, ArraySymbol # Old relative import
+# from ..Logger import Logger # Old relative import
+from jakadac.modules.SymTable import SymbolTable, Symbol #,ArraySymbol # New absolute import
+from jakadac.modules.Logger import Logger # New absolute import
 
 # Forward declaration for type hinting to avoid circular import
 if TYPE_CHECKING:
     from .asm_generator import ASMGenerator
     from .asm_operand_formatter import ASMOperandFormatter
-    from ..SymTable import SymbolTable
-    from ..Logger import Logger # Assuming Logger is a class, logger is an instance
     
 from .tac_instruction import ParsedTACInstruction, TACOpcode
+from .asm_operand_formatter import ASMOperandFormatter # <--- ADD THIS LINE
 
 # Import the translator mixin classes
 from .instruction_translators.asm_im_data_mov_translators import DataMovTranslators
@@ -41,7 +44,54 @@ class ASMInstructionMapper(
         self.logger.debug("ASMInstructionMapper initialized with all translator mixins.")
 
         # Dispatch dictionary mapping opcodes to translator methods
-        # ... existing code ...
+        self.dispatch_table: Dict[TACOpcode, Callable[[ParsedTACInstruction], List[str]]] = {
+            # Arithmetic
+            TACOpcode.ADD: self._translate_add,
+            TACOpcode.SUB: self._translate_sub,
+            TACOpcode.MUL: self._translate_mul,
+            TACOpcode.DIV: self._translate_div,
+            TACOpcode.REM: self._translate_rem,
+            TACOpcode.MOD: self._translate_mod, # Delegate to REM
+            TACOpcode.UMINUS: self._translate_uminus,
+            TACOpcode.NOT_OP: self._translate_not_op,
+
+            # Data Movement
+            TACOpcode.ASSIGN: self._translate_assign,
+
+            # Control Flow
+            TACOpcode.GOTO: self._translate_goto,
+            TACOpcode.LABEL: self._translate_label,
+            TACOpcode.IF_EQ: self._translate_conditional_jump,
+            TACOpcode.IF_NE: self._translate_conditional_jump,
+            TACOpcode.IF_LT: self._translate_conditional_jump,
+            TACOpcode.IF_LE: self._translate_conditional_jump,
+            TACOpcode.IF_GT: self._translate_conditional_jump,
+            TACOpcode.IF_GE: self._translate_conditional_jump,
+            TACOpcode.IF_FALSE_GOTO: self._translate_if_false_goto,
+
+            # Procedures
+            TACOpcode.PARAM: self._translate_param,
+            TACOpcode.PUSH: self._translate_push,
+            TACOpcode.CALL: self._translate_call,
+            TACOpcode.RETURN: self._translate_return,
+            TACOpcode.PROC_BEGIN: self._translate_proc_begin,
+            TACOpcode.PROC_END: self._translate_proc_end,
+            TACOpcode.PROGRAM_START: self._translate_program_start,
+            # PROGRAM_END might not need specific handling beyond normal exit
+
+            # I/O
+            TACOpcode.READ_INT: self._translate_read_int,
+            TACOpcode.WRITE_INT: self._translate_write_int,
+            TACOpcode.WRITE_STR: self._translate_write_str,
+            TACOpcode.WRITE_NEWLINE: self._translate_write_newline,
+
+            # Special / Data Definition
+            TACOpcode.STRING_DEF: self._translate_string_def,
+            
+            # Array Operations
+            TACOpcode.ARRAY_ASSIGN_TO: self._translate_array_assign_to, # e.g., A[i] = x
+            TACOpcode.ARRAY_ASSIGN_FROM: self._translate_array_assign_from, # e.g., x = A[i]
+        }
 
         # Precompile regex for efficiency
         self._param_addr_regex = re.compile(r'^\[bp\+(\d+)\]$')
