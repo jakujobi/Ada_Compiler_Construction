@@ -48,7 +48,7 @@ five PROC NEAR
     ; TAC: push a
     PUSH [BP-2]
     ; TAC: call fun
-    CALL <ERROR_NO_ADDR_OR_VAL_fun>
+    CALL fun
     ; TAC: endp five
     POP BP
 five ENDP

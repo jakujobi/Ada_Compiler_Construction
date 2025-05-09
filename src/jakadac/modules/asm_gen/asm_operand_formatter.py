@@ -102,14 +102,35 @@ class ASMOperandFormatter:
                 symbol_entry = self.symbol_table.lookup(operand_name, search_from_depth=start_search_depth)
                 current_search_depth_for_logging = f"depth {symbol_entry.depth}" # Update with actual found depth
 
+                # === DIAGNOSE TACOpcode COMPARISON ===
+                self.logger.info(f"ASMOperandFormatter: DIAGNOSTIC PRE-CHECK for '{operand_name}':")
+                self.logger.info(f"  context_opcode: val='{context_opcode}', type={type(context_opcode)}, id={id(context_opcode)}")
+                self.logger.info(f"  TACOpcode.CALL: val='{TACOpcode.CALL}', type={type(TACOpcode.CALL)}, id={id(TACOpcode.CALL)}")
+                self.logger.info(f"  symbol_entry.entry_type: val='{symbol_entry.entry_type}', type={type(symbol_entry.entry_type)}")
+                self.logger.info(f"  EntryType.PROCEDURE: val='{EntryType.PROCEDURE}', type={type(EntryType.PROCEDURE)}")
+                self.logger.info(f"  EntryType.FUNCTION: val='{EntryType.FUNCTION}', type={type(EntryType.FUNCTION)}")
+                direct_comparison_opcode = context_opcode == TACOpcode.CALL
+                direct_comparison_type_proc = symbol_entry.entry_type == EntryType.PROCEDURE
+                direct_comparison_type_func = symbol_entry.entry_type == EntryType.FUNCTION
+                self.logger.info(f"  context_opcode == TACOpcode.CALL -> {direct_comparison_opcode}")
+                self.logger.info(f"  symbol_entry.entry_type == EntryType.PROCEDURE -> {direct_comparison_type_proc}")
+                self.logger.info(f"  symbol_entry.entry_type == EntryType.FUNCTION -> {direct_comparison_type_func}")
+                # === END DIAGNOSE TACOpcode COMPARISON ===
+
                 # === PRIORITY CHECK FOR CALLS ===
-                if context_opcode == TACOpcode.CALL and \
-                   (symbol_entry.entry_type == EntryType.PROCEDURE or symbol_entry.entry_type == EntryType.FUNCTION):
-                    self.logger.debug(f"ASMOperandFormatter: Operand '{operand_name}' is a procedure/function name for CALL. Returning name directly: {symbol_entry.name}")
-                    return symbol_entry.name # Procedure/Function labels are used directly
+                # Compare by .name to be robust against different enum object instances
+                if context_opcode is not None and context_opcode.name == TACOpcode.CALL.name:
+                    # For CALL opcodes, operand_name (the procedure label string from TAC)
+                    # is assumed to be the correct call target.
+                    # The original check against symbol_entry.entry_type.name was causing issues
+                    # like <ERROR_NO_ADDR_OR_VAL_procname> for valid procedure calls.
+                    # The preceding symbol_table.lookup() would raise SymbolNotFoundError
+                    # if the operand_name is not a known symbol at all.
+                    self.logger.debug(f"ASMOperandFormatter: Operand '{operand_name}' in CALL context. Returning name directly: {operand_name}")
+                    return operand_name # Return the operand_name (procedure label) directly
                 else: # ADDED FOR DIAGNOSTICS
-                    if context_opcode == TACOpcode.CALL: # Only log if it was a CALL context but failed the type check
-                        self.logger.error(f"ASMOperandFormatter: DIAGNOSTIC - CALL context for '{operand_name}', but symbol type is '{symbol_entry.entry_type.name}' OR other issue in condition.")
+                    if context_opcode is not None and context_opcode.name == TACOpcode.CALL.name: # Only log if it was a CALL context but failed the type check
+                        self.logger.error(f"ASMOperandFormatter: DIAGNOSTIC - CALL context for '{operand_name}', but symbol type is '{symbol_entry.entry_type.name if symbol_entry and hasattr(symbol_entry, 'entry_type') and hasattr(symbol_entry.entry_type, 'name') else 'N/A'}' OR other issue in condition. Enum names - ContextOp: {context_opcode.name}, SymType: {symbol_entry.entry_type.name if symbol_entry and hasattr(symbol_entry, 'entry_type') and hasattr(symbol_entry.entry_type, 'name') else 'N/A'}")
                 # === END PRIORITY CHECK ===
 
                 if symbol_entry.entry_type == EntryType.CONSTANT:

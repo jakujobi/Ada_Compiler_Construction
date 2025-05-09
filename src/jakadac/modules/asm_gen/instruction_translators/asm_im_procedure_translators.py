@@ -136,15 +136,36 @@ class ProcedureTranslators:
             self.logger.error(f"CALL TAC at line {tac_instruction.line_number} is missing procedure label.")
             return [f"; ERROR: Malformed CALL TAC (missing label) at line {tac_instruction.line_number}"]
 
-        proc_label_asm = self.formatter.format_operand(str(proc_label_operand.value), tac_instruction.opcode, active_procedure_symbol=active_proc_ctx)
+        proc_label_str = str(proc_label_operand.value)
+        proc_label_asm = self.formatter.format_operand(proc_label_str, tac_instruction.opcode, active_procedure_symbol=active_proc_ctx)
+        self.logger.info(f"_translate_call: DIAGNOSTIC - Formatted proc_label_asm for '{proc_label_str}': '{proc_label_asm}'")
+        
         asm_lines.append(f"CALL {proc_label_asm}")
+        self.logger.info(f"_translate_call: DIAGNOSTIC - asm_lines after appending CALL: {asm_lines}")
 
         num_params = 0
-        if num_params_operand and num_params_operand.value is not None:
-            try:
-                num_params = int(str(num_params_operand.value))
-            except ValueError:
-                self.logger.error(f"CALL TAC: num_params '{num_params_operand.value}' is not a valid integer.")
+        # Get num_params from Symbol Table entry for the called procedure
+        proc_symbol_entry = self.symbol_table.get_procedure_definition(proc_label_str)
+        if proc_symbol_entry:
+            if hasattr(proc_symbol_entry, 'parameters_info') and proc_symbol_entry.parameters_info is not None:
+                num_params = len(proc_symbol_entry.parameters_info)
+                self.logger.debug(f"CALL TAC: Fetched num_params={num_params} for '{proc_label_str}' from symbol table (using parameters_info list length).")
+            elif hasattr(proc_symbol_entry, 'params'): # Fallback to 'params' attribute
+                num_params = proc_symbol_entry.params
+                self.logger.debug(f"CALL TAC: Fetched num_params={num_params} for '{proc_label_str}' from symbol table (using 'params' attribute).")
+            else:
+                self.logger.warning(f"CALL TAC: Symbol entry for '{proc_label_str}' found, but missing 'parameters_info' and 'params' attributes. Defaulting to 0 params for cleanup.")
+        else:
+            # Fallback or error if not found / no param info - this was the old logic pathway
+            original_num_params_operand = tac_instruction.operand2 # Keep reference to original operand for logging
+            if original_num_params_operand and original_num_params_operand.value is not None:
+                try:
+                    num_params = int(str(original_num_params_operand.value))
+                    self.logger.warning(f"CALL TAC: Used num_params={num_params} from TAC operand2 for '{proc_label_str}' (SymbolTable lookup failed for proc definition).")
+                except ValueError:
+                    self.logger.error(f"CALL TAC: num_params '{original_num_params_operand.value}' from TAC is not a valid integer, and ST lookup failed for '{proc_label_str}'. Defaulting to 0.")
+            else:
+                 self.logger.warning(f"CALL TAC: No num_params in TAC operand2 and SymbolTable lookup failed for '{proc_label_str}'. Defaulting to 0 parameters for stack cleanup.")
         
         if num_params > 0:
             stack_cleanup_bytes = num_params * 2 
