@@ -44,14 +44,14 @@ one PROC NEAR
     ; TAC: _t1 = a * b
      mov ax, [BP-2]    ; Load op1 into AX
      imul [BP-4]     ; Multiply AX by op2
-     mov <ERROR_TEMP_UNEXPECTED__t1>, ax   ; Store result (lower word) into destination
+     mov [BP-6], ax   ; Store result (lower word) into destination
     ; TAC: _t2 = d + _t1
      mov ax, [BP-4]    ; Load op1 into AX
-     mov bx, <ERROR_TEMP_UNEXPECTED__t1>    ; Load op2 into BX
+     mov bx, [BP-6]    ; Load op2 into BX
      add ax, bx        ; Add op2 (from BX) to op1 (in AX)
-     mov <ERROR_TEMP_UNEXPECTED__t2>, ax   ; Store result into destination
+     mov [BP-8], ax   ; Store result into destination
     ; TAC: c = _t2
-     mov ax, <ERROR_TEMP_UNEXPECTED__t2>    ; Load source value/address into AX
+     mov ax, [BP-8]    ; Load source into AX (mem-to-mem workaround)
      mov [BP-2], ax   ; Store AX into destination
     ; TAC: endp one
     POP BP

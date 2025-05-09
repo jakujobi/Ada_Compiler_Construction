@@ -100,26 +100,28 @@ class TACGenerator:
             self.tac_lines.append(instruction) # Store tuple/string  
             self.logger.debug(f"Emit TAC: {instruction}")  
       
-    def _newTempName(self) -> str:  
+    def _generate_new_temp_name(self) -> str:  
         """  
-        Generate a new temporary variable name.  
+        Generate a new temporary variable name string.  
           
         Returns:  
-            A unique temporary variable name (_t1, _t2, etc.)  
+            A unique temporary variable name (_tN).  
         """  
         self.temp_counter += 1  
         temp_name = f"_t{self.temp_counter}"  
-        self.logger.debug(f"Generated new temporary: {temp_name}")  
+        self.logger.debug(f"Generated new temporary name string: {temp_name}")  
         return temp_name  
       
-    def newTemp(self) -> str:  
+    def newTempName(self) -> str:  
         """  
-        Get a new temporary variable.  
-          
+        Get a new temporary variable name string.  
+        The caller is responsible for creating the Symbol object for this temporary,
+        assigning it an offset, and inserting it into the SymbolTable.
+        
         Returns:  
-            The name of the new temporary variable  
+            The name string for the new temporary variable (e.g., _t1)  
         """  
-        return self._newTempName()  
+        return self._generate_new_temp_name()  
       
     def getPlace(self, symbol_or_value, current_proc_depth: Optional[int] = None) -> str:  
         """  
