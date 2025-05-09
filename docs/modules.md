@@ -258,51 +258,106 @@ This document provides detailed information about all modules in the Ada Compile
 
 **File**: `src/jakadac/modules/TACGenerator.py`
 
-**Purpose**: Generates three-address code (TAC) from parse tree.
+**Purpose**: Generates Three-Address Code (TAC) from the parse tree and semantic information.
 
-### Class: TACInstruction
-- `__init__(op: str, arg1: str, arg2: Optional[str], result: Optional[str])` : Defines an IR instruction.
-- `__str__() -> str` : Formats instruction for output.
+### Class: TACGenerator
+- `__init__(symbol_table: SymbolTable, logger: Logger)`: Initializes with symbol table and logger.
+- `generate(root_node: ParseTreeNode)`: Main entry point to traverse parse tree and emit TAC.
+- `emit(...)`: Adds a TAC instruction to the list.
+- Visitor methods (`_visit_program`, `_visit_procedure_body`, `_visit_assign_stat`, etc.) for different parse tree nodes to generate corresponding TAC instructions.
+- Manages temporary variables (`_new_temp`).
+- Handles constant substitution and string literal management (creating labels like `_S0`).
 
-### Class: TACProgram
-- `__init__()` : Initializes instruction list.
-- `add_instruction(instr: TACInstruction)` : Appends to program.
-- `__iter__()`, `__str__()` : Iteration and full program print.
+---
 
-### Class: ThreeAddressCodeGenerator
-- `__init__(parse_tree, symtab)` : Sets IR inputs.
-- `generate()` : Walks parse tree and emits TAC.
-- Internal helpers: `_gen_procedure`, `_gen_statement`, `_gen_expression`, etc.
-- Implements depth-based addressing and constant substitution.
+## ASM Generator Package (`asm_gen`)
+
+**Location**: `src/jakadac/modules/asm_gen/`
+
+**Purpose**: This package is responsible for translating Three-Address Code (TAC) into 8086 assembly language.
+
+### Module: `ASMGenerator`
+
+**File**: `src/jakadac/modules/asm_gen/asm_generator.py`
+
+**Purpose**: Orchestrates the TAC to ASM translation process.
+
+#### Class: `ASMGenerator`
+- `__init__(self, tac_file_path, asm_file_path, symbol_table, string_definitions, logger)`: Initializes paths, symbol table, string definitions map, and internal components like `TACParser`, `DataSegmentManager`, `ASMOperandFormatter`, and `ASMInstructionMapper`.
+- `generate_asm(self)`: Main method to perform the two-pass assembly generation. 
+    1.  Parses the TAC file.
+    2.  Collects definitions for the `.data` segment (globals and strings).
+    3.  Generates assembly code for each TAC instruction by delegating to `ASMInstructionMapper`.
+    4.  Constructs the final `.asm` file including boilerplate, `.data` section, `.code` section (with `include io.asm`), translated instructions, and the main program entry point.
+- `_generate_dos_program_shell(self)`: Generates the main entry procedure (`main PROC`) for the 8086 program, which initializes the data segment and calls the user's main procedure.
+- Helper methods like `_is_param_address` and `_is_immediate_operand` to assist instruction translators.
+
+### Module: `TACParser`
+
+**File**: `src/jakadac/modules/asm_gen/tac_parser.py`
+
+**Purpose**: Parses a `.tac` file into a list of structured `ParsedTACInstruction` objects.
+
+#### Class: `TACParser`
+- `__init__(self, tac_filepath: str, logger: Logger)`: Initializes with the TAC file path.
+- `parse(self) -> List[ParsedTACInstruction]`: Reads the TAC file line by line, parsing each into a `ParsedTACInstruction` object. Handles labels, opcodes, and operands.
+
+### Module: `DataSegmentManager`
+
+**File**: `src/jakadac/modules/asm_gen/data_segment_manager.py`
+
+**Purpose**: Manages the generation of the `.data` segment in the assembly file.
+
+#### Class: `DataSegmentManager`
+- `__init__(self, symbol_table: SymbolTable, string_literals_map: Dict[str, str], logger: Logger)`: Initializes with the symbol table and a map of string literal labels to their values.
+- `collect_definitions(self)`: Identifies global variables (depth 1) from the symbol table.
+- `get_data_section_asm(self) -> List[str]`: Generates the assembly lines for the `.data` section, including `DW ?` for global variables and `DB "string$"` for string literals.
+
+### Module: `ASMOperandFormatter`
+
+**File**: `src/jakadac/modules/asm_gen/asm_operand_formatter.py`
+
+**Purpose**: Translates TAC operands into their 8086 assembly representation.
+
+#### Class: `ASMOperandFormatter`
+- `__init__(self, symbol_table: SymbolTable, logger: Logger)`: Initializes with the symbol table.
+- `format_operand(self, tac_operand: Optional[TACOperand], context_opcode: Optional[TACOpcode] = None) -> str`: Converts a `TACOperand` (which can be an identifier, temporary, literal, or label) into its assembly string form. 
+    - Handles immediate values.
+    - Looks up identifiers in the symbol table to determine if they are global, local, or parameters.
+    - Formats global variables by name (mangling `c` to `cc`).
+    - Formats local variables/temporaries as `[bp-X]` (e.g., `[bp-2]`).
+    - Formats parameters as `[bp+X]` (e.g., `[bp+4]`).
+    - Formats string literal labels as `OFFSET _SLabel` for `WRS` instructions.
+
+### Module: `ASMInstructionMapper`
+
+**File**: `src/jakadac/modules/asm_gen/asm_instruction_mapper.py`
+
+**Purpose**: Maps TAC instructions to sequences of 8086 assembly instructions.
+
+#### Class: `ASMInstructionMapper`
+- `__init__(self, symbol_table: SymbolTable, formatter: ASMOperandFormatter, logger: Logger, asm_generator_instance)`: Initializes with symbol table, operand formatter, logger, and a reference to the `ASMGenerator` (for helper methods).
+- `translate(self, instr: ParsedTACInstruction) -> List[str]`: Main dispatch method that calls specific `_translate_OPCODE` methods based on the TAC instruction's opcode.
+- Contains various private `_translate_OPCODE` methods (e.g., `_translate_assign`, `_translate_add`, `_translate_call`, `_translate_param`, `_translate_wrs`, etc.) which are implemented in separate translator modules.
+
+### Sub-package: `instruction_translators`
+
+**Location**: `src/jakadac/modules/asm_gen/instruction_translators/`
+
+**Purpose**: Contains mixin classes that provide the actual translation logic for different categories of TAC opcodes. These methods are typically bound to `ASMInstructionMapper`.
+
+#### Module: `asm_im_data_mov_translators.py`
+- Contains translators for data movement TAC opcodes like `ASSIGN`.
+- Implements `_translate_assign`, handling direct assignments, and dereferencing for pass-by-reference parameters (loading address to `BX`, then using `[BX]`). Ensures memory-to-memory moves are avoided using `AX` as an intermediary.
+
+#### Module: `asm_im_arithmetic_translators.py`
+- Contains translators for arithmetic TAC opcodes like `ADD`, `SUB`, `MUL`, `UMINUS`, `NOT`.
+- Implements `_translate_add`, `_translate_sub`, etc., handling dereferencing for pass-by-reference operands and destinations. Uses `AX`, `BX`, `CX` for operand loading and computation, storing the result from `AX`.
+
+#### (Other translator modules for I/O, control flow, procedures would also be listed here as they are developed)
 
 ---
 
 ## TypeUtils Module
 
-**File**: `src/jakadac/modules/TypeUtils.py`
-
-**Purpose**: Utility for mapping token types to variable types and computing sizes.
-
-### Class: TypeUtils
-- `token_type_to_var_type(token_type: str) -> VarType` : Maps lexeme type to `VarType`.
-- `get_type_size(var_type: VarType) -> int` : Returns byte size of type.
-- `parse_value_from_token(token_type: str, lexeme: str) -> Tuple[VarType, Any]` : Parses literal values.
-
----
-
-## Driver Module
-
-**File**: `src/jakadac/modules/Driver.py`
-
-**Purpose**: Base driver orchestrating compilation phases and I/O.
-
-### Class: BaseDriver
-- `__init__(input_file_name: str, output_file_name: Optional[str] = None, debug: bool = False, logger: Optional[Logger] = None)` : Initializes phases and paths.
-- `get_source_code_from_file() -> None` : Reads input file.
-- `print_source_code() -> None` : Prints source to console.
-- `process_tokens() -> None` : Runs lexical analysis.
-- `format_and_output_tokens() -> None` : Formats and writes token table.
-- `write_output_to_file(output_file_name, content) -> bool` : Writes text to file.
-- `print_tokens() -> None` : Prints raw tokens.
-- `get_processing_status() -> Dict[str, Any]` : Reports counts and error tallies.
-- `print_compilation_summary() -> None` : Prints overall summary.
+**File**: `

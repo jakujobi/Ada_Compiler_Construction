@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, MagicMock, call, patch
 import sys
+from enum import Enum
 
 # --- Adjust path to import modules from src ---
 # Assuming tests are in tests/unit/
@@ -57,27 +58,30 @@ class TestASMInstructionMapperMain(unittest.TestCase):
         return instr
 
     def test_translate_unknown_opcode_enum(self):
-        class ExtendedTACOpcode(Enum): # Simple Enum for testing
-            MADE_UP_ENUM_OP = "made_up_enum_op_val"
-            # Add a name attribute to mimic TACOpcode enum members
-            @property
-            def name(self):
-                return self._name_
-        
-        ExtendedTACOpcode.MADE_UP_ENUM_OP._name_ = "MADE_UP_ENUM_OP"
+        # class ExtendedTACOpcode(Enum): # Simple Enum for testing
+        #     MADE_UP_ENUM_OP = "made_up_enum_op_val"
+        #     # Add a name attribute to mimic TACOpcode enum members
+        #     @property
+        #     def name(self):
+        #         return self._name_
+        # 
+        # ExtendedTACOpcode.MADE_UP_ENUM_OP._name_ = "MADE_UP_ENUM_OP"
 
-
-        tac_unknown_enum = self._create_tac(ExtendedTACOpcode.MADE_UP_ENUM_OP, dest="d", op1="o1")
+        # Use TACOpcode.UNKNOWN to test the fallback to _translate_unknown
+        # when an opcode is of TACOpcode type but not in the dispatch table.
+        unknown_tac_op = TACOpcode.UNKNOWN 
+        tac_unknown_enum = self._create_tac(unknown_tac_op, dest="d", op1="o1") # Using TACOpcode.UNKNOWN
         
         dest_val_str = "d"
         op1_val_str = "o1"
         op2_val_str = "None"
 
-        expected_asm = [f"; UNHANDLED TAC Opcode: MADE_UP_ENUM_OP (Operands: D:{dest_val_str}, O1:{op1_val_str}, O2:{op2_val_str})"]
+        # Expected ASM when TACOpcode.UNKNOWN is encountered
+        expected_asm = [f"; UNHANDLED TAC Opcode: {TACOpcode.UNKNOWN.name} (Operands: D:{dest_val_str}, O1:{op1_val_str}, O2:{op2_val_str})"]
         result_asm = self.mapper.translate(tac_unknown_enum)
         self.assertEqual(result_asm, expected_asm)
         self.mock_logger.warning.assert_called_with(
-            f"No specific translator for TAC opcode: MADE_UP_ENUM_OP at line {tac_unknown_enum.line_number}"
+            f"No specific translator for TAC opcode: {TACOpcode.UNKNOWN.name} at line {tac_unknown_enum.line_number}"
         )
 
     def test_translate_unknown_opcode_str(self):

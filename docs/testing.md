@@ -116,6 +116,20 @@ Integration tests showing how the symbol table works with other compiler compone
 - Integration with code generator
 - Error handling across components
 
+### ASM Generator Tests
+
+**Location**: `tests/unit_tests/`
+
+Unit tests for the TAC to ASM generation phase are located in `tests/unit_tests/` and include:
+
+- **`test_asm_operand_formatter.py`**: Tests the `ASMOperandFormatter` class, specifically its ability to correctly format various TAC operands (immediates, globals, locals `[bp-X]`, parameters `[bp+X]`, string labels `OFFSET _S0`) into their 8086 assembly string representations. Includes tests for handling the `c` to `cc` mangling for global variables.
+- **`test_asm_instruction_mapper.py`**: (And its associated translator tests in `tests/unit_tests/test_asm_translators/`) Tests the `ASMInstructionMapper` and its various translator methods.
+    - **`test_asm_im_data_mov_translators.py`**: Focuses on the `_translate_assign` method, covering scenarios like direct assignment, assignments involving global/local/parameter operands, and critically, the dereferencing logic for pass-by-reference parameters (both as source and destination).
+    - **`test_asm_im_arithmetic_translators.py`**: (To be updated/expanded) Tests translators for arithmetic operations (`ADD`, `SUB`, `MUL`, `UMINUS`, `NOT`), including scenarios with pass-by-reference parameters that require dereferencing.
+- Other tests for `TACParser` (for ASM gen), `DataSegmentManager`, and `ASMGenerator` (overall integration) are also part of this suite, ensuring individual components and their interactions are correct.
+
+These tests utilize mock objects for dependencies like the `SymbolTable` to isolate the functionality of the ASM generation components.
+
 ## Test Data
 
 The project includes several Ada source files for testing:

@@ -1,6 +1,6 @@
 # src/jakadac/modules/asm_gen/instruction_translators/asm_im_arithmetic_translators.py
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from ..asm_generator import ASMGenerator
@@ -13,97 +13,182 @@ class ArithmeticTranslators:
     # self will be an instance of ASMInstructionMapper
 
     def _translate_add(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction) -> List[str]:
-        """Translates TAC ADD: dest := op1 + op2"""
-        if not all([tac_instruction.destination, tac_instruction.destination.value is not None,
-                    tac_instruction.operand1, tac_instruction.operand1.value is not None,
-                    tac_instruction.operand2, tac_instruction.operand2.value is not None]):
-            self.logger.error(f"ADD TAC at line {tac_instruction.line_number} is missing operand values.")
-            return [f"; ERROR: Malformed ADD TAC at line {tac_instruction.line_number}"]
+        """
+        Translate TAC ADD (dest = op1 + op2) to 8086 assembly.
+        Handles dereferencing for pass-by-reference parameters.
+        TAC Format: (ADD, dest, op1, op2)
+        """
+        asm = []
+        dest = tac_instruction.destination
+        op1 = tac_instruction.operand1
+        op2 = tac_instruction.operand2
 
-        dest_asm = self.asm_generator.get_operand_asm(str(tac_instruction.destination.value), tac_instruction.opcode)
-        op1_asm = self.asm_generator.get_operand_asm(str(tac_instruction.operand1.value), tac_instruction.opcode)
-        op2_asm = self.asm_generator.get_operand_asm(str(tac_instruction.operand2.value), tac_instruction.opcode)
+        if not all([dest, op1, op2]):
+            self.logger.error(f"Invalid ADD TAC: Missing operands/destination. Instruction: {tac_instruction}")
+            return [f"; ERROR: Invalid ADD TAC: {tac_instruction.raw_line}"]
 
-        asm_lines = []
-        if dest_asm.upper() == op1_asm.upper():
-            # ADD dest, op2 (if dest and op1 are the same)
-            asm_lines.append(f"ADD {dest_asm}, {op2_asm}")
-            self.logger.debug(f"ADD {tac_instruction.destination.value} := {tac_instruction.operand1.value} + {tac_instruction.operand2.value} -> ADD {dest_asm}, {op2_asm}")
+        dest_asm = self.formatter.format_operand(str(dest), tac_instruction.opcode)
+        op1_asm = self.formatter.format_operand(str(op1), tac_instruction.opcode)
+        op2_asm = self.formatter.format_operand(str(op2), tac_instruction.opcode)
+
+        is_dest_ref = self._is_param_address(dest_asm)
+        is_op1_ref = self._is_param_address(op1_asm)
+        is_op2_ref = self._is_param_address(op2_asm)
+
+        asm.append(f"; TAC: {dest} = {op1} + {op2}")
+
+        # Load op1 into AX (dereference if needed)
+        if is_op1_ref:
+            asm.append(f" mov bx, {op1_asm} ; Load address of op1")
+            asm.append(f" mov ax, [bx]      ; Dereference op1 into AX")
         else:
-            # General case: MOV AX, op1; ADD AX, op2; MOV dest, AX
-            if op1_asm.upper() != "AX":
-                asm_lines.append(f"MOV AX, {op1_asm}")
-            else: # op1_asm is AX
-                pass # Value already in AX
-            asm_lines.append(f"ADD AX, {op2_asm}")
-            if dest_asm.upper() != "AX":
-                asm_lines.append(f"MOV {dest_asm}, AX")
-            self.logger.debug(f"ADD {tac_instruction.destination.value} := {tac_instruction.operand1.value} + {tac_instruction.operand2.value} -> ... MOV {dest_asm}, AX")
-        return asm_lines
+            asm.append(f" mov ax, {op1_asm}    ; Load op1 into AX")
+
+        # Load op2 into BX (dereference if needed) or determine if direct use
+        was_op2_loaded_to_bx = False
+        if is_op2_ref:
+            asm.append(f" mov cx, {op2_asm} ; Load address of op2") # Use CX
+            asm.append(f" mov bx, [cx]      ; Dereference op2 into BX")
+            was_op2_loaded_to_bx = True
+        elif not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm): # op2 is memory
+             asm.append(f" mov bx, {op2_asm}    ; Load op2 into BX")
+             was_op2_loaded_to_bx = True
+        # else: op2 is immediate or register, use op2_asm directly
+
+        # Perform addition
+        if was_op2_loaded_to_bx:
+            asm.append(f" add ax, bx        ; Add op2 (from BX) to op1 (in AX)") # Use BX
+        else:
+            asm.append(f" add ax, {op2_asm}    ; Add op2 to op1 (in AX)") # Use op2_asm (imm/reg)
+
+        # Store result from AX into destination (dereference if needed)
+        if is_dest_ref:
+            asm.append(f" mov bx, {dest_asm} ; Load address of reference param dest")
+            asm.append(f" mov [bx], ax      ; Store result into dereferenced dest")
+        else:
+            asm.append(f" mov {dest_asm}, ax   ; Store result into destination")
+
+        return asm
 
     def _translate_sub(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction) -> List[str]:
-        """Translates TAC SUB: dest := op1 - op2"""
-        if not all([tac_instruction.destination, tac_instruction.destination.value is not None,
-                    tac_instruction.operand1, tac_instruction.operand1.value is not None,
-                    tac_instruction.operand2, tac_instruction.operand2.value is not None]):
-            self.logger.error(f"SUB TAC at line {tac_instruction.line_number} is missing operand values.")
-            return [f"; ERROR: Malformed SUB TAC at line {tac_instruction.line_number}"]
+        """
+        Translate TAC SUB (dest = op1 - op2) to 8086 assembly.
+        Handles dereferencing for pass-by-reference parameters.
+        TAC Format: (SUB, dest, op1, op2)
+        """
+        asm = []
+        dest = tac_instruction.destination
+        op1 = tac_instruction.operand1
+        op2 = tac_instruction.operand2
 
-        dest_asm = self.asm_generator.get_operand_asm(str(tac_instruction.destination.value), tac_instruction.opcode)
-        op1_asm = self.asm_generator.get_operand_asm(str(tac_instruction.operand1.value), tac_instruction.opcode)
-        op2_asm = self.asm_generator.get_operand_asm(str(tac_instruction.operand2.value), tac_instruction.opcode)
+        if not all([dest, op1, op2]):
+            self.logger.error(f"Invalid SUB TAC: Missing operands/destination. Instruction: {tac_instruction}")
+            return [f"; ERROR: Invalid SUB TAC: {tac_instruction.raw_line}"]
 
-        asm_lines = []
-        if dest_asm.upper() == op1_asm.upper():
-            asm_lines.append(f"SUB {dest_asm}, {op2_asm}")
+        dest_asm = self.formatter.format_operand(str(dest), tac_instruction.opcode)
+        op1_asm = self.formatter.format_operand(str(op1), tac_instruction.opcode)
+        op2_asm = self.formatter.format_operand(str(op2), tac_instruction.opcode)
+
+        is_dest_ref = self._is_param_address(dest_asm)
+        is_op1_ref = self._is_param_address(op1_asm)
+        is_op2_ref = self._is_param_address(op2_asm)
+
+        asm.append(f"; TAC: {dest} = {op1} - {op2}")
+
+        # Load op1 into AX (dereference if needed)
+        if is_op1_ref:
+            asm.append(f" mov bx, {op1_asm} ; Load address of op1")
+            asm.append(f" mov ax, [bx]      ; Dereference op1 into AX")
         else:
-            if op1_asm.upper() != "AX":
-                asm_lines.append(f"MOV AX, {op1_asm}")
-            asm_lines.append(f"SUB AX, {op2_asm}")
-            if dest_asm.upper() != "AX":
-                asm_lines.append(f"MOV {dest_asm}, AX")
-        
-        self.logger.debug(f"SUB {tac_instruction.destination.value} := {tac_instruction.operand1.value} - {tac_instruction.operand2.value} -> Generated SUB sequence, result in {dest_asm}")
-        return asm_lines
+            asm.append(f" mov ax, {op1_asm}    ; Load op1 into AX")
+
+        # Load op2 into BX (dereference if needed) or determine if direct use
+        was_op2_loaded_to_bx = False
+        if is_op2_ref:
+            asm.append(f" mov cx, {op2_asm} ; Load address of op2")
+            asm.append(f" mov bx, [cx]      ; Dereference op2 into BX")
+            was_op2_loaded_to_bx = True
+        elif not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm): # op2 is memory
+             asm.append(f" mov bx, {op2_asm}    ; Load op2 into BX")
+             was_op2_loaded_to_bx = True
+        # else: op2 is immediate or register, use op2_asm directly
+
+        # Perform subtraction
+        if was_op2_loaded_to_bx:
+            asm.append(f" sub ax, bx        ; Subtract op2 (from BX) from op1 (in AX)") # Use BX
+        else:
+            asm.append(f" sub ax, {op2_asm}    ; Subtract op2 from op1 (in AX)") # Use op2_asm (imm/reg)
+
+        # Store result from AX into destination (dereference if needed)
+        if is_dest_ref:
+            asm.append(f" mov bx, {dest_asm} ; Load address of reference param dest")
+            asm.append(f" mov [bx], ax      ; Store result into dereferenced dest")
+        else:
+            asm.append(f" mov {dest_asm}, ax   ; Store result into destination")
+
+        return asm
 
     def _translate_mul(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction) -> List[str]:
-        """Translates TAC MUL: dest := op1 * op2 (signed multiplication)"""
-        if not all([tac_instruction.destination, tac_instruction.destination.value is not None,
-                    tac_instruction.operand1, tac_instruction.operand1.value is not None,
-                    tac_instruction.operand2, tac_instruction.operand2.value is not None]):
-            self.logger.error(f"MUL TAC at line {tac_instruction.line_number} is missing operand values.")
-            return [f"; ERROR: Malformed MUL TAC at line {tac_instruction.line_number}"]
+        """
+        Translate TAC MUL (dest = op1 * op2) to 8086 assembly using IMUL.
+        Handles dereferencing for pass-by-reference parameters.
+        Assumes 16-bit multiplication, result in AX.
+        TAC Format: (MUL, dest, op1, op2)
+        """
+        asm = []
+        dest = tac_instruction.destination
+        op1 = tac_instruction.operand1
+        op2 = tac_instruction.operand2
 
-        dest_asm = self.asm_generator.get_operand_asm(str(tac_instruction.destination.value), tac_instruction.opcode)
-        op1_asm = self.asm_generator.get_operand_asm(str(tac_instruction.operand1.value), tac_instruction.opcode)
-        op2_asm = self.asm_generator.get_operand_asm(str(tac_instruction.operand2.value), tac_instruction.opcode)
+        if not all([dest, op1, op2]):
+            self.logger.error(f"Invalid MUL TAC: Missing operands/destination. Instruction: {tac_instruction}")
+            return [f"; ERROR: Invalid MUL TAC: {tac_instruction.raw_line}"]
 
-        asm_lines = []
-        if op1_asm.upper() != "AX":
-            asm_lines.append(f"MOV AX, {op1_asm}")
-        
-        multiplier_reg_or_mem = "BX" # Default for op2 if it needs to be moved
-        
-        is_op2_imm = self.asm_generator.is_immediate(op2_asm)
+        dest_asm = self.formatter.format_operand(str(dest), tac_instruction.opcode)
+        op1_asm = self.formatter.format_operand(str(op1), tac_instruction.opcode)
+        op2_asm = self.formatter.format_operand(str(op2), tac_instruction.opcode)
 
-        if op2_asm.upper() == "AX": # op1 was moved to AX, op2 is also AX. Move op2 to BX.
-            asm_lines.append(f"MOV {multiplier_reg_or_mem}, AX") 
-            asm_lines.append(f"IMUL {multiplier_reg_or_mem}")
-        elif self.asm_generator.is_register(op2_asm) or op2_asm.startswith("["): # op2 is register (not AX) or memory
-            asm_lines.append(f"IMUL {op2_asm}")
-        elif is_op2_imm: # op2 is immediate, move to register first
-            asm_lines.append(f"MOV {multiplier_reg_or_mem}, {op2_asm}")
-            asm_lines.append(f"IMUL {multiplier_reg_or_mem}")
+        is_dest_ref = self._is_param_address(dest_asm)
+        is_op1_ref = self._is_param_address(op1_asm)
+        is_op2_ref = self._is_param_address(op2_asm)
+
+        asm.append(f"; TAC: {dest} = {op1} * {op2}")
+
+        # Load op1 into AX (dereference if needed)
+        if is_op1_ref:
+            asm.append(f" mov bx, {op1_asm} ; Load address of op1")
+            asm.append(f" mov ax, [bx]      ; Dereference op1 into AX")
         else:
-            self.logger.error(f"MUL: Multiplier {op2_asm} is not a recognized register, memory, or immediate.")
-            return [f"; ERROR: Multiplier {op2_asm} cannot be used directly with IMUL."]
-        
-        # Result of 16-bit IMUL reg/mem is in DX:AX. Low word in AX.
-        if dest_asm.upper() != "AX":
-            asm_lines.append(f"MOV {dest_asm}, AX")
+            asm.append(f" mov ax, {op1_asm}    ; Load op1 into AX")
 
-        self.logger.debug(f"MUL {tac_instruction.destination.value} * {tac_instruction.operand1.value} * {tac_instruction.operand2.value} -> IMUL, result in AX to {dest_asm}")
-        return asm_lines
+        # Load op2 into BX (dereference if needed)
+        # IMUL operand can be register or memory, so we might not always need BX
+        operand_for_imul = op2_asm # Default
+        if is_op2_ref:
+            asm.append(f" mov bx, {op2_asm} ; Load address of op2")
+            operand_for_imul = "bx" # Use register containing address for potential dereference? NO, need value.
+            asm.append(f" mov bx, [bx]      ; Dereference op2 into BX") # Now BX holds the value
+            operand_for_imul = "bx"
+        elif not self.generator.is_immediate(op2_asm) and not self.generator.is_register(op2_asm):
+            # If op2 is memory, IMUL can handle it directly (IMUL memory_operand)
+            operand_for_imul = op2_asm
+        else:
+            # If op2 is immediate or register, need to load into register first for IMUL reg
+            asm.append(f" mov bx, {op2_asm}    ; Load op2 into BX for IMUL")
+            operand_for_imul = "bx"
+
+        # Perform multiplication (DX:AX = AX * operand_for_imul)
+        asm.append(f" imul {operand_for_imul}     ; Multiply AX by op2")
+        # Result (low 16 bits) is in AX
+
+        # Store result from AX into destination (dereference if needed)
+        if is_dest_ref:
+            asm.append(f" mov bx, {dest_asm} ; Load address of reference param dest")
+            asm.append(f" mov [bx], ax      ; Store result into dereferenced dest")
+        else:
+            asm.append(f" mov {dest_asm}, ax   ; Store result into destination")
+
+        return asm
 
     def _translate_div_or_rem(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction, is_div: bool) -> List[str]:
         """Helper for DIV and REM translation (signed IDIV)"""
@@ -154,51 +239,87 @@ class ArithmeticTranslators:
         return self._translate_div_or_rem(tac_instruction, is_div=False)
 
     def _translate_uminus(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction) -> List[str]:
-        """Translates TAC UMINUS: dest := -op1"""
-        if not all([tac_instruction.destination, tac_instruction.destination.value is not None,
-                    tac_instruction.operand1, tac_instruction.operand1.value is not None]):
-            self.logger.error(f"UMINUS TAC at line {tac_instruction.line_number} is missing operand values.")
-            return [f"; ERROR: Malformed UMINUS TAC at line {tac_instruction.line_number}"]
+        """
+        Translate TAC Unary Minus (dest = -op1) to 8086 assembly.
+        Handles destination dereferencing.
+        TAC Format: (=, dest, uminus, op1) ? Or custom opcode?
+                    Assuming (UMINUS, dest, op1) for clarity.
+        """
+        # Assuming TAC format: (UMINUS, dest, op1)
+        asm = []
+        dest = tac_instruction.destination
+        op1 = tac_instruction.operand1
 
-        dest_asm = self.asm_generator.get_operand_asm(str(tac_instruction.destination.value), tac_instruction.opcode)
-        op1_asm = self.asm_generator.get_operand_asm(str(tac_instruction.operand1.value), tac_instruction.opcode)
-        asm_lines = []
+        if not all([dest, op1]):
+            self.logger.error(f"Invalid UMINUS TAC: Missing operands/destination. Instruction: {tac_instruction}")
+            return [f"; ERROR: Invalid UMINUS TAC: {tac_instruction.raw_line}"]
 
-        if dest_asm.upper() == op1_asm.upper(): 
-            asm_lines.append(f"NEG {dest_asm}")
-        else: 
-            if op1_asm.upper() != "AX":
-                asm_lines.append(f"MOV AX, {op1_asm}")
-            else: # op1_asm is AX
-                pass # Value already in AX
-            asm_lines.append(f"NEG AX")
-            if dest_asm.upper() != "AX":
-                asm_lines.append(f"MOV {dest_asm}, AX")
-        
-        self.logger.debug(f"Translated UMINUS {tac_instruction} -> {asm_lines}")
-        return asm_lines
+        dest_asm = self.formatter.format_operand(str(dest), tac_instruction.opcode)
+        op1_asm = self.formatter.format_operand(str(op1), tac_instruction.opcode)
+
+        is_dest_ref = self._is_param_address(dest_asm)
+        is_op1_ref = self._is_param_address(op1_asm)
+
+        asm.append(f"; TAC: {dest} = - {op1}")
+
+        # Load op1 into AX (dereference if needed)
+        if is_op1_ref:
+            asm.append(f" mov bx, {op1_asm} ; Load address of op1")
+            asm.append(f" mov ax, [bx]      ; Dereference op1 into AX")
+        else:
+            asm.append(f" mov ax, {op1_asm}    ; Load op1 into AX")
+
+        # Negate AX
+        asm.append(f" neg ax            ; Negate value in AX")
+
+        # Store result from AX into destination (dereference if needed)
+        if is_dest_ref:
+            asm.append(f" mov bx, {dest_asm} ; Load address of reference param dest")
+            asm.append(f" mov [bx], ax      ; Store result into dereferenced dest")
+        else:
+            asm.append(f" mov {dest_asm}, ax   ; Store result into destination")
+
+        return asm
 
     def _translate_not_op(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction) -> List[str]:
-        """Translates TAC NOT_OP: dest := not op1 (bitwise NOT)"""
-        if not all([tac_instruction.destination, tac_instruction.destination.value is not None,
-                    tac_instruction.operand1, tac_instruction.operand1.value is not None]):
-            self.logger.error(f"NOT_OP TAC at line {tac_instruction.line_number} is missing operand values.")
-            return [f"; ERROR: Malformed NOT_OP TAC at line {tac_instruction.line_number}"]
+        """
+        Translate TAC Logical NOT (dest = not op1) to 8086 assembly.
+        Handles destination dereferencing.
+        TAC Format: (=, dest, not, op1) ? Or custom opcode?
+                    Assuming (NOT_OP, dest, op1) for clarity.
+        """
+        # Assuming TAC format: (NOT_OP, dest, op1)
+        asm = []
+        dest = tac_instruction.destination
+        op1 = tac_instruction.operand1
 
-        dest_asm = self.asm_generator.get_operand_asm(str(tac_instruction.destination.value), tac_instruction.opcode)
-        op1_asm = self.asm_generator.get_operand_asm(str(tac_instruction.operand1.value), tac_instruction.opcode)
-        asm_lines = []
+        if not all([dest, op1]):
+            self.logger.error(f"Invalid NOT_OP TAC: Missing operands/destination. Instruction: {tac_instruction}")
+            return [f"; ERROR: Invalid NOT_OP TAC: {tac_instruction.raw_line}"]
 
-        if dest_asm.upper() == op1_asm.upper():
-            asm_lines.append(f"NOT {dest_asm}")
+        dest_asm = self.formatter.format_operand(str(dest), tac_instruction.opcode)
+        op1_asm = self.formatter.format_operand(str(op1), tac_instruction.opcode)
+
+        is_dest_ref = self._is_param_address(dest_asm)
+        is_op1_ref = self._is_param_address(op1_asm)
+
+        asm.append(f"; TAC: {dest} = not {op1}")
+
+        # Load op1 into AX (dereference if needed)
+        if is_op1_ref:
+            asm.append(f" mov bx, {op1_asm} ; Load address of op1")
+            asm.append(f" mov ax, [bx]      ; Dereference op1 into AX")
         else:
-            if op1_asm.upper() != "AX":
-                asm_lines.append(f"MOV AX, {op1_asm}")
-            else: # op1_asm is AX
-                pass
-            asm_lines.append(f"NOT AX")
-            if dest_asm.upper() != "AX":
-                asm_lines.append(f"MOV {dest_asm}, AX")
-            
-        self.logger.debug(f"Translated NOT_OP {tac_instruction} -> {asm_lines}")
-        return asm_lines
+            asm.append(f" mov ax, {op1_asm}    ; Load op1 into AX")
+
+        # Apply NOT to AX
+        asm.append(f" not ax            ; Logical NOT on value in AX")
+
+        # Store result from AX into destination (dereference if needed)
+        if is_dest_ref:
+            asm.append(f" mov bx, {dest_asm} ; Load address of reference param dest")
+            asm.append(f" mov [bx], ax      ; Store result into dereferenced dest")
+        else:
+            asm.append(f" mov {dest_asm}, ax   ; Store result into destination")
+
+        return asm

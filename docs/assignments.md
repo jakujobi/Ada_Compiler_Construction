@@ -210,3 +210,37 @@ python JohnA6.py path/to/source.ada
 ### Usage
 ```bash
 python JohnA7.py path/to/source.ada
+
+```
+
+## Assignment 8: TAC to 8086 Assembly Generation
+**Directory**: `A8_TAC_to_ASM/`
+
+**Main File**: `JohnA8.py`
+
+**Description**: Translates Three-Address Code (TAC) into 8086 assembly language compatible with MASM/TASM and DOSBox. This includes handling I/O statements, procedure calls, local/global variables, and pass-by-reference parameters.
+
+### Current Progress & Key Features Implemented:
+
+*   **`JohnA8.py` Integration**: The `ASMGenerator` module is integrated into the `JohnA8.py` pipeline, which now accepts an `--asm_output` command-line argument to specify the output assembly file.
+*   **`ASMOperandFormatter` Enhancements**: The formatter now correctly translates internal symbol table offsets into 8086 stack frame addresses:
+    *   Parameters (depth >= 2): `[bp+<offset+4>]`
+    *   Local Variables/Temporaries (depth >= 2): `[bp-<offset+2>]`
+    *   Global variables (depth <= 1) are referenced by name (with `c` mangled to `cc`).
+    *   String labels (e.g., `_S0`) are formatted as `OFFSET _S0` in the context of `WRS` TAC instructions.
+    *   Unit tests for `ASMOperandFormatter` covering these features have been updated and are passing.
+*   **Pass-by-Reference Dereferencing**: Logic to handle dereferencing of pass-by-reference parameters has been implemented in:
+    *   `_translate_assign` (for `ASSIGN` TAC opcodes) in `asm_im_data_mov_translators.py`. This involves using an intermediary register (`AX` or `BX`) to load the address of the reference parameter and then accessing the value at that address.
+    *   Arithmetic translators (`_translate_add`, `_translate_sub`, `_translate_mul`, `_translate_uminus`, `_translate_not_op`) in `asm_im_arithmetic_translators.py`. Similar dereferencing logic is applied to source operands and for storing results to reference parameter destinations.
+*   **Unit Testing**: 
+    *   Unit tests for `ASMOperandFormatter` are passing.
+    *   Unit tests for `_translate_assign` in `test_asm_im_data_mov_translators.py` have been updated to include pass-by-reference scenarios but are currently failing due to discrepancies in expected vs. actual assembly output (primarily TAC comment formatting and minor instruction differences). Debugging these failures is the next immediate step.
+    *   Unit tests for arithmetic translators need to be updated to cover pass-by-reference scenarios.
+
+### Usage
+
+```bash
+python JohnA8.py path/to/source.ada --tac_output path/to/output.tac --asm_output path/to/output.asm
+```
+
+This will compile the Ada source, generate TAC, and then translate the TAC to an 8086 assembly file.
