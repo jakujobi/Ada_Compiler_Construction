@@ -102,9 +102,15 @@ class ASMOperandFormatter:
                 symbol_entry = self.symbol_table.lookup(operand_name, search_from_depth=start_search_depth)
                 current_search_depth_for_logging = f"depth {symbol_entry.depth}" # Update with actual found depth
 
-                # For CALL, the operand_name is the procedure label, not a variable to be looked up for memory access.
-                if context_opcode == TACOpcode.CALL and (symbol_entry.entry_type == EntryType.PROCEDURE or symbol_entry.entry_type == EntryType.FUNCTION):
+                # === PRIORITY CHECK FOR CALLS ===
+                if context_opcode == TACOpcode.CALL and \
+                   (symbol_entry.entry_type == EntryType.PROCEDURE or symbol_entry.entry_type == EntryType.FUNCTION):
+                    self.logger.debug(f"ASMOperandFormatter: Operand '{operand_name}' is a procedure/function name for CALL. Returning name directly: {symbol_entry.name}")
                     return symbol_entry.name # Procedure/Function labels are used directly
+                else: # ADDED FOR DIAGNOSTICS
+                    if context_opcode == TACOpcode.CALL: # Only log if it was a CALL context but failed the type check
+                        self.logger.error(f"ASMOperandFormatter: DIAGNOSTIC - CALL context for '{operand_name}', but symbol type is '{symbol_entry.entry_type.name}' OR other issue in condition.")
+                # === END PRIORITY CHECK ===
 
                 if symbol_entry.entry_type == EntryType.CONSTANT:
                     if symbol_entry.value is not None:
@@ -141,5 +147,7 @@ class ASMOperandFormatter:
 
         # 2. Handle integer literals
         # ... existing code ...
+
+        # ... rest of the method ...
 
         # ... rest of the method ...
