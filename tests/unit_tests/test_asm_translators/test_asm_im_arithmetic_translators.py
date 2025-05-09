@@ -150,7 +150,7 @@ class TestArithmeticTranslators(unittest.TestCase, ArithmeticTranslators):
     def test_add_all_refs(self): self._run_generic_arith_test(TACOpcode.ADD, "add", "RefR", "RefA", "RefB", "[bp-2]", "[bp+2]", "[bp+4]", True, True, True)
     def test_add_op2_mem(self): self._run_generic_arith_test(TACOpcode.ADD, "add", "R", "A", "MemB", "CX", "DX", "[ValB]")
     def test_add_op2_imm(self): self._run_generic_arith_test(TACOpcode.ADD, "add", "R", "A", "5", "CX", "DX", "5", op2_is_imm=True)
-
+        
     # --- SUB ---
     def test_sub_regs(self): self._run_generic_arith_test(TACOpcode.SUB, "sub", "R", "A", "B", "CX", "DX", "SI", op2_is_reg=True)
     def test_sub_op1_ref(self): self._run_generic_arith_test(TACOpcode.SUB, "sub", "R", "RefA", "B", "CX", "[bp+2]", "DI", is_op1_ref=True, op2_is_reg=True)
@@ -249,7 +249,7 @@ class TestArithmeticTranslators(unittest.TestCase, ArithmeticTranslators):
         
         # Get Result (use try/finally carefully if needed, but mocks should be set)
         result = self._translate_div_or_rem(tac, is_div=is_div_flag)
-
+        
         # --- Build Expected (Successful path) --- 
         expected = [] 
         

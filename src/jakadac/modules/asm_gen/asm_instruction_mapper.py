@@ -61,12 +61,12 @@ class ASMInstructionMapper(
             # Control Flow
             TACOpcode.GOTO: self._translate_goto,
             TACOpcode.LABEL: self._translate_label,
-            TACOpcode.IF_EQ: self._translate_conditional_jump,
-            TACOpcode.IF_NE: self._translate_conditional_jump,
-            TACOpcode.IF_LT: self._translate_conditional_jump,
-            TACOpcode.IF_LE: self._translate_conditional_jump,
-            TACOpcode.IF_GT: self._translate_conditional_jump,
-            TACOpcode.IF_GE: self._translate_conditional_jump,
+            TACOpcode.IF_EQ_GOTO: self._translate_if_eq_goto,
+            TACOpcode.IF_NE_GOTO: self._translate_if_ne_goto,
+            TACOpcode.IF_LT_GOTO: self._translate_if_lt_goto,
+            TACOpcode.IF_LE_GOTO: self._translate_if_le_goto,
+            TACOpcode.IF_GT_GOTO: self._translate_if_gt_goto,
+            TACOpcode.IF_GE_GOTO: self._translate_if_ge_goto,
             TACOpcode.IF_FALSE_GOTO: self._translate_if_false_goto,
 
             # Procedures

@@ -45,7 +45,7 @@ class ASMGenerator:
         self.logger = logger
 
         # Sub-components (to be initialized as needed or passed if they are complex)
-        self.tac_parser = TACParser(self.tac_filepath, self.logger)
+        self.tac_parser = TACParser(self.tac_filepath)
         # ASMInstructionMapper will likely need the symbol_table and logger too,
         # and potentially a reference back to this generator for operand formatting.
         self.instruction_mapper = ASMInstructionMapper(self.symbol_table, self.logger, self) # Passing self for get_operand_asm
