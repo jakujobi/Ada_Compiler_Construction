@@ -171,6 +171,7 @@ class SymbolTable:
         """Initializes the symbol table with a single global scope (depth 0)."""
         self._scope_stack: List[Dict[str, Symbol]] = []
         self._current_depth: int = -1 # Will become 0 when first scope is entered
+        self.procedure_definitions: Dict[str, Symbol] = {} # ADDED: For persistent procedure symbols
         self.enter_scope() # Initialize the global scope
         logger.info("Symbol Table initialized.")
 
@@ -236,13 +237,21 @@ class SymbolTable:
         current_scope[name] = symbol
         logger.info(f"Inserted symbol: {symbol}")
 
-    def lookup(self, name: str, lookup_current_scope_only: bool = False) -> Symbol:
+        # ADDED: If it's a procedure or function, store it persistently
+        if symbol.entry_type in [EntryType.PROCEDURE, EntryType.FUNCTION]:
+            if name in self.procedure_definitions:
+                logger.warning(f"Procedure/Function '{name}' redefined. Overwriting in persistent store. This might indicate a parser issue or language feature not fully handled (e.g. overloading without signature differentiation).")
+            self.procedure_definitions[name] = symbol
+            logger.info(f"Stored persistent definition for {symbol.entry_type.name}: {name}")
+
+    def lookup(self, name: str, lookup_current_scope_only: bool = False, search_from_depth: Optional[int] = None) -> Symbol:
         """
-        Looks up a symbol by name, searching from the current scope outwards.
+        Looks up a symbol by name, searching from a specified depth or current scope outwards.
 
         Args:
             name: The name (identifier) of the symbol to find.
-            lookup_current_scope_only: If True, only search the current scope.
+            lookup_current_scope_only: If True, only search the current scope (or specified search_from_depth).
+            search_from_depth: Optional specific depth to start searching from. If None, uses current_depth.
 
         Returns:
             The found Symbol object.
@@ -250,31 +259,41 @@ class SymbolTable:
         Raises:
             SymbolNotFoundError: If the symbol is not found in any accessible scope.
         """
-        logger.debug(f"Looking up symbol '{name}' (current scope only: {lookup_current_scope_only})")
+        effective_start_depth = search_from_depth if search_from_depth is not None else self._current_depth
 
         if lookup_current_scope_only:
-            if self._scope_stack:
-                current_scope = self._scope_stack[-1]
-                if name in current_scope:
-                    found_symbol = current_scope[name]
-                    logger.debug(f"Found '{name}' in current scope (depth {self.current_depth})")
-                    return found_symbol
-            logger.debug(f"'{name}' not found in current scope (depth {self.current_depth})")
-            raise SymbolNotFoundError(name)
-        else:
-            # Search from current scope down to global scope
-            for depth in range(self.current_depth, -1, -1):
-                if depth < len(self._scope_stack): # Ensure index is valid
-                    scope = self._scope_stack[depth]
-                    if name in scope:
-                        found_symbol = scope[name]
-                        logger.debug(f"Found '{name}' at depth {depth}")
-                        return found_symbol
-                else:
-                     logger.warning(f"Scope inconsistency: looking for depth {depth}, but stack size is {len(self._scope_stack)}")
+            if 0 <= effective_start_depth < len(self._scope_stack):
+                scope_to_search = self._scope_stack[effective_start_depth]
+                if name in scope_to_search:
+                    logger.debug(f"Found '{name}' at depth {effective_start_depth} (current/specified scope only).")
+                    return scope_to_search[name]
+            raise SymbolNotFoundError(name) # Not found in the single specified/current scope
 
-            logger.debug(f"'{name}' not found in any accessible scope.")
-            raise SymbolNotFoundError(name)
+        # Search from effective_start_depth down to global scope (depth 0)
+        # Ensure effective_start_depth is within bounds of the current stack
+        # This handles cases where search_from_depth might be for a scope not currently on stack top,
+        # but is a valid historical depth index.
+        actual_search_start_index = min(effective_start_depth, len(self._scope_stack) - 1)
+
+        for i in range(actual_search_start_index, -1, -1):
+            # Current scope is at index i which corresponds to depth i
+            # (assuming SymbolTable starts with depth 0 at index 0)
+            scope = self._scope_stack[i]
+            if name in scope:
+                logger.debug(f"Found '{name}' at depth {i} (searched from depth {effective_start_depth}).")
+                return scope[name]
+        
+        logger.debug(f"'{name}' not found in any accessible scope (searched from depth {effective_start_depth}).")
+        raise SymbolNotFoundError(name)
+
+    def get_procedure_definition(self, name: str) -> Optional[Symbol]:
+        """Retrieves a procedure or function symbol from the persistent store."""
+        found_symbol = self.procedure_definitions.get(name)
+        if found_symbol:
+            logger.debug(f"Retrieved persistent definition for '{name}': {found_symbol}")
+        else:
+            logger.warning(f"Persistent definition for procedure/function '{name}' not found.")
+        return found_symbol
 
     def get_current_scope_symbols(self) -> Dict[str, Symbol]:
         """Returns a dictionary of symbols in the current scope."""

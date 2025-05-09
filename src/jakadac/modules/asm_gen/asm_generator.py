@@ -62,224 +62,140 @@ class ASMGenerator:
     def _parse_and_prepare(self) -> bool:
         """
         Parses the TAC file, identifies the main procedure, and groups
-        TAC instructions by procedure.
+        TAC instructions by procedure using a stack to handle nesting.
         Returns True on success, False on failure.
         """
+        self.logger.info("Diag: _parse_and_prepare started.") # DIAGNOSTIC
         try:
             self.parsed_tac = self.tac_parser.parse_tac_file()
             if not self.parsed_tac:
+                self.logger.error("Diag: Condition: Parsing TAC file yielded no instructions.") # DIAGNOSTIC
                 self.logger.error("Parsing TAC file yielded no instructions.")
                 return False
         except Exception as e:
+            self.logger.error(f"Diag: Exception during TAC parsing: {e}") # DIAGNOSTIC
             self.logger.error(f"Error parsing TAC file '{self.tac_filepath}': {e}")
             return False
 
-        # Group TAC by procedure
-        # This simple grouping assumes procedures are not nested in TAC output
-        # and that PROGRAM_START is treated like a procedure start.
-        # It also assumes a single PROGRAM_START.
-        
-        # Store procedures TAC lines here, including the main one
-        _procedures_tac: Dict[str, List[ParsedTACInstruction]] = {}
-        current_proc_name: Optional[str] = None
-        current_proc_instructions: List[ParsedTACInstruction] = []
+        self.logger.info(f"Diag: TAC parsing complete. Number of instructions: {len(self.parsed_tac)}") # DIAGNOSTIC
 
-        for instr in self.parsed_tac:
+        # 1. Identify user_main_procedure_name from PROGRAM_START
+        self.user_main_procedure_name = None
+        self.logger.info("Diag: Starting PROGRAM_START identification loop.") # DIAGNOSTIC
+        for instr_idx, instr in enumerate(self.parsed_tac):
+            self.logger.debug(f"Diag: Checking instr {instr_idx}: {instr.opcode}, op1: {instr.operand1.value if instr.operand1 else 'N/A'}") # DIAGNOSTIC
             if instr.opcode == TACOpcode.PROGRAM_START:
-                if self.user_main_procedure_name:
-                    self.logger.error(f"Multiple PROGRAM_START directives found. First: '{self.user_main_procedure_name}', additional: '{instr.destination.value if instr.destination else None}'. This is not supported.")
-                    return False
-                if instr.destination and isinstance(instr.destination.value, str):
-                    self.user_main_procedure_name = instr.destination.value
+                self.logger.info(f"Diag: Found PROGRAM_START at instr {instr_idx}.") # DIAGNOSTIC
+                if instr.operand1 and isinstance(instr.operand1.value, str):
+                    if self.user_main_procedure_name is not None:
+                        self.logger.error("Diag: Condition: Multiple PROGRAM_START directives.") # DIAGNOSTIC
+                        self.logger.error(f"Multiple PROGRAM_START directives found. First: '{self.user_main_procedure_name}', additional: '{instr.operand1.value}'. This is not supported.")
+                        return False
+                    self.user_main_procedure_name = instr.operand1.value
+                    self.logger.info(f"Diag: user_main_procedure_name set to '{self.user_main_procedure_name}'.") # DIAGNOSTIC
                 else:
-                    self.logger.error(f"PROGRAM_START TAC at line {instr.line_number} is missing procedure name in destination operand.")
+                    self.logger.error(f"Diag: Condition: PROGRAM_START TAC at line {instr.line_number} missing/invalid operand1.") # DIAGNOSTIC
+                    self.logger.error(f"PROGRAM_START TAC at line {instr.line_number} is missing procedure name in operand1.")
                     return False
+        
+        self.logger.info(f"Diag: PROGRAM_START identification loop finished. user_main_procedure_name: '{self.user_main_procedure_name}'.") # DIAGNOSTIC
                 
-                if current_proc_name and current_proc_instructions: 
-                    _procedures_tac[current_proc_name] = current_proc_instructions
-                
-                current_proc_name = self.user_main_procedure_name 
-                current_proc_instructions = [instr] 
-            
-            elif instr.opcode == TACOpcode.PROC_BEGIN:
-                if current_proc_name and current_proc_instructions: 
-                     _procedures_tac[current_proc_name] = current_proc_instructions
-                if instr.destination and isinstance(instr.destination.value, str):
-                    current_proc_name = instr.destination.value
-                else:
-                    self.logger.error(f"PROC_BEGIN TAC at line {instr.line_number} is missing procedure name in destination operand.")
-                    return False
-                current_proc_instructions = [instr] 
-
-            elif instr.opcode == TACOpcode.PROC_END:
-                proc_name_from_instr = instr.destination.value if instr.destination and isinstance(instr.destination.value, str) else None
-                if current_proc_name:
-                    if proc_name_from_instr and proc_name_from_instr != current_proc_name:
-                        self.logger.error(f"PROC_END name '{proc_name_from_instr}' does not match current procedure '{current_proc_name}' at line {instr.line_number}.")
-                    current_proc_instructions.append(instr) 
-                    _procedures_tac[current_proc_name] = current_proc_instructions
-                    current_proc_name = None 
-                    current_proc_instructions = []
-                else:
-                    self.logger.error(f"Found PROC_END ('{proc_name_from_instr}') without a preceding PROC_BEGIN or PROGRAM_START at line {instr.line_number}.")
-                    return False 
-            
-            elif current_proc_name: # Regular instruction within a procedure
-                current_proc_instructions.append(instr)
-            
-            # Instructions outside any procedure are currently ignored or could be an error
-            # (unless they are global directives, which are not handled here)
-            elif not current_proc_name and instr.opcode not in [TACOpcode.PROGRAM_START, TACOpcode.PROC_BEGIN, TACOpcode.PROC_END]:
-                self.logger.warning(f"Instruction at line {instr.line_number} (Opcode: {instr.opcode}) found outside of any procedure definition. It will be ignored.")
-
-        # Store any remaining instructions from the last procedure encountered
-        if current_proc_name and current_proc_instructions:
-            _procedures_tac[current_proc_name] = current_proc_instructions
-
         if not self.user_main_procedure_name:
+            self.logger.error("Diag: Condition: No PROGRAM_START directive found after loop.") # DIAGNOSTIC
             self.logger.error("No PROGRAM_START directive found in TAC file. Cannot determine program entry point.")
             return False
+        self.logger.info(f"Identified main Ada procedure: '{self.user_main_procedure_name}'")
+
+        # 2. Group TAC instructions by procedure using a stack
+        self.logger.info("Diag: Starting procedure grouping.") # DIAGNOSTIC
+        _procedures_tac: Dict[str, List[ParsedTACInstruction]] = {}
+        proc_stack: List[str] = []
+        active_proc_name: Optional[str] = None
+
+        for instr_idx, instr in enumerate(self.parsed_tac):
+            self.logger.debug(f"Diag: Grouping instr {instr_idx}: {instr.raw_line.strip()}") # DIAGNOSTIC
+            if instr.opcode == TACOpcode.PROC_BEGIN:
+                if not instr.operand1 or not isinstance(instr.operand1.value, str):
+                    self.logger.error(f"Diag: Condition: PROC_BEGIN TAC at line {instr.line_number} missing/invalid operand1.") # DIAGNOSTIC
+                    self.logger.error(f"PROC_BEGIN TAC at line {instr.line_number} is missing procedure name in operand1.")
+                    return False
+                proc_name = instr.operand1.value
+                self.logger.debug(f"Diag: PROC_BEGIN for '{proc_name}'.") # DIAGNOSTIC
+
+                if proc_name not in _procedures_tac:
+                    _procedures_tac[proc_name] = []
+                _procedures_tac[proc_name].append(instr)
+                
+                proc_stack.append(proc_name)
+                active_proc_name = proc_name
+
+            elif instr.opcode == TACOpcode.PROC_END:
+                if not instr.operand1 or not isinstance(instr.operand1.value, str):
+                    self.logger.error(f"Diag: Condition: PROC_END TAC at line {instr.line_number} missing/invalid operand1.") # DIAGNOSTIC
+                    self.logger.error(f"PROC_END TAC at line {instr.line_number} is missing procedure name in operand1.")
+                    return False
+                proc_name = instr.operand1.value
+                self.logger.debug(f"Diag: PROC_END for '{proc_name}'. Stack top: '{proc_stack[-1] if proc_stack else 'EMPTY'}'.") # DIAGNOSTIC
+
+                if not proc_stack or proc_stack[-1] != proc_name:
+                    self.logger.error(f"Diag: Condition: PROC_END for '{proc_name}' mismatch/empty stack.") # DIAGNOSTIC
+                    self.logger.error(f"PROC_END for '{proc_name}' at line {instr.line_number} found without matching PROC_BEGIN on stack (stack top: '{proc_stack[-1] if proc_stack else None}').")
+                    return False 
             
-        # Verify all procedures in TAC are in symbol table and get their entries for later use.
-        # For now, just store the grouped TAC. Symbol table lookups will happen during code gen for each proc.
-        # self.procedures_symbol_table_entries: Dict[str, SymbolTableEntry] = {}
-        # For simplicity, we'll directly use the _procedures_tac in _generate_code_segment
-        # and look up proc entries from self.symbol_table there.
+                _procedures_tac[proc_name].append(instr) # Add before popping for completeness of procedure's TAC list
+                proc_stack.pop()
+                active_proc_name = proc_stack[-1] if proc_stack else None
+            
+            elif instr.opcode == TACOpcode.PROGRAM_START:
+                self.logger.debug(f"Diag: Skipping PROGRAM_START instruction during grouping: {instr.raw_line.strip()}") # DIAGNOSTIC
+                continue
 
-        self.logger.info(f"TAC parsed successfully. Main Ada procedure: '{self.user_main_procedure_name}'.")
-        self.logger.info(f"Procedures found in TAC: {list(_procedures_tac.keys())}")
-        # Store the grouped tac for later use by _generate_code_segment
-        # This attribute can be named something like self.grouped_tac_by_procedure
+            else: # Other instructions (ASSIGN, CALL, GOTO, etc.)
+                if active_proc_name:
+                    if active_proc_name not in _procedures_tac:
+                        self.logger.error(f"Diag: Internal error: active_proc_name '{active_proc_name}' not in _procedures_tac dict during grouping.") # DIAGNOSTIC
+                        _procedures_tac[active_proc_name] = [] # Should not happen
+                    _procedures_tac[active_proc_name].append(instr)
+                    self.logger.debug(f"Diag: Added instruction to '{active_proc_name}': {instr.raw_line.strip()}") # DIAGNOSTIC
+                else:
+                    self.logger.warning(f"Diag: Instruction '{instr.raw_line.strip()}' at line {instr.line_number} (Opcode: {instr.opcode}) outside active procedure context. IGNORING.") # DIAGNOSTIC
+
+        if proc_stack: # Should be empty if all PROC_BEGINs have matching PROC_ENDs
+            self.logger.error(f"Diag: Condition: Unmatched PROC_BEGIN statements at end. Stack: {proc_stack}") # DIAGNOSTIC
+            self.logger.error(f"Unmatched PROC_BEGIN statements at end of TAC processing. Stack: {proc_stack}")
+            return False
+            
+        self.logger.info(f"TAC grouped successfully. Procedures found: {list(_procedures_tac.keys())}")
         self._internal_grouped_tac = _procedures_tac 
-
+        self.logger.info("Diag: _parse_and_prepare successfully completed.") # DIAGNOSTIC
         return True
 
     def _collect_global_vars(self) -> None:
         """Identifies global variables from the symbol table."""
         self.program_global_vars = {}
-        # Assuming the symbol table has a way to iterate or query for global scope entries
-        # Or iterate all and check depth == 1
-        global_scope_name = self.symbol_table.global_scope_name # Or however global scope is identified
         
-        if global_scope_name not in self.symbol_table.symbols:
-            self.logger.warning(f"Global scope '{global_scope_name}' not found in symbol table.")
+        # Access the global scope (first scope in the stack, typically depth 0 in SymbolTable)
+        # The ASMGenerator logic then checks for entry.depth == 1 for its definition of global.
+        if not self.symbol_table._scope_stack:
+            self.logger.warning("Symbol table scope stack is empty. Cannot collect global variables.")
             return
 
-        for name, entry in self.symbol_table.symbols[global_scope_name].items():
+        global_scope_symbols = self.symbol_table._scope_stack[0]
+
+        for name, entry in global_scope_symbols.items():
+            # The ASMGenerator's existing logic expects global vars to be at depth 1.
+            # The SymbolTable itself considers the first scope (index 0) to be depth 0.
+            # We rely on the entry.depth assigned during parsing and symbol insertion.
             if entry.depth == 1:
-                # Check if it's a variable (not procedure, not a string literal handled by map)
                 if entry.entry_type not in [EntryType.PROCEDURE, EntryType.FUNCTION]:
-                    # Further check if it's a string constant that's already in string_literals_map
                     is_mapped_string_const = (
                         entry.entry_type == EntryType.CONSTANT and 
                         entry.name in self.string_literals_map
                     )
                     if not is_mapped_string_const:
                         self.program_global_vars[entry.name] = entry
-                        self.logger.debug(f"Collected global variable: {entry.name}")
+                        self.logger.debug(f"Collected global variable: {entry.name} (depth {entry.depth})")
         self.logger.info(f"Collected {len(self.program_global_vars)} global variable(s).")
-
-    def get_operand_asm(self, tac_operand: Optional[str], instruction_opcode: Optional[TACOpcode] = None) -> str:
-        """
-        Translates a TAC operand string into its 8086 assembly representation.
-        Uses self.current_procedure_context for scoped lookups.
-        Args:
-            tac_operand: The operand string from TAC (e.g., variable name, literal, _S0).
-            instruction_opcode: The opcode of the instruction this operand belongs to (for context).
-        Returns:
-            The assembly representation of the operand.
-        """
-        if tac_operand is None:
-            self.logger.error("get_operand_asm called with None operand.")
-            return "<ERROR_NONE_OPERAND>"
-
-        # 1. Integer Literal Check
-        try:
-            val = int(tac_operand)
-            return str(val)
-        except ValueError:
-            pass # Not an integer literal
-
-        # 2. String Label Check (e.g., _S0 for WRS)
-        #    These should become OFFSET _S0 for instructions like WRS
-        if tac_operand.startswith("_S") and tac_operand[2:].isdigit():
-            # For WRS, the string_literals_map ensures it's a known label.
-            # The typical use in ASM is 'OFFSET _S_label'.
-            return f"OFFSET {tac_operand}"
-
-        # 3. Identifier Lookup (Variable, Temporary, Parameter)
-        entry: Optional[Symbol] = None
-        scope_searched = "global (no procedure context)"
-
-        if self.current_procedure_context:
-            scope_searched = self.current_procedure_context.name
-            entry = self.symbol_table.lookup(tac_operand, scope=scope_searched)
-        
-        if not entry: # Fallback to global lookup if not found in procedure scope or no proc context
-            scope_searched = self.symbol_table.global_scope_name
-            entry = self.symbol_table.lookup_globally(tac_operand)
-
-        if not entry:
-            self.logger.error(f"Operand '{tac_operand}' not found in scope '{scope_searched}' or globally.")
-            return f"<ERROR_UNDEF_{tac_operand}>"
-
-        # Handle 'c' -> 'cc' assembly keyword conflict
-        asm_name = "cc" if entry.name == "c" else entry.name
-
-        if entry.depth == 1:
-            # Global variable. Should be its name.
-            # If it's a global constant string not from string_literals_map, it's an issue or needs OFFSET.
-            if entry.entry_type == EntryType.CONSTANT and not asm_name.startswith("_S"):
-                self.logger.warning(f"Global constant string '{asm_name}' accessed. Assuming it's a label needing OFFSET.")
-                return f"OFFSET {asm_name}" # Or just asm_name if it's a variable holding an address
-            return asm_name
-        
-        elif entry.depth > 1:
-            # Local variable or parameter within the current_procedure_context
-            if self.current_procedure_context is None:
-                self.logger.error(f"Operand '{asm_name}' (depth {entry.depth}) found, but no current procedure context is set.")
-                return f"<ERROR_NO_PROC_CTX_{asm_name}>"
-            if entry.scope != self.current_procedure_context.name:
-                 # This could happen if a global was shadowed but then re-looked up globally.
-                 # If it IS a global after all, handle as depth 1.
-                 # This check might be redundant if lookup logic is perfect.
-                 self.logger.warning(f"Operand '{asm_name}' found with depth {entry.depth} but its scope '{entry.scope}' doesn't match current proc '{self.current_procedure_context.name}'. Treating as error or re-evaluating scope.")
-                 # For now, error if not clearly global by previous check.
-                 return f"<ERROR_SCOPE_MISMATCH_{asm_name}>"
-
-            if entry.offset is None:
-                self.logger.error(f"Local/Param operand '{asm_name}' in scope '{entry.scope}' has no offset.")
-                return f"<ERROR_NO_OFFSET_{asm_name}>"
-
-            # Parameters: Positive offset from BP. BP holds Old BP, RET ADDR is above. First param [BP+4].
-            #   Internal offset '0' for the first parameter (e.g., size 2 bytes) becomes [BP + (0 + 4)] = [BP+4].
-            #   Internal offset '2' for the second parameter (e.g., size 2 bytes) becomes [BP + (2 + 4)] = [BP+6].
-            # Locals: Negative offset from BP. First local is at [BP-2].
-            #   Internal offset '0' for the first local (e.g., size 2 bytes) becomes [BP - (0 + 2)] = [BP-2].
-            #   Internal offset '2' for the second local (e.g., size 2 bytes) becomes [BP - (2 + 2)] = [BP-4].
-            
-            # Ensure entry.offset is an int
-            try:
-                internal_offset = int(entry.offset)
-            except (ValueError, TypeError):
-                self.logger.error(f"Operand '{asm_name}' has an invalid offset '{entry.offset}'.")
-                return f"<ERROR_INVALID_OFFSET_{asm_name}>"
-
-            if entry.is_parameter:
-                # Assumes entry.offset is the 0-indexed byte offset *within the parameter block*
-                # Standard stack: ... Pn ... P1 | RetAddr (2B) | OldBP (2B) <-- BP points here
-                # So, first param (internal offset 0) is at BP + 4
-                actual_bp_offset = internal_offset + 4 
-                return f"[BP+{actual_bp_offset}]"
-            else: # Local variable or temporary
-                # Assumes entry.offset is the 0-indexed byte offset *within the local variable block*
-                # Standard stack: OldBP (2B) | Local1 | Local2 ... <-- BP points to OldBP
-                # So, first local (internal offset 0) is at BP - 2
-                actual_bp_offset = internal_offset + 2
-                return f"[BP-{actual_bp_offset}]"
-        else:
-            self.logger.error(f"Operand '{asm_name}' has an unexpected depth: {entry.depth}.")
-            return f"<ERROR_UNEXPECTED_DEPTH_{asm_name}>"
 
     def _generate_data_segment(self) -> List[str]:
         """Generates the .DATA segment assembly lines."""
@@ -374,10 +290,10 @@ class ASMGenerator:
         """
         asm_lines: List[str] = []
         
-        proc_entry = self.symbol_table.lookup_globally(proc_name) # Procedures are global
+        proc_entry = self.symbol_table.get_procedure_definition(proc_name)
         if not proc_entry or proc_entry.entry_type not in [EntryType.PROCEDURE, EntryType.FUNCTION]:
-            self.logger.error(f"Symbol table entry for procedure '{proc_name}' not found or not a procedure type.")
-            asm_lines.append(f"; ERROR: Procedure '{proc_name}' not found in symbol table or invalid type.")
+            self.logger.error(f"Symbol table entry for procedure '{proc_name}' not found or not a procedure/function type using get_procedure_definition.")
+            asm_lines.append(f"; ERROR: Procedure '{proc_name}' definition not found or invalid type.")
             return asm_lines
 
         self.current_procedure_context = proc_entry # CRITICAL: Set context for get_operand_asm
@@ -488,9 +404,24 @@ class ASMGenerator:
             return False
         
         # Ensure the user_main_procedure_name is a valid symbol table entry for a procedure
-        main_proc_entry = self.symbol_table.lookup_globally(self.user_main_procedure_name)
+        self.logger.info(f"Diag: Looking up main procedure '{self.user_main_procedure_name}' in symbol table's persistent definitions.") # DIAGNOSTIC
+        main_proc_entry = self.symbol_table.get_procedure_definition(self.user_main_procedure_name)
+        
+        # --- Start Diagnostic Block ---
+        if main_proc_entry:
+            self.logger.info(f"Diag: main_proc_entry found: {main_proc_entry}")
+            self.logger.info(f"Diag: main_proc_entry.entry_type: {main_proc_entry.entry_type} (id: {id(main_proc_entry.entry_type)})")
+            self.logger.info(f"Diag: Literal EntryType.PROCEDURE: {EntryType.PROCEDURE} (id: {id(EntryType.PROCEDURE)})")
+            self.logger.info(f"Diag: Literal EntryType.FUNCTION: {EntryType.FUNCTION} (id: {id(EntryType.FUNCTION)})")
+            self.logger.info(f"Diag: Is main_proc_entry.entry_type == EntryType.PROCEDURE? {main_proc_entry.entry_type == EntryType.PROCEDURE}")
+            self.logger.info(f"Diag: Is main_proc_entry.entry_type is EntryType.PROCEDURE? {main_proc_entry.entry_type is EntryType.PROCEDURE}")
+            self.logger.info(f"Diag: Is main_proc_entry.entry_type in [EntryType.PROCEDURE, EntryType.FUNCTION]? {main_proc_entry.entry_type in [EntryType.PROCEDURE, EntryType.FUNCTION]}")
+        else:
+            self.logger.info("Diag: main_proc_entry is None after get_procedure_definition.")
+        # --- End Diagnostic Block ---
+
         if not main_proc_entry or main_proc_entry.entry_type not in [EntryType.PROCEDURE, EntryType.FUNCTION]:
-            self.logger.error(f"User main procedure '{self.user_main_procedure_name}' not found in symbol table or is not a procedure/function.")
+            self.logger.error(f"User main procedure '{self.user_main_procedure_name}' not found in symbol table (get_procedure_definition) or is not a procedure/function.")
             return False
         
         dos_shell_asm = self._generate_dos_program_shell(self.user_main_procedure_name)

@@ -17,122 +17,122 @@ if TYPE_CHECKING:
 
 
 class ASMOperandFormatter:
-    def __init__(self, symbol_table: SymbolTable):
+    def __init__(self, symbol_table: 'SymbolTable', asm_generator_instance: 'ASMGenerator', logger_instance: 'Logger'):
         self.symbol_table = symbol_table
-        logger.debug("ASMOperandFormatter initialized.")
+        self.asm_generator = asm_generator_instance # Provides current_procedure_context
+        self.logger = logger_instance
+        self.logger.debug("ASMOperandFormatter initialized.")
 
-    def format_operand(self, tac_operand: Optional[str], context_opcode: Optional['TACOpcode'] = None) -> str:
+    def format_operand(self, operand_name: str, context_opcode: Optional[TACOpcode] = None, active_procedure_symbol: Optional['Symbol'] = None) -> str:
         """
-        Translates a TAC operand string into its 8086 assembly representation.
-        Handles immediates, global variables, local variables/params ([bp+/-offset]),
-        string labels (OFFSET _S...), and temporary variable names (_t...).
-
-        Args:
-            tac_operand: The operand string from TAC (e.g., variable name, literal, _S0, _t1, [bp...]).
-            context_opcode: The TACOpcode of the instruction this operand belongs to (optional, for context like WRS).
-
-        Returns:
-            The assembly representation of the operand.
+        Formats a TAC operand (string) into its assembly representation.
+        Handles variables (global, local, param), temporaries, integer literals, and string labels.
+        `active_procedure_symbol` is crucial for looking up locals/params in the correct scope.
         """
-        if tac_operand is None:
-            logger.error("format_operand called with None operand.")
+        self.logger.debug(f"ASMOperandFormatter: Formatting operand: '{operand_name}' (context: {context_opcode}, active_proc: {active_procedure_symbol.name if active_procedure_symbol else 'None'})")
+
+        if operand_name is None:
+            self.logger.error("format_operand called with None operand_name")
             return "<ERROR_NONE_OPERAND>"
 
-        operand_str = str(tac_operand).strip()
-        logger.debug(f"ASMOperandFormatter: Formatting operand: '{operand_str}' (context: {context_opcode})", stacklevel=2)
-
-        # 1. Check if it's already formatted as [bp+/-offset] (should not happen ideally if TAC is clean)
-        if operand_str.startswith(('[bp+', '[bp-')) and operand_str.endswith(']'):
-            logger.debug(f"Operand '{operand_str}' is already in [bp+/-offset] format. Returning as is.")
-            return operand_str
-
-        # 2. Immediate Check (Integer/Float)
+        # Check if it's an integer literal
         try:
-            # Attempt to convert to float first to handle decimals
-            val = float(operand_str)
-            # If it converts back to int without loss, treat as int for simplicity in ASM
-            if val == int(val):
-                int_val = int(val)
-                logger.debug(f"Formatted '{operand_str}' as immediate integer: {int_val}")
-                return str(int_val)
-            else:
-                # Handle float representation if needed (e.g., for FPU instructions)
-                # For basic 8086, floating point requires dedicated handling or libraries.
-                # Defaulting to string representation, may need refinement based on target ASM features.
-                logger.warning(f"Operand '{operand_str}' is a non-integer number. Representing as string. Floating point ops require special handling.")
-                return operand_str
+            val = int(operand_name)
+            return str(val)  # Immediate value
         except ValueError:
-            pass  # Not a number
+            pass # Not an integer, proceed
 
-        # 3. String Label Check (e.g., _S0)
-        if operand_str.startswith("_S") and operand_str[2:].isdigit():
-            # Context matters: WRS needs OFFSET, assignment might need the label name
-            if context_opcode == TACOpcode.WRITE_STR:
-                 formatted = f"OFFSET {operand_str}"
-                 logger.debug(f"Formatted string label '{operand_str}' as {formatted} for WRS context.")
-                 return formatted
-            else:
-                 logger.debug(f"Formatted string label '{operand_str}' as itself (non-WRS context). Potential address needed.")
-                 return operand_str # Return label name; might need OFFSET later depending on usage
+        # Check if it's a known string literal label (e.g., _S0, _S1)
+        if operand_name in self.asm_generator.string_literals_map.values():
+            # For NASM, string labels are used directly with OFFSET if they are in .data
+            # However, here we just return the label itself as the data segment manager handles OFFSET.
+            # If it's a string literal from string_literals_map (which are labels like _S0)
+            return f"OFFSET {operand_name}"
 
-        # 4. Temporary Variable Check (e.g., _t1)
-        if operand_str.startswith("_t") and operand_str[2:].isdigit():
-             logger.debug(f"Operand '{operand_str}' recognized as temporary variable. Assuming it maps to [BP-offset].")
-             # **CRITICAL**: Temps NEED lookup to get their BP offset assigned during TAC generation/SymTab phase!
-             # Fallback for now: Treat like other identifiers needing lookup.
-             pass # Continue to identifier lookup
+        # Check if it's a temporary variable (e.g., _t0, _t1)
+        # These are expected to be found in the symbol table with offsets by TACGenerator
+        if operand_name.startswith("_t"):
+            search_depth = -1 # Default for logging if active_procedure_symbol is None
+            try:
+                # Temporaries are local to the procedure they were generated in.
+                # Their depth in symbol table would match the procedure's depth.
+                search_depth = active_procedure_symbol.depth if active_procedure_symbol else self.symbol_table.current_depth
+                symbol_entry = self.symbol_table.lookup(operand_name, search_from_depth=search_depth)
+                
+                if symbol_entry.offset is not None:
+                    # Correctly format as [BP - offset] or [BP + offset] based on convention
+                    # Assuming standard local var (negative) / param (positive) offset from BP
+                    if symbol_entry.offset < 0: # Local variable or temp on stack
+                        return f"[BP{symbol_entry.offset:+#}]" # e.g., [BP-2], [BP-4]
+                    else: # Parameter or other positive offset
+                        return f"[BP+{symbol_entry.offset}]" # e.g. [BP+4], [BP+6]
+                else: # symbol_entry.offset is None
+                    self.logger.error(f"Temporary variable '{operand_name}' found but has no offset.")
+                    return f"<ERROR_NO_OFFSET_{operand_name}>"
+            except SymbolNotFoundError:
+                self.logger.error(f"Temporary variable '{operand_name}' not found in symbol table at depth {search_depth}.")
+                return f"<ERROR_TEMP_NOT_FOUND_{operand_name}>"
+            except Exception as e:
+                self.logger.error(f"Unexpected error formatting temporary '{operand_name}': {e}")
+                return f"<ERROR_TEMP_UNEXPECTED_{operand_name}>"
 
-        # 5. Identifier Lookup (Variable, Parameter, Procedure, Constant)
-        try:
-            entry = self.symbol_table.lookup(operand_str) # Use simple lookup for now
-            logger.debug(f" Found symbol entry for '{operand_str}': {entry}")
+        # 1. Try to find as a variable (local, param, or global)
+        # Ensure it's not a special prefix, not a label, and not purely numeric (already handled)
+        if not operand_name.startswith(("_", ".")) and not operand_name.isdigit():
+            current_search_depth_for_logging = "global/current" 
+            try:
+                start_search_depth = None
+                if active_procedure_symbol:
+                    # The procedure's own variables are at its declaration depth + 1
+                    # Parameters are at its declaration depth
+                    start_search_depth = active_procedure_symbol.depth + 1 # Search locals first
+                    current_search_depth_for_logging = f"proc '{active_procedure_symbol.name}' depth {start_search_depth}"
+                    self.logger.debug(f"ASMOperandFormatter: Var '{operand_name}', active_proc '{active_procedure_symbol.name}' (depth {active_procedure_symbol.depth}), searching from depth {start_search_depth}.")
+                else:
+                    self.logger.debug(f"ASMOperandFormatter: Var '{operand_name}', no active_procedure_symbol, search_from_depth=None (use symtab current/global).")
 
-            # Handle potential 'c' -> 'cc' MASM keyword conflict
-            asm_name = "cc" if entry.name.lower() == "c" else entry.name
+                # Lookup logic revised
+                symbol_entry = self.symbol_table.lookup(operand_name, search_from_depth=start_search_depth)
+                current_search_depth_for_logging = f"depth {symbol_entry.depth}" # Update with actual found depth
 
-            # Global Variable (Depth 0 or 1 in some contexts)
-            if entry.depth <= 1 and entry.entry_type in (EntryType.VARIABLE, EntryType.CONSTANT):
-                logger.debug(f"Formatted '{operand_str}' as global variable/constant: {asm_name}")
-                return asm_name
+                # For CALL, the operand_name is the procedure label, not a variable to be looked up for memory access.
+                if context_opcode == TACOpcode.CALL and (symbol_entry.entry_type == EntryType.PROCEDURE or symbol_entry.entry_type == EntryType.FUNCTION):
+                    return symbol_entry.name # Procedure/Function labels are used directly
 
-            # Local Variable or Parameter (Depth > 1)
-            elif entry.depth >= 2 and entry.entry_type in (EntryType.VARIABLE, EntryType.PARAMETER):
-                if entry.offset is None:
-                     logger.error(f"Local/Param operand '{asm_name}' (Depth {entry.depth}) in scope '{entry.scope}' has no offset.")
-                     return f"<ERROR_NO_OFFSET_{asm_name}>"
+                if symbol_entry.entry_type == EntryType.CONSTANT:
+                    if symbol_entry.value is not None:
+                        return str(symbol_entry.value) # Use the constant's value directly
+                    else: # Constant with no value (should not happen for resolved constants)
+                        self.logger.error(f"Constant symbol '{operand_name}' found but has no value.")
+                        return f"<ERROR_CONST_NO_VALUE_{operand_name}>"
 
-                # **Translate Internal Offset to 8086 Offset**
-                internal_offset = entry.offset
-                asm_offset_str = "<ERROR_OFFSET_CALC>"
+                # Handle variables (global, local, param)
+                if symbol_entry.offset is not None:
+                    # Global variables (depth 0 or 1, check specific project convention)
+                    # Using a simplified check for globals: depth 1 or specific list
+                    is_global_via_map = self.asm_generator.program_global_vars and operand_name in self.asm_generator.program_global_vars
+                    if symbol_entry.depth <= 1 or is_global_via_map: # Adjust depth for globals if needed (0 for builtins, 1 for program globals)
+                         # Check if it's a global var explicitly tracked in ASMGenerator
+                        if is_global_via_map or (not active_procedure_symbol and symbol_entry.depth <=1 ): # Crude check, refine if SymbolTable has better global distinction
+                            return f"{operand_name}" # Global variable, use its name as label
+                    
+                    # Locals and Parameters (relative to BP)
+                    if symbol_entry.offset < 0: # Local variable
+                        return f"[BP{symbol_entry.offset:+#}]"
+                    else: # Parameter (positive offset)
+                        return f"[BP+{symbol_entry.offset}]"
+                else: # Has no offset (and not a handled constant/procedure)
+                    self.logger.error(f"Symbol '{operand_name}' (type: {symbol_entry.entry_type}) found but has no offset and is not a global label or handled constant.")
+                    return f"<ERROR_NO_ADDR_OR_VAL_{operand_name}>"
 
-                if entry.entry_type == EntryType.PARAMETER:
-                    # Parameters: Positive offset from BP. First param [BP+4].
-                    # Assumes internal offset 0 = first param, 2 = second (for WORDs), etc.
-                    final_asm_offset = internal_offset + 4 # BP+0=OldBP, BP+2=RetAddr
-                    asm_offset_str = f"[bp+{final_asm_offset}]"
-                    logger.debug(f"Calculated PARAMETER offset for '{asm_name}' (internal: {internal_offset}) -> {asm_offset_str}")
-                else: # VARIABLE (or Temporary treated as variable)
-                    # Locals/Temps: Negative offset from BP. First local [BP-2].
-                    # Assumes internal offset 0 = first local, 2 = second, etc.
-                    final_asm_offset = -(internal_offset + 2)
-                    asm_offset_str = f"[bp{final_asm_offset}]"
-                    logger.debug(f"Calculated LOCAL/TEMP variable offset for '{asm_name}' (internal: {internal_offset}) -> {asm_offset_str}")
+            except SymbolNotFoundError:
+                self.logger.error(f"Symbol '{operand_name}' not found in symbol table (searched from {current_search_depth_for_logging}). Context: {context_opcode}")
+                return f"<ERROR_SYMBOL_NOT_FOUND_{operand_name}>"
+            except Exception as e:
+                self.logger.error(f"Unexpected error formatting variable/symbol '{operand_name}': {e}")
+                return f"<ERROR_UNEXPECTED_FORMAT_{operand_name}>"
 
-                return asm_offset_str
+        # 2. Handle integer literals
+        # ... existing code ...
 
-            # Procedure/Function Name (or other types like TYPE)
-            elif entry.entry_type in (EntryType.PROCEDURE, EntryType.FUNCTION, EntryType.TYPE):
-                logger.debug(f"Formatted '{operand_str}' as procedure/function/type name: {asm_name}")
-                return asm_name
-            else:
-                 logger.warning(f"Symbol '{operand_str}' found but has unexpected type/depth combination: Type={entry.entry_type}, Depth={entry.depth}. Returning name '{asm_name}'.")
-                 return asm_name
-
-        except SymbolNotFoundError:
-            # 6. Fallback: If not found in symbol table, not immediate, not string label, not temp pattern
-            # Treat as potential label, temp, or error.
-            logger.debug(f"Operand '{operand_str}' not found in symbol table or matched other patterns. Returning as potential label/temp name.")
-            return operand_str
-        except Exception as e:
-            logger.error(f"Unexpected error formatting operand '{operand_str}': {e}")
-            return f"<ERROR_FORMATTING_{operand_str}>"
+        # ... rest of the method ...

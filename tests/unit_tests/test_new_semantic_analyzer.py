@@ -266,7 +266,7 @@ class TestNewSemanticAnalyzer(unittest.TestCase):
 
         self.assertFalse(sem_ok)
         self.assertEqual(len(analyzer.errors), 1)
-        self.assertIn("Undeclared identifier 'x' used in assignment", analyzer.errors[0])
+        self.assertIn("Undeclared identifier 'x' used at line", analyzer.errors[0])
 
     # Add tests for undeclared in expression factors
     # Add tests for nested procedures and scope resolution
