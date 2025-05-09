@@ -25,7 +25,7 @@ class IOTranslators:
         
         asm_lines.append(f"CALL READINT") 
         if dest_var_asm.upper() != "AX":
-            asm_lines.append(f"MOV {dest_var_asm}, AX")
+            asm_lines.append(f"MOV {dest_var_asm}, BX")
         
         self.logger.debug(f"Translated READ_INT {tac_instruction} -> {asm_lines}")
         return asm_lines

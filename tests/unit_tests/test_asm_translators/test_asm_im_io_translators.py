@@ -40,7 +40,7 @@ class TestIOTranslators(unittest.TestCase, IOTranslators):
         self.asm_generator.get_operand_asm.return_value = "TargetVar_asm"
         tac = self._create_tac(TACOpcode.READ_INT, dest="TargetVar")
         result = self._translate_read_int(tac)
-        self.assertEqual(result, ["CALL READINT", "MOV TargetVar_asm, AX"])
+        self.assertEqual(result, ["CALL READINT", "MOV TargetVar_asm, BX"])
 
     def test_translate_read_int_dest_is_ax(self):
         self.asm_generator.get_operand_asm.side_effect = lambda op_val_str, tac_opcode: "AX" if op_val_str == "AX_val_placeholder" else str(op_val_str) + "_asm"
