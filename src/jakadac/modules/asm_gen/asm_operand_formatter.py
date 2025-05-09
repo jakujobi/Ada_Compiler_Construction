@@ -55,8 +55,15 @@ class ASMOperandFormatter:
             search_depth = -1 # Default for logging if active_procedure_symbol is None
             try:
                 # Temporaries are local to the procedure they were generated in.
-                # Their depth in symbol table would match the procedure's depth.
-                search_depth = active_procedure_symbol.depth if active_procedure_symbol else self.symbol_table.current_depth
+                # Their depth in symbol table would match the procedure's body scope depth.
+                if active_procedure_symbol:
+                    search_depth = active_procedure_symbol.depth + 1
+                else:
+                    # Fallback, though active_procedure_symbol should ideally always be present for temps
+                    search_depth = self.symbol_table.current_depth 
+                
+                self.logger.debug(f"ASMOperandFormatter: Temp '{operand_name}', active_proc '{active_procedure_symbol.name if active_procedure_symbol else 'None'}', calculated search_depth for temp: {search_depth}.")
+
                 symbol_entry = self.symbol_table.lookup(operand_name, search_from_depth=search_depth)
                 
                 if symbol_entry.offset is not None:

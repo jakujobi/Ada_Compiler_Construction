@@ -191,73 +191,59 @@ class SymbolTable:
         logger.info(f"Entered scope depth {self._current_depth}")
 
     def exit_scope(self):
-        """Exits the current lexical scope."""
+        """Exits the current lexical scope. Scope dictionary is retained in _scope_stack for potential historical lookups."""
         if self._current_depth < 0:
             logger.error("Attempted to exit scope below global scope.")
-            # Optionally raise an internal error
             return
-        exiting_scope = self._scope_stack.pop()
-        logger.info(f"Exiting scope depth {self._current_depth}. Removing {len(exiting_scope)} symbols.")
+        
+        # Scope is not popped from _scope_stack to allow historical lookup by depth.
+        # exiting_scope = self._scope_stack.pop() 
+        exiting_scope_dict = {}
+        if self._current_depth < len(self._scope_stack):
+            exiting_scope_dict = self._scope_stack[self._current_depth]
+        
+        logger.info(f"Exiting scope depth {self._current_depth}. Scope contained {len(exiting_scope_dict)} symbols. (Scope dictionary retained in stack)")
         self._current_depth -= 1
-        if self._current_depth < -1: # Should not happen if logic is correct
-             logger.critical("Symbol table depth inconsistency detected!")
-             self._current_depth = -1 # Reset for safety
+        if self._current_depth < -1: 
+             logger.critical("Symbol table depth inconsistency detected post exit_scope!")
+             self._current_depth = -1
 
     def insert(self, symbol: Symbol):
         """
-        Inserts a symbol into the current scope.
-
-        Args:
-            symbol: The Symbol object to insert.
-
-        Raises:
-            DuplicateSymbolError: If a symbol with the same name already exists
-                                in the current scope.
+        Inserts a symbol into the scope indicated by self._current_depth.
+        Ensures _scope_stack is grown if current_depth is beyond its current len - 1.
         """
-        if not self._scope_stack:
-            logger.error("Cannot insert symbol: No active scope.")
-            # Optionally raise an internal error
-            return
-
-        current_scope = self._scope_stack[-1]
         name = symbol.name
-        depth = self.current_depth # Symbol should belong to the current scope
+        depth = self.current_depth
 
-        # Ensure symbol's depth matches current scope depth
         if symbol.depth != depth:
-            # logger.warning(f"Inserting symbol '{name}' with depth {symbol.depth} into scope {depth}. Adjusting symbol depth.")
-            # symbol.depth = depth # Remove adjustment - enforce correct depth from caller
-            logger.error(f"Symbol '{name}' has depth {symbol.depth}, but current scope depth is {depth}.")
+            logger.error(f"Symbol '{name}' has depth {symbol.depth}, but current scope depth for insertion is {depth}.")
             raise ValueError(f"Attempting to insert symbol '{name}' with incorrect depth ({symbol.depth}) into scope {depth}.")
 
-        if name in current_scope:
+        # Ensure _scope_stack has a dictionary for the current depth
+        while depth >= len(self._scope_stack):
+            self._scope_stack.append({})
+            logger.debug(f"Extended _scope_stack to accommodate depth {len(self._scope_stack)-1}")
+
+        current_scope_dict = self._scope_stack[depth]
+
+        if name in current_scope_dict:
             logger.error(f"Duplicate symbol declaration: '{name}' at depth {depth}")
             raise DuplicateSymbolError(name, depth)
 
-        current_scope[name] = symbol
-        logger.info(f"Inserted symbol: {symbol}")
+        current_scope_dict[name] = symbol
+        logger.info(f"Inserted symbol: {symbol} into scope {depth}")
 
-        # ADDED: If it's a procedure or function, store it persistently
         if symbol.entry_type in [EntryType.PROCEDURE, EntryType.FUNCTION]:
             if name in self.procedure_definitions:
-                logger.warning(f"Procedure/Function '{name}' redefined. Overwriting in persistent store. This might indicate a parser issue or language feature not fully handled (e.g. overloading without signature differentiation).")
+                logger.warning(f"Procedure/Function '{name}' redefined. Overwriting in persistent store.")
             self.procedure_definitions[name] = symbol
             logger.info(f"Stored persistent definition for {symbol.entry_type.name}: {name}")
 
     def lookup(self, name: str, lookup_current_scope_only: bool = False, search_from_depth: Optional[int] = None) -> Symbol:
         """
-        Looks up a symbol by name, searching from a specified depth or current scope outwards.
-
-        Args:
-            name: The name (identifier) of the symbol to find.
-            lookup_current_scope_only: If True, only search the current scope (or specified search_from_depth).
-            search_from_depth: Optional specific depth to start searching from. If None, uses current_depth.
-
-        Returns:
-            The found Symbol object.
-
-        Raises:
-            SymbolNotFoundError: If the symbol is not found in any accessible scope.
+        Looks up a symbol by name, searching from a specified depth or current_depth outwards.
+        Assumes _scope_stack contains all historical scopes, indexed by their depth.
         """
         effective_start_depth = search_from_depth if search_from_depth is not None else self._current_depth
 
@@ -267,23 +253,27 @@ class SymbolTable:
                 if name in scope_to_search:
                     logger.debug(f"Found '{name}' at depth {effective_start_depth} (current/specified scope only).")
                     return scope_to_search[name]
-            raise SymbolNotFoundError(name) # Not found in the single specified/current scope
+            logger.debug(f"'{name}' not found in scope {effective_start_depth} (current/specified scope only).")
+            raise SymbolNotFoundError(name)
 
         # Search from effective_start_depth down to global scope (depth 0)
-        # Ensure effective_start_depth is within bounds of the current stack
-        # This handles cases where search_from_depth might be for a scope not currently on stack top,
-        # but is a valid historical depth index.
-        actual_search_start_index = min(effective_start_depth, len(self._scope_stack) - 1)
+        # Ensure effective_start_depth is a valid index for _scope_stack
+        if not (0 <= effective_start_depth < len(self._scope_stack)):
+            logger.debug(f"'{name}' not found: initial search depth {effective_start_depth} is out of bounds for preserved scope stack (len {len(self._scope_stack)}).")
+            raise SymbolNotFoundError(name)
 
-        for i in range(actual_search_start_index, -1, -1):
-            # Current scope is at index i which corresponds to depth i
-            # (assuming SymbolTable starts with depth 0 at index 0)
-            scope = self._scope_stack[i]
-            if name in scope:
-                logger.debug(f"Found '{name}' at depth {i} (searched from depth {effective_start_depth}).")
-                return scope[name]
+        for i in range(effective_start_depth, -1, -1):
+            # Ensure scope index i is valid for _scope_stack (it should be if effective_start_depth was valid)
+            if i < len(self._scope_stack):
+                scope = self._scope_stack[i]
+                if name in scope:
+                    logger.debug(f"Found '{name}' at depth {i} (searched from effective_depth {effective_start_depth}).")
+                    return scope[name]
+            else:
+                # This case should ideally not be reached if effective_start_depth is validated.
+                logger.error(f"SymbolTable.lookup internal error: index {i} out of bounds during loop for _scope_stack (len {len(self._scope_stack)})")
         
-        logger.debug(f"'{name}' not found in any accessible scope (searched from depth {effective_start_depth}).")
+        logger.debug(f"'{name}' not found in any accessible scope (searched from effective_depth {effective_start_depth} down to 0).")
         raise SymbolNotFoundError(name)
 
     def get_procedure_definition(self, name: str) -> Optional[Symbol]:
