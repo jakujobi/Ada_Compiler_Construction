@@ -197,12 +197,10 @@ class ExpressionsMixin:
             while self.current_token and self.is_addopt(self.current_token.token_type):
                 op_token = self.current_token
                 op = op_token.lexeme # Use lexeme for TAC op if it matches (+, -)
-                                     # Or map if different (e.g. 'OR' to 'or')
                 self.advance()
                 right_place = self.parseTerm() # Returns str
                 if not isinstance(right_place, str):
                      self.logger.error(f"Type mismatch: Expected str place from parseTerm (right operand) in TAC mode, got {type(right_place)}")
-                     # Potentially return an error marker or raise an exception
                      return "ERROR_PLACE_ADDOPT_TERM"
                 
                 if not self.tac_gen or not self.symbol_table or not hasattr(self, 'current_local_offset') or not hasattr(self, 'defs'):
@@ -214,7 +212,6 @@ class ExpressionsMixin:
                 temp_token_for_symbol = op_token 
                 
                 temp_depth = self.symbol_table.current_depth
-                # temp_size = TypeUtils.get_type_size(temp_var_type, self.defs.TYPE_SIZE_MAP)
                 temp_size = 2 # Direct assumption for INT size
 
                 temp_offset = self.current_local_offset
@@ -227,13 +224,12 @@ class ExpressionsMixin:
                     self.logger.info(f"EXPR_MIXIN (SimpleExpr): Inserted temp symbol {temp_sym.name} (type: {temp_var_type.name}, offset: {temp_offset}, size: {temp_size}) at depth {temp_depth}")
                 except DuplicateSymbolError as e:
                     self.logger.error(f"EXPR_MIXIN (SimpleExpr): Duplicate symbol error for temp {temp_name_str}: {e}")
-                    # Potentially bubble this error up or handle more gracefully
                 
                 result_place_for_tac = temp_name_str 
                 self.tac_gen.emitBinaryOp(op, result_place_for_tac, left_place, right_place)
-                left_place = result_place_for_tac # Update left_place for the next iteration
+                left_place = result_place_for_tac
 
-            return left_place # Return the final place
+            return left_place
             # --- End TAC Generation ---
 
         else:
@@ -307,7 +303,6 @@ class ExpressionsMixin:
                 temp_token_for_symbol = op_token
 
                 temp_depth = self.symbol_table.current_depth
-                # temp_size = TypeUtils.get_type_size(temp_var_type, self.defs.TYPE_SIZE_MAP)
                 temp_size = 2 # Direct assumption for INT size
                 
                 temp_offset = self.current_local_offset
@@ -323,9 +318,9 @@ class ExpressionsMixin:
 
                 result_place_for_tac = temp_name_str
                 self.tac_gen.emitBinaryOp(op, result_place_for_tac, left_place, right_place)
-                left_place = result_place_for_tac # Update for next iteration
+                left_place = result_place_for_tac
 
-            return left_place # Return the final place
+            return left_place
              # --- End TAC Generation ---
         else:
             # --- Non-Tree, Non-TAC ---
@@ -340,11 +335,11 @@ class ExpressionsMixin:
         
     def parseFactor(self) -> Union[ParseTreeNode, str, None]:
         """
-        Factor -> idt | numt | ( Expr ) | not Factor | signopt Factor
+        Factor -> ID | ID ( ExprList ) | NUM | ( Expr ) | NOT Factor | - Factor
         Enhanced to generate TAC and return the place where the result is stored.
-        Also performs semantic checking for undeclared variables.
+        Handles function calls with ExprList for TAC.
         """
-        node = None # Initialize
+        node = None
         place = "ERROR_PLACE" # Default place for TAC
 
         if self.build_parse_tree:
