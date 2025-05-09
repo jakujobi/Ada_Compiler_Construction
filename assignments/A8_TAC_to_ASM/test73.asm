@@ -8,8 +8,8 @@ start PROC
     MOV AX, @DATA
     MOV DS, AX
 
-    ; Call the user's main procedure: four
-    CALL four
+    ; Call the user's main procedure: three
+    CALL three
 
     ; Exit program
     MOV AH, 4CH
@@ -18,18 +18,8 @@ start ENDP
 
 .DATA
 .CODE
-    ; TAC: proc four
-four PROC NEAR
-    PUSH BP
-    MOV BP, SP
-    ; TAC: call one
-    CALL <ERROR_UNEXPECTED_FORMAT_one>
-    ; TAC: endp four
-    POP BP
-four ENDP
-
-    ; TAC: proc one
-one PROC NEAR
+    ; TAC: proc three
+three PROC NEAR
     PUSH BP
     MOV BP, SP
     ; TAC: a = 5
@@ -50,11 +40,11 @@ one PROC NEAR
      mov bx, <ERROR_TEMP_UNEXPECTED__t1>    ; Load op2 into BX
      add ax, bx        ; Add op2 (from BX) to op1 (in AX)
      mov <ERROR_TEMP_UNEXPECTED__t2>, ax   ; Store result into destination
-    ; TAC: c = _t2
+    ; TAC: cc = _t2
      mov ax, <ERROR_TEMP_UNEXPECTED__t2>    ; Load source value/address into AX
-     mov <ERROR_UNEXPECTED_FORMAT_c>, ax   ; Store AX into destination
-    ; TAC: endp one
+     mov <ERROR_UNEXPECTED_FORMAT_cc>, ax   ; Store AX into destination
+    ; TAC: endp three
     POP BP
-one ENDP
+three ENDP
 
 END start
