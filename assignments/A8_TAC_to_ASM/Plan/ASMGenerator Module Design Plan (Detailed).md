@@ -22,38 +22,38 @@ This document provides a detailed plan for the 8086 assembly code generation mod
 
 ### **2.1. TACInstruction (Data Class)**
 
-* **File:** tac_instruction.py
+* **File:** `tac_instruction.py`
 * **Purpose:** A structured container for a single parsed TAC instruction line.
-* **Implementation:** Python @dataclass recommended for simplicity and type hinting.
-* **Attributes:**
-  * line_number: int (For error reporting)
-  * label: Optional[str] = None (e.g., "L1")
-  * opcode: Optional[str] = None (e.g., "ASSIGN", "ADD", "WRS", "PROC")
-  * op1: Optional[str] = None (Source operand 1 / Address / Label)
-  * op2: Optional[str] = None (Source operand 2)
-  * dest: Optional[str] = None (Destination operand / Procedure Name)
+* **Implementation:** Python `@dataclass` (`ParsedTACInstruction`)
+* **Attributes (matching `ParsedTACInstruction`):**
+  * `line_number: int` (For error reporting)
+  * `raw_line: str` (Original raw line from TAC file)
+  * `label: Optional[str]` (Optional label associated with the instruction, e.g., "L1")
+  * `opcode: Union[TACOpcode, str]` (The operation, preferably `TACOpcode` enum)
+  * `destination: Optional[TACOperand]` (e.g., for `ASSIGN`, `READ_INT`, jump targets)
+  * `operand1: Optional[TACOperand]` (e.g., for `ASSIGN`, binary ops, `WRITE_INT`, `PARAM`)
+  * `operand2: Optional[TACOperand]` (e.g., for binary ops, `CALL` num_params)
 * **Methods:**
-  * ``__init__``(self, line_number: int, label: Optional[str] = None, opcode: Optional[str] = None, op1: Optional[str] = None, op2: Optional[str] = None, dest: Optional[str] = None)
-  * @staticmethod from_tac_line(line: str, line_num: int) -> 'TACInstruction':
-    * **Input:** Raw string line from .tac, line number.
-    * **Action:**
-      1. Strip leading/trailing whitespace. Ignore empty lines or comment lines (if any defined).
-      2. Check for and extract a leading label (e.g., L1:). Store label without the colon.
-      3. **(Crucial!)** Based on the **actual, observed format** of your A7 TAC output (delimiters, operand order), split the remaining string into components. (Refer to `A8_Prep_Findings.md`, Section 2, for specific observed formats including `START PROC Name` and operand representation like `_BP-N` vs. `[bp+/-N]`.)
-      4. Identify the opcode (usually the first component after the label, or the first component if no label).
-      5. Map the remaining components to op1, op2, dest based on the *known format* of the specific opcode. Define expected patterns clearly (e.g., for `dest = op1 op op2`, order might be dest, op1, op2 after `=`; for `wrs Label`, just op1=Label; for `proc Name`, dest=Name).
-      6. Handle instructions with varying numbers of operands gracefully (e.g., `wrln` has none, `push @Var` has one, `add` has three).
-    * **Output:** Populated TACInstruction instance. Raise an error for unparseable lines.
+  * `__init__` (as defined in `ParsedTACInstruction`)
+  * `@staticmethod TACOpcode.from_string(s: str) -> TACOpcode`: Used by parser to map string opcodes.
+  * The parsing logic itself (`from_tac_line`) resides in `TACParser.py`.
+    * **Crucial Parsing Aspects (handled by `TACParser`):**
+      1. Strip leading/trailing whitespace, handle comments.
+      2. Extract leading labels (e.g., `L1:`).
+      3. Split remaining string into components based on observed TAC format.
+      4. Identify opcode string, convert to `TACOpcode` enum.
+      5. Map remaining components to `destination`, `operand1`, `operand2` as `TACOperand` objects, based on the opcode.
+      6. Handle instructions with varying numbers of operands.
 
 ### **2.2. TACParser Class**
 
-* **File:** tac_parser.py
-* **Purpose:** Read the entire .tac file and produce a list of TACInstruction objects.
+* **File:** `tac_parser.py`
+* **Purpose:** Read the entire .tac file and produce a list of `ParsedTACInstruction` objects.
 * **Attributes:**
   * tac_filepath: str
 * **Methods:**
   * ``__init__``(self, tac_filepath: str): Stores file path.
-  * parse(self) -> List[TACInstruction]:
+  * parse(self) -> List[ParsedTACInstruction]:
     * **Action:**
       1. Open tac_filepath for reading. Handle FileNotFoundError.
       2. Initialize an empty list instructions.
@@ -66,130 +66,110 @@ This document provides a detailed plan for the 8086 assembly code generation mod
 
 ### **2.3. DataSegmentManager Class**
 
-* **File:** data_segment_manager.py
-* **Purpose:** Collect definitions for the .data segment (globals, strings) by analyzing the TAC and symbol table. Generate the final .data section assembly code.
+* **File:** `data_segment_manager.py`
+* **Purpose:** Collect definitions for the .data segment (globals, strings) by analyzing the symbol table and the provided string literals map. Generate the final .data section assembly code.
 * **Attributes:**
-  * symbol_table: SymbolTable
-  * global_vars: Set[str] (Stores unique lexemes of depth 1 variables)
-  * string_literals: Dict[str, str] (Maps label like _S0 to string value like "Prompt$")
+  * `symbol_table: SymbolTable`
+  * `global_vars: Dict[str, Symbol]` (Stores unique global variable Symbols of depth 1)
+  * `string_literals_map: Dict[str, str]` (Provided map: label like _S0 to raw string value like "Prompt")
 * **Methods:**
-  * ``__init__``(self, symbol_table: SymbolTable): Stores symbol_table, initializes empty global_vars set and string_literals dict.
-  * collect_definitions(self, instructions: List[TACInstruction]):
-    * **Input:** List of all TACInstruction objects.
+  * `__init__(self, symbol_table: SymbolTable, string_literals_map: Dict[str, str])`: Stores references.
+  * `collect_definitions(self)`: (Renamed from `collect_definitions_from_tac` in actual code for simplicity here)
     * **Action:**
-      1. Iterate through instructions.
-      2. For each operand (op1, op2, dest) that is not None and looks like an identifier (not immediate, not [bp...], not _S...):
-         * entry = self.symbol_table.lookup(operand) (Need context if names can be reused across scopes, but globals should be unique).
-         * If entry found and entry.depth == 1 and it's a variable (not procedure name): Add entry.lexeme to self.global_vars.
-      3. If instr.opcode == 'wrs' (or equivalent):
-         * Assume instr.op1 is the string label (e.g., _S0).
-         * entry = self.symbol_table.lookup(instr.op1)
-         * If entry found and represents a stored string literal:
-           * Retrieve the actual string value (e.g., from entry.value).
-           * Ensure the value includes the $ terminator (this should ideally be added when stored in SymTable during TAC generation).
-           * Store self.string_literals[instr.op1] = entry.value.
-         * Else: Raise an error (string label not found in symbol table).
-  * get_data_section_asm(self) -> List[str]:
+      1. Iterate through `self.symbol_table` for entries with `depth == 1` and `entry_type == EntryType.VARIABLE` (or other global data types). Add to `self.global_vars`.
+      2. String literals are already provided via `self.string_literals_map`.
+  * `get_data_section_asm(self) -> List[str]:`
     * **Action:**
-      1. Initialize asm_lines = [".data"].
-      2. For var_name in sorted(list(self.global_vars)): (Sorting provides consistent output order)
-         * Handle potential c -> cc rename if needed based on the stored lexeme.
-         * Append f" {renamed_var_name:<8} DW ?".
-      3. For label, value in sorted(self.string_literals.items()):
-         * Append f"{label:<8} DB \"{value}\"".
-    * **Output:** List of assembly lines for the .data section.
+      1. Initialize `asm_lines = [".DATA"]`.
+      2. For `var_name`, `symbol_entry` in sorted `self.global_vars.items()`:
+         * Handle `c` -> `cc` rename if `var_name == 'c'`.
+         * Append `f"    {renamed_var_name:<8} DW ?"`.
+      3. For `label`, `raw_value` in sorted `self.string_literals_map.items()`:
+         * Append `f"    {label:<8} DB \"{raw_value}$\""`. (Ensures `$` termination)
 
 ### **2.4. ASMOperandFormatter Class**
 
-* **File:** asm_operand_formatter.py
+* **File:** `asm_operand_formatter.py`
 * **Purpose:** The critical translator for converting a single TAC operand string into its final 8086 assembly representation.
 * **Attributes:**
-  * symbol_table: SymbolTable
+  * `symbol_table: SymbolTable`
 * **Methods:**
-  * ``__init__``(self, symbol_table: SymbolTable): Stores symbol table reference.
-  * format_operand(self, tac_operand: str, current_proc_name: Optional[str] = None) -> str:
-    * **Input:** TAC operand string, optional name of the procedure currently being processed (for scoped lookups).
+  * `__init__(self, symbol_table: SymbolTable)`: Stores symbol table reference.
+  * `format_operand(self, tac_operand: Optional[str], context_opcode: Optional[TACOpcode] = None) -> str:`
+    * **Input:** TAC operand string, optional `TACOpcode` for context (e.g., `WRITE_STR`).
     * **Action (Detailed Logic):**
       1. **Handle None/Empty:** If tac_operand is None or empty, return empty string or raise error.
       2. **Immediate Check:** Use try-except or regex to check if tac_operand is an integer literal. If yes, return it as a string.
-      3. **BP-Relative Check:** Check if tac_operand starts with "[bp" (or _bp if that's the TAC format). If yes:
-         * *If TAC uses internal offsets (e.g., _bp+0, _bp+2):* Parse the offset value. Look up the operand name (if needed, might not be present in TAC) or use context to determine if it was a parameter. Calculate the final offset (e.g., local 0 -> -2, param 2 -> +6). Return formatted f"[bp{sign}{offset}]".
-         * *If TAC already uses final offsets (e.g., [bp-2], [bp+6]):* Validate the format and return it directly.
-         * **Decision:** Assume TAC uses an internal representation like _bp+Offset or just the variable name, requiring lookup and translation here.
-      4. **String Label Check:** If tac_operand matches the string label pattern (e.g., `_S` followed by a number): Return f"OFFSET {tac_operand}".
-      5. **Identifier/Temp Lookup:** If none of the above, assume it's a variable or temporary name.
-         * entry = self.symbol_table.lookup(tac_operand, context=current_proc_name) (Handle KeyError or equivalent if not found).
-         * Apply c -> cc rename if entry.lexeme == 'c'. Store the potentially renamed lexeme.
-         * If entry.depth == 1: Return the (potentially renamed) entry.lexeme.
-         * If entry.depth >= 2:
-           * Retrieve offset = entry.offset and is_param = entry.isParameter.
+      3. **BP-Relative Check:** Handles if `tac_operand` is already `[bp+/-X]`.
+      4. **String Label Check:** If `tac_operand` matches `_S<num>`:
+         * If `context_opcode == TACOpcode.WRITE_STR`, return `f"OFFSET {tac_operand}"`.
+         * Else, return `tac_operand` (as other contexts might need just the label).
+      5. **Identifier/Temp Lookup:** (Using `symbol_table.lookup`)
+         * Apply `c` -> `cc` rename.
+         * If `entry.depth == 1` (Global): Return name.
+         * If `entry.depth >= 2` (Local/Param/Temp):
+           * Retrieve `offset`, `entry_type == EntryType.PARAMETER`.
            * **Translate Internal Offset to 8086 Offset:**
-             * *(Verify!)* Cross-reference your specific stack frame documentation (`Notes/Semantic Analysis.md`, `Notes/Symbol Tables.md`) for exact layout.
-             * If is_param: asm_offset = offset + 4 (Assuming internal param offsets start at 0, first param is at [bp+4] after RetAddr(+2) and OldBP(+0)). Example: offset 0 -> +4, offset 2 -> +6.
-             * Else (local/temp): asm_offset = -(offset + 2) (Assuming internal local/temp offsets start at 0, first local is at [bp-2] after OldBP(+0)). Example: offset 0 -> -2, offset 2 -> -4.
-           * Return formatted f"[bp{'+' if asm_offset > 0 else ''}{asm_offset}]".
+             * If parameter: `asm_offset = internal_offset + 4`. (e.g., internal offset 0 is `[bp+4]`)
+             * Else (local/temp): `asm_offset = -(internal_offset + 2)`. (e.g., internal offset 0 is `[bp-2]`)
+           * Return formatted `f"[bp{sign}{asm_offset}]"`.
       6. **Error:** If lookup fails or type is unexpected, raise an informative error including the tac_operand and line_number (if available).
     * **Output:** The assembly operand string (e.g., "10", "[bp-4]", "[bp+6]", "myGlobal", "OFFSET _S0", "cc").
 
 ### **2.5. ASMInstructionMapper Class**
 
-* **File:** asm_instruction_mapper.py
+* **File:** `asm_instruction_mapper.py`
 * **Purpose:** Provides the specific 8086 assembly instruction sequences (templates) for each TAC opcode.
 * **Attributes:**
-  * symbol_table: SymbolTable
+  * `symbol_table: SymbolTable`
+  * `formatter: ASMOperandFormatter`
+  * `generator: ASMGenerator` (or its relevant helper methods/properties, for `is_immediate`, `is_param_address`, etc.)
 * **Methods:**
-  * ``__init__``(self, symbol_table: SymbolTable): Stores symbol table reference.
-  * **translate_*(self, instr: TACInstruction, formatter: ASMOperandFormatter) -> List[str]:** (One per opcode)
-    * **translate_assign(self, instr, formatter):**
-      * dest = formatter.format_operand(instr.dest, ...)
-      * src = formatter.format_operand(instr.op1, ...)
-      * Return [f" mov ax, {src}", f" mov {dest}, ax"] (Handle potential immediate source differently if needed: mov {dest}, {src}).
-      * **Note on Dereferencing:** If `dest` corresponds to a reference parameter (e.g., looks like `[bp+N]` from formatter), the sequence should be: `mov bx, dest_address_from_[bp+N]; mov ax, src; mov [bx], ax`. Similarly, if `src` is a reference parameter: `mov bx, src_address_from_[bp+N]; mov ax, [bx]; mov dest, ax`.
-    * **translate_add(self, instr, formatter):**
-      * dest = formatter.format_operand(instr.dest, ...)
-      * op1 = formatter.format_operand(instr.op1, ...)
-      * op2 = formatter.format_operand(instr.op2, ...)
-      * Return [f" mov ax, {op1}", f" add ax, {op2}", f" mov {dest}, ax"]
-      * **Note on Dereferencing:** Similar logic applies if operands or destination are reference parameters (load address to BX, use `[bx]` for operation, store result via `[bx]` if dest is reference).
-    * **translate_mul(self, instr, formatter):** (Similar to add, using mov bx, op2, imul bx, apply dereferencing logic)
-    * **translate_proc(self, instr, formatter):**
-      * proc_name = instr.dest
-      * proc_info = self.symbol_table.lookup(proc_name)
-      * size_locals = proc_info.size_of_locals
-      * Return [f"{proc_name} PROC", f" push bp", f" mov bp, sp", f" sub sp, {size_locals}"]
-    * **translate_endp(self, instr, formatter):**
-      * proc_name = instr.dest
-      * proc_info = self.symbol_table.lookup(proc_name)
-      * size_locals = proc_info.size_of_locals
-      * size_params = proc_info.size_of_params
-      * Return [f" add sp, {size_locals}", f" pop bp", f" ret {size_params}", f"{proc_name} ENDP"]
-    * **translate_call(self, instr, formatter):**
-      * proc_name = instr.dest (or op1 depending on TAC format)
-      * Return [f" call {proc_name}"]
-    * **translate_push(self, instr, formatter):** (Pass by Value)
-      * value_op = formatter.format_operand(instr.op1, ...)
-      * Return [f" mov ax, {value_op}", f" push ax"] (Handle immediate push directly: push {value_op})
-    * **translate_push_ref(self, instr, formatter):** (Pass by Reference)
-      * var_name = instr.op1 # Assumes op1 is the variable *name* before formatting
-      * address_op = f"offset {var_name}" # Generate OFFSET format directly
-      * Return [f" mov ax, {address_op}", f" push ax"]
-    * **translate_wrs(self, instr, formatter):**
-      * label_op = formatter.format_operand(instr.op1, ...) # Should return "OFFSET _S0"
-      * Return [f" mov dx, {label_op}", f" call writestr"]
-    * **translate_wri(self, instr, formatter):**
-      * address_op = formatter.format_operand(instr.op1, ...) # e.g., "[bp-6]"
-      * register = "ax" # Confirmed from io.asm conventions (expects integer in AX).
-      * Return [f" mov {register}, {address_op}", f" call writeint"]
-    * **translate_rdi(self, instr, formatter):**
-      * address_op = formatter.format_operand(instr.dest, ...) # e.g., "[bp-2]"
-      * Return [f" call readint", f" mov {address_op}, bx"] # readint returns in BX
-    * **translate_wrln(self, instr, formatter):**
-      * Return [f" call writeln"]
-    * *(Add methods for other ops like SUB, potentially control flow if needed)*
+  * `__init__(self, symbol_table: SymbolTable, logger_instance: Logger, asm_generator_instance: ASMGenerator)`: Initializes attributes, including `self.formatter`.
+  * **`translate_*(self, instr: ParsedTACInstruction) -> List[str]:`** (One per opcode, takes `ParsedTACInstruction`)
+    * Operands are accessed from `instr.destination`, `instr.operand1`, `instr.operand2`.
+    * Formatting uses `self.formatter.format_operand(str(operand.value), instr.opcode)`.
+    * **`_translate_assign`:** (Conceptual) `mov ax, formatted_src; mov formatted_dest, ax`. Actual implementation in `DataMovTranslators` handles dereferencing for ref params (using `_is_param_address` helper from `generator` and `bx`) and mem-to-mem.
+    * **`_translate_add`, `_translate_mul`:** (Conceptual) `mov ax, op1; op ax, op2; mov dest, ax`. Actual implementation in `ArithmeticTranslators` handles dereferencing.
+    * **`_translate_proc_begin` (for `PROC_BEGIN Name`):**
+      * `proc_name = instr.destination.value`
+      * `proc_info = self.symbol_table.lookup_globally(proc_name)`
+      * `size_locals = proc_info.total_locals_size` (Must include temps)
+      * Return `[f"{proc_name} PROC NEAR", "PUSH BP", "MOV BP, SP", f"SUB SP, {size_locals}"]` (if size_locals > 0)
+    * **`_translate_proc_end` (for `PROC_END Name`):**
+      * `proc_name = instr.destination.value`
+      * `proc_info = self.symbol_table.lookup_globally(proc_name)`
+      * `size_locals = proc_info.total_locals_size`
+      * `size_params_bytes = proc_info.total_params_size`
+      * Return `["MOV SP, BP" (if size_locals > 0), "POP BP", f"RET {size_params_bytes}", f"{proc_name} ENDP"]`
+    * **`_translate_call` (for `CALL ProcName, NumParams`):**
+      * `proc_name = instr.operand1.value`
+      * `num_params_val = int(instr.operand2.value)`
+      * Assembly: `CALL {proc_name}` followed by `ADD SP, {num_params_val * 2}` if `num_params_val > 0`.
+    * **`_translate_param` (for `PARAM Operand`):**
+        * `param_operand_str = str(instr.operand1.value)`
+        * `is_address_of = instr.operand1.is_address_of`
+        * If `is_address_of`:
+            * Look up `param_operand_str`. If global: `push OFFSET {global_name}`.
+            * If local: `lea ax, {formatted_local_addr}; push ax`.
+        * Else (pass by value):
+            * `value_op_asm = self.formatter.format_operand(param_operand_str, instr.opcode)`
+            * `push {value_op_asm}` (Direct push of value/memory location).
+    * **`_translate_write_str` (for `WRITE_STR Label`):**
+      * `label_op = self.formatter.format_operand(str(instr.operand1.value), instr.opcode)` (should return "OFFSET _S0")
+      * Return `[f"MOV DX, {label_op}", "CALL writestr"]`
+    * **`_translate_write_int` (for `WRITE_INT Value`):**
+      * `value_asm = self.formatter.format_operand(str(instr.operand1.value), instr.opcode)`
+      * Return `[f"MOV AX, {value_asm}", "CALL writeint"]` (Value in `AX`)
+    * **`_translate_read_int` (for `READ_INT Dest`):**
+      * `dest_asm = self.formatter.format_operand(str(instr.destination.value), instr.opcode)`
+      * Return `["CALL readint", f"MOV {dest_asm}, BX"]` (Result from `BX`)
+    * **`_translate_write_newline` (for `WRITE_NEWLINE`):**
+      * Return `["CALL writeln"]`
 
 ### **2.6. ASMGenerator Class (Orchestrator)**
 
-* **File:** asm_generator.py
+* **File:** `asm_generator.py`
 * **Purpose:** Coordinates the entire process, uses the other components.
 * **Attributes:** As defined previously (paths, symbol table, instances of other components, start proc name).
 * **Methods:**
@@ -202,12 +182,12 @@ This document provides a detailed plan for the 8086 assembly code generation mod
       4. Initializes code_lines = [].
       5. Sets current_proc_context = None.
       6. Iterates through instructions:
-         * Handles labels (code_lines.append(f"{instr.label}:")).
-         * Handles start directive (stores instr.op1 in self.start_proc_name).
-         * Handles proc (sets current_proc_context, calls mapper.translate_proc).
-         * Handles endp (calls mapper.translate_endp, clears current_proc_context).
-         * For all other opcodes, looks up the appropriate mapper.translate_* method (e.g., using getattr or a dispatch dictionary) and calls it, passing instr and self.formatter. Appends results to code_lines.
-      7. Calls self._generate_main_entry() to get main_lines.
+         * Handles labels (e.g., `code_lines.append(f"{instr.label}:")` if `instr.label` exists).
+         * Handles `PROGRAM_START` (stores `instr.destination.value` in `self.user_main_procedure_name`).
+         * Handles `PROC_BEGIN` (sets `current_procedure_context`, calls `mapper._translate_proc_begin`).
+         * Handles `PROC_END` (calls `mapper._translate_proc_end`, clears `current_procedure_context`).
+         * For all other opcodes, calls `self.instruction_mapper.translate(instr)`. Appends results to `code_lines`.
+      7. Calls `self._generate_dos_program_shell()` to get main ASM entry.
       8. Assembles the final list of strings: Boilerplate + data_lines + .code + include io.asm + code_lines + main_lines + END main_label.
       9. Writes the result to self.asm_filepath.
   * _generate_main_entry(self) -> List[str]:
@@ -242,16 +222,13 @@ These decisions clarify and, where conflicting, supersede prior design details w
     * Orchestrates the entire TAC to ASM conversion process.
     * Manages construction of `.data` (globals, strings) and `.code` segments.
     * Generates full procedure prologues (including `PUSH BP; MOV BP, SP; SUB SP, <size>`) and epilogues (`MOV SP, BP; POP BP; RET <param_bytes>`).
-    * Includes a crucial helper method: `get_operand_asm(tac_operand_str, current_procedure_symbol_table_entry)` to translate TAC operands (variables, temporaries, literals, `_BP` offsets) into their correct assembly address string (e.g., `var_label`, `[BP-4]`, `[BP+6]`, `123`). This requires access to symbol table information to determine scope and type.
+    * Includes a crucial helper method `get_operand_asm` (now `ASMOperandFormatter.format_operand`) to translate TAC operands into their correct assembly address string.
     * (Ref: `A8_Refined_Recommendations.md` - Point E)
 
 4. **Interaction with `ASMInstructionMapper`:**
-    * `ASMGenerator` iterates through parsed TAC instructions.
+    * `ASMGenerator` iterates through parsed TAC instructions (`ParsedTACInstruction` objects).
     * For each `ParsedTACInstruction`, it invokes the appropriate mapping method on an `ASMInstructionMapper` instance.
     * `ASMInstructionMapper` returns a list of ASM instruction strings, which `ASMGenerator` appends to the `.code` segment output.
-    * (Ref: `A8_Refined_Recommendations.md` - Point F)
-
-5. **Handling of String Literals:**
-    * `ASMGenerator` receives a map of string labels to string values (e.g., `{"_S0": "Hello"}`) from its caller (`JohnA8.py`).
-    * It uses this map to generate `DB` directives in the `.data` segment (e.g., `_S0 DB "Hello",0`).
+    * `ASMGenerator` receives a map of string labels to string values (e.g., `{"_S0": "Hello"}` - raw value without `$`) from its caller (`JohnA8.py`).
+    * It uses this map (passing it to `DataSegmentManager`) to generate `DB` directives in the `.data` segment (e.g., `_S0 DB "Hello$"` - `$` added during generation).
     * (Ref: `A8_Refined_Recommendations.md` - Point G)

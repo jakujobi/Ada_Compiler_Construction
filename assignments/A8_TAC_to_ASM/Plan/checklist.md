@@ -67,8 +67,7 @@ This checklist breaks down the implementation into verifiable steps. It is guide
 * **[X] Update `Driver.py` / `JohnA8.py`:**
 
   * [X] Ensure *final, populated* `SymbolTable` instance is available for later phases.
-
-  * *Note: Adding the `ASMGenerator` call happens later (Phase 1/2).*
+  * [X] Call to `ASMGenerator` and its `generate_asm` method integrated. Command line arguments for ASM output file handled.
   * Done
 
 ## Phase 1: Foundational ASM Generator Components
@@ -99,7 +98,7 @@ This checklist breaks down the implementation into verifiable steps. It is guide
   * [ ] Implement `__init__(tac_filepath, asm_filepath, symbol_table)`. Instantiate `TACParser`, `DataSegmentManager`, `ASMOperandFormatter`.
   * [ ] Implement `_generate_main_entry()` returning *static minimal* `main PROC`.
   * [ ] Implement `generate_asm()`: Call parser & data manager; write boilerplate, `.data`, `.code`, `include`, minimal `main`, `END main`.
-  * [ ] **Modify `Driver.py` / `JohnA8.py`:** Add call to instantiate & run `ASMGenerator.generate_asm()` after TAC gen, passing paths & populated `SymbolTable`.
+  * [X] **Modify `Driver.py` / `JohnA8.py`:** Add call to instantiate & run `ASMGenerator.generate_asm()` after TAC gen, passing paths & populated `SymbolTable`.
   * [ ] **Verify (Integration):** Run Driver on simple Ada->TAC->ASM (globals only). Check `.asm` created. Inspect boilerplate, `.data`, `include`, `main`. **Assemble `.asm` with MASM/TASM - verify no errors.**
 
 ## Phase 3: Basic Procedures & Global Assignments
@@ -121,14 +120,14 @@ This checklist breaks down the implementation into verifiable steps. It is guide
 ## Phase 4: Locals, Temps & Arithmetic
 
 * **Goal:** Implement `[bp+/-X]` addressing and `+`, `*` translation.
-* **[ ] Enhance `ASMOperandFormatter.format_operand`:**
-  * [ ] **Implement:** Full logic for depth >= 2: Retrieve `offset`, `isParameter`. Translate internal offset to `[bp+/-X]` (**Double-check calc against stack docs!**). Handle `c`->`cc`.
-  * [ ] **Verify:** Unit test `format_operand` extensively for locals, params, temps (`[bp-...]`, `[bp+...]`).
-* **[ ] Enhance `ASMInstructionMapper`:**
-  * [ ] Implement `translate_add`: `mov ax, op1; add ax, op2; mov dest, ax`. Format operands.
-  * [ ] Implement `translate_mul`: `mov ax, op1; mov bx, op2; imul bx; mov dest, ax`. Format operands.
-  * [ ] Update `translate_assign` for stack variables using enhanced formatter.
-  * [ ] **Verify:** Unit test `translate_add/mul`. Re-test `translate_assign` with stack vars.
+* **[X] Enhance `ASMOperandFormatter.format_operand`:**
+  * [X] **Implement:** Full logic for depth >= 2: Retrieve `offset`, `isParameter`. Translate internal offset to `[bp+/-X]` (**Double-check calc against stack docs!**). Handle `c`->`cc`.
+  * [X] **Verify:** Unit test `format_operand` extensively for locals, params, temps (`[bp-...]`, `[bp+...]`). *(Tests passed)*
+* **[X] Enhance `ASMInstructionMapper`:**
+  * [X] Implement `translate_add`: `mov ax, op1; add ax, op2; mov dest, ax`. Format operands. *(Dereferencing for reference parameters implemented)*
+  * [X] Implement `translate_mul`: `mov ax, op1; mov bx, op2; imul bx; mov dest, ax`. Format operands. *(Dereferencing for reference parameters implemented)*
+  * [-] Update `translate_assign` for stack variables using enhanced formatter. *(Dereferencing for reference parameters implemented, but unit tests for data movement translators are currently failing)*
+  * [-] **Verify:** Unit test `translate_add/mul`. Re-test `translate_assign` with stack vars. *(Arithmetic translator tests need update for pass-by-ref. Data movement translator tests updated but failing)*
 * **[ ] Enhance `ASMGenerator.generate_asm()`:** Add handling for `+`, `*` opcodes (if separate from `=`).
 * **[ ] Verify (Integration):** Run Driver (Ada->ASM) with locals, temps, arithmetic. Inspect `.asm` for correct `[bp...]` usage & arithmetic sequences. Assemble & Run (use I/O or debugger to check results).
 
@@ -158,7 +157,7 @@ This checklist breaks down the implementation into verifiable steps. It is guide
 * **Goal:** Implement integer input (`rdi`) and pass-by-reference (`push @`, dereferencing).
 * **[ ] Implement `ASMInstructionMapper.translate_rdi`:** Format address operand. Generate `call readint; mov AddressOperand, bx`. Verify via unit test.
 * **[ ] Implement `ASMInstructionMapper.translate_push_ref`:** Assume TAC `push @VarName`. Generate `mov ax, offset VarName; push ax`. (*Verify MASM `offset` works for stack vars; revisit if needed*). Verify via unit test.
-* **[ ] Enhance `ASMInstructionMapper` (Dereferencing):** Modify `assign/add/mul` to handle reference params: load address `mov bx, [bp+N]`, use `[bx]` for loads/stores. **Verify via unit tests** covering ref param cases.
+* **[-] Enhance `ASMInstructionMapper` (Dereferencing):** Modify `assign/add/mul` to handle reference params: load address `mov bx, [bp+N]`, use `[bx]` for loads/stores. **Verify via unit tests** covering ref param cases. *(Dereferencing logic implemented for assign, add, sub, mul, uminus, not. Unit tests for assign (data mov) updated but failing. Arithmetic unit tests need updating for these changes.)*
 * **[ ] Enhance `ASMGenerator.generate_asm()`:** Add handling for `rdi` & `push @`.
 * **[ ] Verify (Integration):** Run Driver (Ada->ASM) for Test Case 5 equiv. Inspect `push offset`, `ret N`, `call readint`, `mov Address, bx`, dereferencing (`mov bx, [bp+N]; ... [bx] ...`). Assemble, run, provide input, verify caller variable modified.
 
