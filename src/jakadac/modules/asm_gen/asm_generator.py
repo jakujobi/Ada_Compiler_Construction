@@ -87,31 +87,42 @@ class ASMGenerator:
         for instr in self.parsed_tac:
             if instr.opcode == TACOpcode.PROGRAM_START:
                 if self.user_main_procedure_name:
-                    self.logger.error(f"Multiple PROGRAM_START directives found. First: '{self.user_main_procedure_name}', additional: '{instr.dest}'. This is not supported.")
+                    self.logger.error(f"Multiple PROGRAM_START directives found. First: '{self.user_main_procedure_name}', additional: '{instr.destination.value if instr.destination else None}'. This is not supported.")
                     return False
-                self.user_main_procedure_name = instr.dest
+                if instr.destination and isinstance(instr.destination.value, str):
+                    self.user_main_procedure_name = instr.destination.value
+                else:
+                    self.logger.error(f"PROGRAM_START TAC at line {instr.line_number} is missing procedure name in destination operand.")
+                    return False
                 
-                if current_proc_name and current_proc_instructions: # Save any preceding proc
+                if current_proc_name and current_proc_instructions: 
                     _procedures_tac[current_proc_name] = current_proc_instructions
                 
-                current_proc_name = instr.dest # Main program starts here
-                current_proc_instructions = [instr] # Start with PROGRAM_START itself
+                current_proc_name = self.user_main_procedure_name 
+                current_proc_instructions = [instr] 
             
             elif instr.opcode == TACOpcode.PROC_BEGIN:
-                if current_proc_name and current_proc_instructions: # Save previous proc
+                if current_proc_name and current_proc_instructions: 
                      _procedures_tac[current_proc_name] = current_proc_instructions
-                current_proc_name = instr.dest
-                current_proc_instructions = [instr] # Start with PROC_BEGIN itself
+                if instr.destination and isinstance(instr.destination.value, str):
+                    current_proc_name = instr.destination.value
+                else:
+                    self.logger.error(f"PROC_BEGIN TAC at line {instr.line_number} is missing procedure name in destination operand.")
+                    return False
+                current_proc_instructions = [instr] 
 
             elif instr.opcode == TACOpcode.PROC_END:
+                proc_name_from_instr = instr.destination.value if instr.destination and isinstance(instr.destination.value, str) else None
                 if current_proc_name:
-                    current_proc_instructions.append(instr) # Include PROC_END
+                    if proc_name_from_instr and proc_name_from_instr != current_proc_name:
+                        self.logger.error(f"PROC_END name '{proc_name_from_instr}' does not match current procedure '{current_proc_name}' at line {instr.line_number}.")
+                    current_proc_instructions.append(instr) 
                     _procedures_tac[current_proc_name] = current_proc_instructions
-                    current_proc_name = None # Reset for next procedure
+                    current_proc_name = None 
                     current_proc_instructions = []
                 else:
-                    self.logger.error(f"Found PROC_END ('{instr.dest}') without a preceding PROC_BEGIN or PROGRAM_START at line {instr.line_number}.")
-                    return False # Or handle as a non-fatal warning if appropriate
+                    self.logger.error(f"Found PROC_END ('{proc_name_from_instr}') without a preceding PROC_BEGIN or PROGRAM_START at line {instr.line_number}.")
+                    return False 
             
             elif current_proc_name: # Regular instruction within a procedure
                 current_proc_instructions.append(instr)
@@ -503,7 +514,7 @@ class ASMGenerator:
         final_asm_lines.append("END start")
 
         try:
-            with open(self.asm_filepath, 'w') as f:
+            with open(self.asm_filepath, 'w', encoding='utf-8') as f:
                 for line in final_asm_lines:
                     f.write(line + "\n") # Corrected newline character
             self.logger.info(f"ASM file successfully written to: {self.asm_filepath}")

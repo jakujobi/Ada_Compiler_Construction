@@ -12,9 +12,9 @@ src_root = repo_root / "src"
 if str(src_root) not in sys.path:
     sys.path.insert(0, str(src_root))
 
-from jakadac.modules.SymTable import SymbolTable, EntryType
+from jakadac.modules.SymTable import SymbolTable, EntryType, Symbol
 from jakadac.modules.asm_gen.asm_generator import ASMGenerator
-from jakadac.modules.asm_gen.tac_instruction import ParsedTACInstruction, TACOpcode
+from jakadac.modules.asm_gen.tac_instruction import ParsedTACInstruction, TACOpcode, TACOperand
 from jakadac.modules.Logger import Logger # Import Logger for spec
 
 # Patches for dependencies OF ASMGenerator that have module-level loggers
@@ -28,13 +28,18 @@ class TestASMGenerator(unittest.TestCase):
         self.mock_symbol_table.global_scope_name = "global"
         self.mock_symbol_table.symbols = {"global": {}}
         
-        # Mock lookup_globally to return a mock symbol that looks like a procedure
-        mock_main_proc_symbol = MagicMock()
-        mock_main_proc_symbol.name = "mockMainProc" # Give it a name
-        mock_main_proc_symbol.entry_type = EntryType.PROCEDURE # Crucial for generate_asm logic
-        mock_main_proc_symbol.local_size = 0 
-        mock_main_proc_symbol.param_size = 0 # Add param_size as it might be accessed
-        self.mock_symbol_table.lookup_globally = MagicMock(return_value=mock_main_proc_symbol)
+        # Mock lookup_globally to be flexible for different procedure names
+        def flexible_lookup_globally(proc_name_being_looked_up):
+            mock_proc_sym = MagicMock(spec=Symbol) # Use spec for Symbol from SymTable.py
+            mock_proc_sym.name = proc_name_being_looked_up 
+            mock_proc_sym.entry_type = EntryType.PROCEDURE 
+            mock_proc_sym.local_size = 0 
+            mock_proc_sym.param_size = 0 
+            # Add other attributes of a Symbol entry if generate_asm or its callees need them.
+            # For example, if it needs a defined label attribute for the proc.
+            # mock_proc_sym.label = proc_name_being_looked_up 
+            return mock_proc_sym
+        self.mock_symbol_table.lookup_globally = MagicMock(side_effect=flexible_lookup_globally)
 
         self.tac_filepath = "dummy.tac"
         self.asm_filepath = "dummy.asm"
@@ -95,39 +100,46 @@ class TestASMGenerator(unittest.TestCase):
     # Test name and logic updated to match ASMGenerator methods
     # REMOVED: mock_asm_gen_logger
     def test_generate_dos_program_shell_no_user_main(self, mock_op_form_logger, mock_data_mgr_logger, mock_tac_parse_logger):
-        # UPDATED: ASMGenerator instantiation
         generator = ASMGenerator(self.tac_filepath, self.asm_filepath, self.mock_symbol_table, self.mock_string_literals_map, self.mock_logger_for_asm_gen)
-        # user_main_procedure_name would be None if _parse_and_prepare didn't find PROGRAM_START
         generator.user_main_procedure_name = None 
-        # _generate_dos_program_shell takes the determined main label as arg.
-        shell = generator._generate_dos_program_shell("main") # "main" is the fallback from generate_asm
-        self.assertIn("main PROC", "\\n".join(shell))
-        self.assertIn("main ENDP", "\\n".join(shell))
-        # UPDATED: logger assertion (message from ASMGenerator source)
-        self.mock_logger_for_asm_gen.warning.assert_any_call("No user main procedure name specified for DOS shell, using 'main'. Ensure this is intended.")
+        # The method _generate_dos_program_shell itself determines the fallback.
+        # The argument to it in generate_asm is what we need to align with.
+        # If user_main_procedure_name is None, generate_asm calls _generate_dos_program_shell("main")
+        shell_output = "\\n".join(generator._generate_dos_program_shell("main")) 
+        
+        self.assertIn("start PROC", shell_output) 
+        self.assertIn("CALL main", shell_output)   
+        self.assertIn("start ENDP", shell_output)
+        self.mock_logger_for_asm_gen.info.assert_any_call("Generated DOS program shell. Entry point: 'start', User main: 'main'.")
 
     # REMOVED: mock_asm_gen_logger
     def test_generate_dos_program_shell_with_user_main(self, mock_op_form_logger, mock_data_mgr_logger, mock_tac_parse_logger):
-        # UPDATED: ASMGenerator instantiation
         generator = ASMGenerator(self.tac_filepath, self.asm_filepath, self.mock_symbol_table, self.mock_string_literals_map, self.mock_logger_for_asm_gen)
-        generator.user_main_procedure_name = "AppStart" # Set for the test
-        shell = generator._generate_dos_program_shell("AppStart")
-        self.assertIn("AppStart PROC", "\\n".join(shell))
-        self.assertIn("AppStart ENDP", "\\n".join(shell))
+        user_proc_name = "AppStart"
+        generator.user_main_procedure_name = user_proc_name # Set by _parse_and_prepare in real flow
+        shell_output = "\\n".join(generator._generate_dos_program_shell(user_proc_name))
+
+        self.assertIn("start PROC", shell_output) # Main DOS entry point
+        self.assertIn(f"CALL {user_proc_name}", shell_output)
+        self.assertIn("start ENDP", shell_output)
 
     # Test name and logic updated to match ASMGenerator methods (_parse_and_prepare)
     # REMOVED: mock_asm_gen_logger
     def test_parse_and_prepare_success(self, mock_op_form_logger, mock_data_mgr_logger, mock_tac_parse_logger):
-        mock_tac_parser_instance = MagicMock() 
-        mock_tac_parser_instance.parse_tac_file.return_value = [
-            ParsedTACInstruction(1, None, TACOpcode.PROGRAM_START, None, None, "MainProc")
-        ]
-        with patch('jakadac.modules.asm_gen.asm_generator.TACParser', return_value=mock_tac_parser_instance) as MockTACParserClass:
-            # UPDATED: ASMGenerator instantiation
+        mock_tac_parser_instance = MagicMock()
+        # Correctly set up ParsedTACInstruction: PROGRAM_START has proc name in destination.value
+        tac_instr = ParsedTACInstruction(
+            line_number=1, 
+            raw_line="PROGRAM_START MainProc", 
+            opcode=TACOpcode.PROGRAM_START, 
+            destination=TACOperand("MainProc")
+        )
+        mock_tac_parser_instance.parse_tac_file.return_value = [tac_instr]
+
+        with patch('jakadac.modules.asm_gen.asm_generator.TACParser', return_value=mock_tac_parser_instance):
             generator = ASMGenerator(self.tac_filepath, self.asm_filepath, self.mock_symbol_table, self.mock_string_literals_map, self.mock_logger_for_asm_gen)
-            self.assertTrue(generator._parse_and_prepare())
+            self.assertTrue(generator._parse_and_prepare(), msg="_parse_and_prepare should return True with valid PROGRAM_START")
             self.assertEqual(generator.user_main_procedure_name, "MainProc")
-            # UPDATED: logger assertion
             self.mock_logger_for_asm_gen.info.assert_any_call("TAC parsed successfully. Main Ada procedure: 'MainProc'.")
 
     # REMOVED: mock_asm_gen_logger
@@ -243,8 +255,9 @@ class TestASMGenerator(unittest.TestCase):
 
                     success = generator.generate_asm()
                     self.assertFalse(success)
-                    # UPDATED: logger assertion
-                    self.mock_logger_for_asm_gen.error.assert_called_with(f"Failed to write ASM output to {self.asm_filepath}: Disk full")
+                    # UPDATED: logger assertion to match actual error string
+                    # self.mock_logger_for_asm_gen.error.assert_called_with(f"Failed to write ASM output to {self.asm_filepath}: Disk full") # OLD
+                    self.mock_logger_for_asm_gen.error.assert_called_with(f"Failed to write ASM file '{self.asm_filepath}': Disk full") # CORRECTED
 
 if __name__ == '__main__':
     unittest.main()
