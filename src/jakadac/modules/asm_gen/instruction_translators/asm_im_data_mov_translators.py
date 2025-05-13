@@ -1,75 +1,106 @@
 # src/jakadac/modules/asm_gen/instruction_translators/asm_im_data_mov_translators.py
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
-    from ..asm_generator import ASMGenerator 
-    from ...Logger import Logger
-    from ...SymTable import SymbolTable # Added for self.symbol_table hint
-    from ..asm_instruction_mapper import ASMInstructionMapper
-    from ..tac_instruction import ParsedTACInstruction
+    from ..asm_generator import ASMGenerator # For type hinting active_procedure_context
+    from ...SymTable import Symbol # For type hinting active_procedure_symbol
+    # ASMOperandFormatter is available via self.formatter
     
 from ..tac_instruction import ParsedTACInstruction, TACOpcode
 
-class DataMovTranslators:
+class DataMovementTranslators:
     # self will be an instance of ASMInstructionMapper
-    # Required attributes from ASMInstructionMapper:
-    # self.logger: Logger
-    # self.asm_generator: ASMGenerator
-    # self.symbol_table: SymbolTable
 
-    def _translate_assign(self: 'ASMInstructionMapper', tac_instruction: 'ParsedTACInstruction') -> List[str]:
-        """
-        Translate TAC ASSIGN (dest = src) to 8086 assembly.
-        Handles dereferencing for pass-by-reference parameters.
-        Format: dest = src (e.g., x = y, x = 5, [bp-2] = _t1, [bp+4] = ax)
-        TAC Format: (ASSIGN, dest, src) or (ASSIGN, dest, op, src) for unary?
-                    Assuming (ASSIGN, dest, src) for simple assignment.
-        """
-        asm = []
-        # Check for missing operand VALUES
-        if tac_instruction.destination is None or tac_instruction.destination.value is None or \
-           tac_instruction.operand1 is None or tac_instruction.operand1.value is None:
-            self.logger.error(f"Invalid ASSIGN TAC: Missing destination or source value. Instruction: {tac_instruction}")
-            return [f"; ERROR: Invalid ASSIGN TAC (missing value): {tac_instruction.raw_line}"]
+    def _translate_assign(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates ASSIGN: dest = source"""
+        asm_lines = [f"; TAC: {tac_instruction.raw_line.strip()}"]
+        dest_operand = tac_instruction.destination
+        source_operand = tac_instruction.operand1 # In simple assign, source is operand1
+        active_proc_ctx = self.asm_generator.current_procedure_context
 
-        # Get formatted ASM operands
-        dest_asm = self.formatter.format_operand(str(tac_instruction.destination), tac_instruction.opcode)
-        src_asm = self.formatter.format_operand(str(tac_instruction.operand1), tac_instruction.opcode)
+        if not dest_operand or dest_operand.value is None or \
+           not source_operand or source_operand.value is None:
+            self.logger.error(f"ASSIGN TAC at line {tac_instruction.line_number} is missing destination or source value.")
+            return [f"; ERROR: Malformed ASSIGN TAC at line {tac_instruction.line_number}"]
 
-        # Check if operands are reference parameters
-        is_dest_ref = self._is_param_address(dest_asm)
-        is_src_ref = self._is_param_address(src_asm)
-        is_src_immediate = self.generator.is_immediate(src_asm)
+        dest_asm = self.formatter.format_operand(str(dest_operand.value), tac_instruction.opcode, active_procedure_symbol=active_proc_ctx)
+        source_asm = self.formatter.format_operand(str(source_operand.value), tac_instruction.opcode, active_procedure_symbol=active_proc_ctx)
 
-        asm.append(f"; TAC: {tac_instruction.destination} = {tac_instruction.operand1}")
+        # Avoid memory-to-memory MOV if both are memory operands (e.g. [BP-2] = [BP-4])
+        # Heuristic: if both start with \"[\"
+        is_dest_mem = dest_asm.startswith("[")
+        is_source_mem = source_asm.startswith("[")
 
-        # Step 1: Load source value into AX (handle dereference if needed)
-        if is_src_ref:
-            asm.append(f" mov bx, {src_asm} ; Load address of reference param source")
-            asm.append(f" mov ax, [bx]      ; Dereference source param into AX")
+        if is_dest_mem and is_source_mem:
+            asm_lines.append(f" mov ax, {source_asm}    ; Load source into AX (mem-to-mem workaround)")
+            asm_lines.append(f" mov {dest_asm}, ax   ; Store AX into destination")
+        elif dest_asm == source_asm:
+            asm_lines.append(f"; mov {dest_asm}, {source_asm} ; Redundant MOV, skipped")
+            self.logger.debug(f"ASSIGN {tac_instruction}: Skipped redundant mov {dest_asm}, {source_asm}")
         else:
-            # Check for direct memory-to-memory move, which is illegal
-            is_dest_mem = dest_asm.startswith('[') or not self.generator.is_register(dest_asm) and not self.generator.is_immediate(dest_asm)
-            is_src_mem = src_asm.startswith('[') or not self.generator.is_register(src_asm) and not self.generator.is_immediate(src_asm)
+            asm_lines.append(f" mov ax, {source_asm}    ; Load source value/address into AX") # General case: use AX
+            asm_lines.append(f" mov {dest_asm}, ax   ; Store AX into destination")
             
-            if is_dest_mem and is_src_mem and not is_dest_ref and not is_src_ref:
-                # Illegal memory-to-memory: Use AX as intermediate
-                 asm.append(f" mov ax, {src_asm}    ; Load source into AX (mem-to-mem workaround)")
-                 # AX now holds the source value for Step 2
-            else:
-                 # Can potentially move directly if destination is register or source is immediate/register
-                 # Or if one is memory and the other is not (handled below in Step 2)
-                 # For simplicity, we often use AX anyway. Let's load source into AX.
-                 asm.append(f" mov ax, {src_asm}    ; Load source value/address into AX")
+        self.logger.debug(f"Translated ASSIGN {tac_instruction} -> {asm_lines}")
+        return asm_lines
 
-        # Step 2: Store value from AX into destination (handle dereference if needed)
-        if is_dest_ref:
-            asm.append(f" mov bx, {dest_asm} ; Load address of reference param dest")
-            asm.append(f" mov [bx], ax      ; Store AX into dereferenced dest param")
-        else:
-            # If we didn't need AX as intermediate for mem-to-mem, this is direct store
-            # If we *did* use AX as intermediate, this stores AX to the final dest
-            asm.append(f" mov {dest_asm}, ax   ; Store AX into destination")
+    def _translate_array_assign_from(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates ARRAY_ASSIGN_FROM (Indexed Read): dest = array[index]"""
+        # TAC: (ARRAY_ASSIGN_FROM, dest, array_base_name, index_val_or_temp)
+        asm_lines = [f"; TAC: {tac_instruction.raw_line.strip()}"]
+        dest_operand = tac_instruction.destination
+        array_name_operand = tac_instruction.operand1 
+        index_operand = tac_instruction.operand2 
+        active_proc_ctx = self.asm_generator.current_procedure_context
 
-        return asm
+        if not all([dest_operand, array_name_operand, index_operand,
+                    dest_operand.value is not None, array_name_operand.value is not None, index_operand.value is not None]):
+            self.logger.error(f"ARRAY_ASSIGN_FROM TAC at line {tac_instruction.line_number} missing operands/values.")
+            return [f"; ERROR: Malformed ARRAY_ASSIGN_FROM TAC: {tac_instruction.line_number}"]
+
+        dest_asm = self.formatter.format_operand(str(dest_operand.value), tac_instruction.opcode, active_procedure_symbol=active_proc_ctx)
+        array_base_asm = self.formatter.format_operand(str(array_name_operand.value), TACOpcode.ARRAY_BASE_ADDR, active_procedure_symbol=active_proc_ctx) # Special context for base
+        index_asm = self.formatter.format_operand(str(index_operand.value), tac_instruction.opcode, active_procedure_symbol=active_proc_ctx)
+
+        # Assuming element size is WORD (2 bytes)
+        asm_lines.append(f" mov bx, {index_asm}    ; Load index into BX")
+        asm_lines.append(f" shl bx, 1           ; Multiply index by 2 (element size)")
+        # If array_base_asm is a label (global/static), LEA is fine.
+        # If array_base_asm is [BP-offset] (local array base on stack), LEA [BP-offset] is valid.
+        asm_lines.append(f" lea si, {array_base_asm} ; Load base address of array into SI")
+        asm_lines.append(f" add si, bx            ; Add scaled index to base address (SI = addr of element)")
+        asm_lines.append(f" mov ax, [si]          ; Load array element value into AX")
+        asm_lines.append(f" mov {dest_asm}, ax   ; Store element value into destination")
+
+        self.logger.debug(f"Translated ARRAY_ASSIGN_FROM {tac_instruction} -> {asm_lines}")
+        return asm_lines
+
+    def _translate_array_assign_to(self: 'ASMInstructionMapper', tac_instruction: ParsedTACInstruction) -> List[str]:
+        """Translates ARRAY_ASSIGN_TO (Indexed Write): array[index] = source"""
+        # TAC: (ARRAY_ASSIGN_TO, array_base_name, index_val_or_temp, source_val_or_temp)
+        # Note: operand mapping in TACInstruction might be: dest=arr_name, op1=index, op2=source
+        asm_lines = [f"; TAC: {tac_instruction.raw_line.strip()}"]
+        array_name_operand = tac_instruction.destination # First operand in TAC for this form
+        index_operand = tac_instruction.operand1
+        source_operand = tac_instruction.operand2
+        active_proc_ctx = self.asm_generator.current_procedure_context
+
+        if not all([array_name_operand, index_operand, source_operand,
+                    array_name_operand.value is not None, index_operand.value is not None, source_operand.value is not None]):
+            self.logger.error(f"ARRAY_ASSIGN_TO TAC at line {tac_instruction.line_number} missing operands/values.")
+            return [f"; ERROR: Malformed ARRAY_ASSIGN_TO TAC: {tac_instruction.line_number}"]
+
+        array_base_asm = self.formatter.format_operand(str(array_name_operand.value), TACOpcode.ARRAY_BASE_ADDR, active_procedure_symbol=active_proc_ctx)
+        index_asm = self.formatter.format_operand(str(index_operand.value), tac_instruction.opcode, active_procedure_symbol=active_proc_ctx)
+        source_asm = self.formatter.format_operand(str(source_operand.value), tac_instruction.opcode, active_procedure_symbol=active_proc_ctx)
+
+        asm_lines.append(f" mov ax, {source_asm}   ; Load source value into AX")
+        asm_lines.append(f" mov bx, {index_asm}    ; Load index into BX")
+        asm_lines.append(f" shl bx, 1           ; Multiply index by 2 (element size)")
+        asm_lines.append(f" lea si, {array_base_asm} ; Load base address of array into SI")
+        asm_lines.append(f" add si, bx            ; Add scaled index to base address")
+        asm_lines.append(f" mov [si], ax          ; Store source value into array element")
+
+        self.logger.debug(f"Translated ARRAY_ASSIGN_TO {tac_instruction} -> {asm_lines}")
+        return asm_lines

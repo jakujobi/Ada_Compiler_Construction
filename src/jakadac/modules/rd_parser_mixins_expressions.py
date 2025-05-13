@@ -7,7 +7,7 @@ from .RDParser import ParseTreeNode # Assuming RDParser has ParseTreeNode
 from .Token import Token
 # from .Definitions import Definitions # Definitions likely accessed via self.defs
 from .Logger import Logger # Assuming logger is passed or inherited
-from .SymTable import Symbol, EntryType, SymbolTable, SymbolNotFoundError # Assuming access via self.symbol_table
+from .SymTable import Symbol, EntryType, SymbolTable, SymbolNotFoundError, VarType, DuplicateSymbolError # Assuming access via self.symbol_table
 # from .TACGenerator import TACGenerator # Assuming access via self.tac_gen
 
 # Use TYPE_CHECKING to avoid circular imports at runtime if necessary
@@ -18,6 +18,7 @@ from .SymTable import Symbol, EntryType, SymbolTable, SymbolNotFoundError # Assu
 # Assuming these modules exist in the same directory
 from .Definitions import Definitions 
 from .TACGenerator import TACGenerator
+from .TypeUtils import TypeUtils # Added TypeUtils
 
 # Use TYPE_CHECKING to provide context for self attributes/methods
 if TYPE_CHECKING:
@@ -190,30 +191,45 @@ class ExpressionsMixin:
             left_place = self.parseTerm() # Returns str
             if not isinstance(left_place, str):
                  self.logger.error(f"Type mismatch: Expected str place from parseTerm in TAC mode, got {type(left_place)}")
-                 return "ERROR_PLACE"
+                 return "ERROR_PLACE_ADDOPT_TERM"
 
             # Parse additional terms if they exist
             while self.current_token and self.is_addopt(self.current_token.token_type):
                 op_token = self.current_token
-                op = op_token.lexeme
+                op = op_token.lexeme # Use lexeme for TAC op if it matches (+, -)
                 self.advance()
                 right_place = self.parseTerm() # Returns str
                 if not isinstance(right_place, str):
                      self.logger.error(f"Type mismatch: Expected str place from parseTerm (right operand) in TAC mode, got {type(right_place)}")
-                     return "ERROR_PLACE"
+                     return "ERROR_PLACE_ADDOPT_TERM"
                 
-                # Ensure tac_gen exists before using it
-                if not self.tac_gen:
-                     self.logger.error("TAC Generator not available for SimpleExpr TAC emission.")
-                     return "ERROR_PLACE"
+                if not self.tac_gen or not self.symbol_table or not hasattr(self, 'current_local_offset') or not hasattr(self, 'defs'):
+                     self.logger.error("TAC/SymbolTable/current_local_offset/defs not available for SimpleExpr TAC emission.")
+                     return "ERROR_CONTEXT_MISSING_ADDOPT"
                 
-                result_place = self.tac_gen.newTemp()
-                # Use the original operator lexeme directly
-                tac_op = op 
-                self.tac_gen.emitBinaryOp(tac_op, result_place, left_place, right_place)
-                left_place = result_place
+                temp_name_str = self.tac_gen.newTempName()
+                temp_var_type = VarType.INT # Assuming INT for results of +/- expressions
+                temp_token_for_symbol = op_token 
+                
+                temp_depth = self.symbol_table.current_depth
+                temp_size = 2 # Direct assumption for INT size
 
-            return left_place # Return the final place
+                temp_offset = self.current_local_offset
+                self.current_local_offset -= temp_size
+                
+                temp_sym = Symbol(temp_name_str, temp_token_for_symbol, EntryType.VARIABLE, temp_depth)
+                temp_sym.set_variable_info(temp_var_type, temp_offset, temp_size)
+                try:
+                    self.symbol_table.insert(temp_sym)
+                    self.logger.info(f"EXPR_MIXIN (SimpleExpr): Inserted temp symbol {temp_sym.name} (type: {temp_var_type.name}, offset: {temp_offset}, size: {temp_size}) at depth {temp_depth}")
+                except DuplicateSymbolError as e:
+                    self.logger.error(f"EXPR_MIXIN (SimpleExpr): Duplicate symbol error for temp {temp_name_str}: {e}")
+                
+                result_place_for_tac = temp_name_str 
+                self.tac_gen.emitBinaryOp(op, result_place_for_tac, left_place, right_place)
+                left_place = result_place_for_tac
+
+            return left_place
             # --- End TAC Generation ---
 
         else:
@@ -265,30 +281,46 @@ class ExpressionsMixin:
             left_place = self.parseFactor() # Returns str
             if not isinstance(left_place, str):
                  self.logger.error(f"Type mismatch: Expected str place from parseFactor in TAC mode, got {type(left_place)}")
-                 return "ERROR_PLACE"
+                 return "ERROR_PLACE_MULOPT_FACTOR"
 
             # Parse additional factors if they exist
             while self.current_token and self.is_mulopt(self.current_token.token_type):
                 op_token = self.current_token
-                op = op_token.lexeme
+                op = op_token.lexeme # Use lexeme for TAC op if it matches (*, /)
+                                     # Or map if different (e.g. 'MOD' to 'mod')
                 self.advance()
                 right_place = self.parseFactor() # Returns str
                 if not isinstance(right_place, str):
-                     self.logger.error(f"Type mismatch: Expected str place from parseFactor (right operand) in TAC mode, got {type(right_place)}")
-                     return "ERROR_PLACE"
+                    self.logger.error(f"Type mismatch: Expected str place from parseFactor (right operand) in TAC mode, got {type(right_place)}")
+                    return "ERROR_PLACE_MULOPT_FACTOR"
 
-                # Ensure tac_gen exists before using it
-                if not self.tac_gen:
-                     self.logger.error("TAC Generator not available for Term TAC emission.")
-                     return "ERROR_PLACE"
-                     
-                result_place = self.tac_gen.newTemp()
-                # Use the original operator lexeme directly
-                tac_op = op 
-                self.tac_gen.emitBinaryOp(tac_op, result_place, left_place, right_place)
-                left_place = result_place
+                if not self.tac_gen or not self.symbol_table or not hasattr(self, 'current_local_offset') or not hasattr(self, 'defs'):
+                    self.logger.error("TAC/SymbolTable/current_local_offset/defs not available for Term TAC emission.")
+                    return "ERROR_CONTEXT_MISSING_MULOPT"
 
-            return left_place # Return the final place
+                temp_name_str = self.tac_gen.newTempName()
+                temp_var_type = VarType.INT # Assuming INT for results of */ expressions
+                temp_token_for_symbol = op_token
+
+                temp_depth = self.symbol_table.current_depth
+                temp_size = 2 # Direct assumption for INT size
+                
+                temp_offset = self.current_local_offset
+                self.current_local_offset -= temp_size
+
+                temp_sym = Symbol(temp_name_str, temp_token_for_symbol, EntryType.VARIABLE, temp_depth)
+                temp_sym.set_variable_info(temp_var_type, temp_offset, temp_size)
+                try:
+                    self.symbol_table.insert(temp_sym)
+                    self.logger.info(f"EXPR_MIXIN (Term): Inserted temp symbol {temp_sym.name} (type: {temp_var_type.name}, offset: {temp_offset}, size: {temp_size}) at depth {temp_depth}")
+                except DuplicateSymbolError as e:
+                    self.logger.error(f"EXPR_MIXIN (Term): Duplicate symbol error for temp {temp_name_str}: {e}")
+
+                result_place_for_tac = temp_name_str
+                self.tac_gen.emitBinaryOp(op, result_place_for_tac, left_place, right_place)
+                left_place = result_place_for_tac
+
+            return left_place
              # --- End TAC Generation ---
         else:
             # --- Non-Tree, Non-TAC ---
@@ -303,11 +335,11 @@ class ExpressionsMixin:
         
     def parseFactor(self) -> Union[ParseTreeNode, str, None]:
         """
-        Factor -> idt | numt | ( Expr ) | not Factor | signopt Factor
+        Factor -> ID | ID ( ExprList ) | NUM | ( Expr ) | NOT Factor | - Factor
         Enhanced to generate TAC and return the place where the result is stored.
-        Also performs semantic checking for undeclared variables.
+        Handles function calls with ExprList for TAC.
         """
-        node = None # Initialize
+        node = None
         place = "ERROR_PLACE" # Default place for TAC
 
         if self.build_parse_tree:

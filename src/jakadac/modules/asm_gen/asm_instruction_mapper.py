@@ -16,7 +16,7 @@ from .tac_instruction import ParsedTACInstruction, TACOpcode
 from .asm_operand_formatter import ASMOperandFormatter # <--- ADD THIS LINE
 
 # Import the translator mixin classes
-from .instruction_translators.asm_im_data_mov_translators import DataMovTranslators
+from .instruction_translators.asm_im_data_mov_translators import DataMovementTranslators
 from .instruction_translators.asm_im_arithmetic_translators import ArithmeticTranslators
 from .instruction_translators.asm_im_procedure_translators import ProcedureTranslators
 from .instruction_translators.asm_im_control_flow_translators import ControlFlowTranslators
@@ -26,7 +26,7 @@ from .instruction_translators.asm_im_special_translators import SpecialTranslato
 
 
 class ASMInstructionMapper(
-    DataMovTranslators,
+    DataMovementTranslators,
     ArithmeticTranslators,
     ProcedureTranslators,
     ControlFlowTranslators,
@@ -38,7 +38,7 @@ class ASMInstructionMapper(
         self.symbol_table: 'SymbolTable' = symbol_table
         self.logger: 'Logger' = logger_instance 
         self.asm_generator: 'ASMGenerator' = asm_generator_instance
-        self.formatter = ASMOperandFormatter(symbol_table)
+        self.formatter = ASMOperandFormatter(symbol_table, asm_generator_instance, logger_instance)
         self.generator = asm_generator_instance # Reference to the generator for calling helpers
         
         self.logger.debug("ASMInstructionMapper initialized with all translator mixins.")
@@ -52,7 +52,7 @@ class ASMInstructionMapper(
             TACOpcode.DIV: self._translate_div,
             TACOpcode.REM: self._translate_rem,
             TACOpcode.MOD: self._translate_mod, # Delegate to REM
-            TACOpcode.UMINUS: self._translate_uminus,
+            TACOpcode.UMINUS: self._translate_neg,
             TACOpcode.NOT_OP: self._translate_not_op,
 
             # Data Movement
@@ -83,7 +83,7 @@ class ASMInstructionMapper(
             TACOpcode.READ_INT: self._translate_read_int,
             TACOpcode.WRITE_INT: self._translate_write_int,
             TACOpcode.WRITE_STR: self._translate_write_str,
-            TACOpcode.WRITE_NEWLINE: self._translate_write_newline,
+            TACOpcode.WRITE_NEWLINE: self._translate_write_ln,
 
             # Special / Data Definition
             TACOpcode.STRING_DEF: self._translate_string_def,

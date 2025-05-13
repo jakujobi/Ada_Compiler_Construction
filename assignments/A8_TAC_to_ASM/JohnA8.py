@@ -75,6 +75,9 @@ class JohnA8(BaseDriver):
         else:
             self.asm_output_filename = self.input_file_name.with_suffix('.asm')
 
+        self.asm_generation_errors: int = 0 # ADDED: Counter for ASM generation errors
+        self.ran_asm_generation: bool = False # ADDED: Flag to indicate if ASM generation phase was run
+
         self.logger.info("JohnA8Driver initialized (RDParserExtExt + TAC Gen Enabled, SymbolTable created).")
         self.logger.info(f" Input Ada file: {self.input_file_name}")
         self.logger.info(f" Output TAC file: {self.tac_output_filename}")
@@ -155,15 +158,19 @@ class JohnA8(BaseDriver):
                      logger=self.logger
                  )
                  asm_gen_ok = asm_gen.generate_asm()
+                 self.ran_asm_generation = True # ADDED: Mark ASM generation as run
                  if asm_gen_ok:
                      self.logger.info(f"Assembly generation completed successfully. Output: {self.asm_output_filename}")
                  else:
                      self.logger.error("Assembly generation failed.")
+                     self.asm_generation_errors += 1 # ADDED: Increment ASM errors
                      # Optionally add specific ASM errors if collected by ASMGenerator
                      # self.asm_errors = asm_gen.errors 
             except Exception as asm_e:
                  self.logger.critical(f"An unexpected error occurred during Assembly Generation: {asm_e}")
                  self.logger.critical(traceback.format_exc())
+                 self.ran_asm_generation = True # ADDED: Mark as run even if exception
+                 self.asm_generation_errors += 1 # ADDED: Increment ASM errors on exception
             # --- END ADDED FOR A8 ---
 
             self.logger.info("A8 compilation pipeline finished.")
@@ -176,6 +183,47 @@ class JohnA8(BaseDriver):
         finally:
             # Always print summary regardless of exceptions
             self.print_compilation_summary()
+
+    def print_compilation_summary(self) -> None:
+        """Prints a summary of the compilation process."""
+        summary_lines = []
+
+        # Determine overall status based on errors in all relevant phases
+        # Ensure all error counts are integers before summing
+        num_lex_errors = len(self.lexical_errors) if isinstance(self.lexical_errors, list) else 0
+        num_syn_errors = len(self.syntax_errors) if isinstance(self.syntax_errors, list) else 0
+        num_sem_errors = len(self.semantic_errors) if isinstance(self.semantic_errors, list) else 0 # self.semantic_errors is a list
+        num_tac_errors = len(self.tac_errors) if isinstance(self.tac_errors, list) else 0 # self.tac_errors is a list
+        num_asm_errors = self.asm_generation_errors # This is already an int
+
+        total_errors = num_lex_errors + num_syn_errors + num_sem_errors + num_tac_errors + num_asm_errors
+        success = total_errors == 0
+
+        # Determine status string for each phase
+        lex_status = "Done" if self.ran_lexical else "Skipped"
+        syn_status = "Done" if self.ran_syntax else "Skipped"
+        sem_status = "Done" if self.ran_semantic else "Skipped" # ran_semantic is set if semantic_errors > 0 or parser sets it
+        tac_status = "Done" if self.ran_tac_write else "Skipped"
+        asm_status = "Done" if self.ran_asm_generation else "Skipped" # ADDED: ASM status
+
+        summary_lines.append(f"Lexical   : {lex_status:<7} | Errors: {num_lex_errors}")
+        summary_lines.append(f"Syntax    : {syn_status:<7} | Errors: {num_syn_errors}")
+        summary_lines.append(f"Semantic  : {sem_status:<7} | Errors: {num_sem_errors}")
+        summary_lines.append(f"TAC Write : {tac_status:<7} | Errors: {num_tac_errors}")
+        summary_lines.append(f"ASM Gen   : {asm_status:<7} | Errors: {num_asm_errors}") # ADDED: ASM errors in summary
+        summary_lines.append("---------------------")
+        summary_lines.append(f"Total Errors: {total_errors}")
+
+        if success:
+            summary_lines.append("Compilation completed successfully!")
+            self.logger.info("Compilation completed successfully!")
+        else:
+            summary_lines.append("Compilation failed with errors.")
+            self.logger.error("Compilation failed with errors.")
+        
+        # Print summary to console
+        for line in summary_lines:
+            print(line)
 
 def main():
     """Main function to parse arguments and run the JohnA8Driver."""
